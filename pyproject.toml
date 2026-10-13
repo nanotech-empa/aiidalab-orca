@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aiidalab-orca"
+version = "0.1.0"
+description = "AiiDAlab interface for composable molecular ORCA workflows"
+requires-python = ">=3.12"
+dependencies = [
+  "aiida-empa-orca==0.1.0",
+  "aiidalab>=26.9.0",
+  "ipywidgets>=8,<9",
+  "nglview>=3",
+  "matplotlib",
+]
+
+[project.urls]
+Home = "https://github.com/nanotech-empa/aiidalab-orca"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

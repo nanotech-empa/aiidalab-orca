@@ -1,10 +1,12 @@
 # AiiDAlab ORCA: molecular spectroscopy
 
-**Status: discussion draft.** This repository is a place to agree on the scientific scope and user requirements before implementing an app or AiiDA workflows. The repository name is provisional. No workflows or app have been implemented here, and no scientific protocol described below should be treated as validated.
+**Status: first local geometry prototype.** Following the [design discussion](https://github.com/nanotech-empa/aiidalab-orca/issues/1), implementation has started with a small geometry WorkChain and a separate AiiDAlab interface. The broader spectroscopy design below remains under review. CASCI, Dyson orbitals, spectral blends, and electronic-artifact recovery are not implemented yet.
+
+The geometry prototype supports explicit charge/multiplicity, HF or DFT optimization, keeping a supplied geometry, provenance-based result reuse, and a molecular trajectory/energy viewer. See [the geometry implementation and local setup guide](docs/geometry.md). The backend is separately installable from `backend/` and usable without the app. The local starting test is **NO, neutral doublet, PBE/def2-SVP**; pentacene remains the spectroscopy reference target.
 
 The intended application would let a researcher start from a molecular geometry, optionally optimize it with DFT or hybrid DFT, and calculate selected molecular properties such as natural orbitals, electron-addition/removal spectra, and Dyson-orbital maps. Existing compatible results should be reusable at every stage.
 
-The immediate next step is to review this plan with [Andrés Ortega-Guerrero](https://github.com/AndresOrtegaGuerrero). Please keep initial feedback in the design-review issue under [Issues](https://github.com/nanotech-empa/aiidalab-orca/issues), referring to the relevant README section. This is a request for design and scientific review; it is not an assignment to implement the proposal.
+The scientific plan and implementation should continue to be reviewed with [Andrés Ortega-Guerrero](https://github.com/AndresOrtegaGuerrero). Please keep initial feedback in the design-review issue under [Issues](https://github.com/nanotech-empa/aiidalab-orca/issues), referring to the relevant README section. This is a request for design and scientific review; it is not an assignment to implement the proposal.
 
 ## 1. Starting requirements
 
@@ -48,7 +50,7 @@ This diagram describes dependencies, not a mandatory sequence to execute on ever
 
 ### First testing target: pentacene
 
-**Pentacene is the agreed first system for design and subsequent testing.** The user-supplied starting geometry is included as [`examples/pentacene/pentacene.xyz`](examples/pentacene/pentacene.xyz). The XYZ contains 36 atoms (C22H14), all in the xy plane. This file has not yet been verified as an optimized geometry or as the exact geometry used in the publication.
+**Pentacene is the agreed spectroscopy reference target for design and subsequent testing.** The first geometry implementation uses the smaller neutral NO doublet for quick local integration tests. The user-supplied starting geometry is included as [`examples/pentacene/pentacene.xyz`](examples/pentacene/pentacene.xyz). The XYZ contains 36 atoms (C22H14), all in the xy plane. This file has not yet been verified as an optimized geometry or as the exact geometry used in the publication.
 
 The scientific reference is Kumar et al., *Multireference Theory of Scanning Tunneling Spectroscopy Beyond One-Electron Molecular Orbitals: Can We Image Molecular Orbitals?*, **J. Am. Chem. Soc. 147**, 24993–25003 (2025), [DOI: 10.1021/jacs.5c08166](https://doi.org/10.1021/jacs.5c08166) ([user-supplied article link](https://pubs.acs.org/jacsat/article/147/28/24993/3738262/Multireference-Theory-of-Scanning-Tunneling)).
 
@@ -189,7 +191,7 @@ These observations are inputs to the discussion, not an agreed implementation ba
 5. **Build the AiiDAlab interface.** Add structure selection, optional optimization, property selection, execution-plan review, monitoring, and result exploration.
 6. **Evaluate the pilot before wider adoption.** Review the reuse and recovery behavior in this app. If satisfactory, identify the interfaces and tests that can be shared and adapt the approach to other EMPA apps, checking each app's scientific dependencies and artifact requirements.
 
-No workflow implementation should start until the first design discussion has established what we want to support. There is no delivery schedule or finalized package topology yet.
+The initial design discussion established enough scope to start the geometry component on 2026-10-13. Its backend and app are separate Python packages in this repository. The remaining spectroscopy components and their package boundaries still require scientific review; there is no delivery schedule.
 
 Candidate acceptance cases for the eventual implementation follow. Run the applicable reuse and recovery cases with caching both enabled and disabled; the choice must not change scientific compatibility checks, artifact validation, or the ability to reuse valid existing results.
 
@@ -220,6 +222,6 @@ Candidate acceptance cases for the eventual implementation follow. Run the appli
 - [aiida-nanotech-empa](https://github.com/nanotech-empa/aiida-nanotech-empa): existing molecular and scanning-probe workflows and a possible home for shared components.
 - [aiidalab-qe](https://github.com/aiidalab/aiidalab-qe): reference for the user-facing application flow.
 
-Repository names, backend package boundaries, supported runtime versions, and release dependencies remain design decisions. The application should reuse maintained scientific packages rather than duplicate their numerical implementations.
+The geometry prototype separates `aiida-empa-orca` (backend) from `aiidalab-orca` (interface), initially in this repository. It targets Python >=3.12, AiiDA >=2.9.2, and AiiDAlab >=26.9.0. Future spectroscopy package boundaries remain design decisions. The application should reuse maintained scientific packages rather than duplicate their numerical implementations.
 
 This draft was prepared with Codex assistance from the initial discussion and source inspection. It awaits scientific and design review.

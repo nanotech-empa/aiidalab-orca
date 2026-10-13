@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aiida-empa-orca"
+version = "0.1.0"
+description = "Composable molecular ORCA workflows for EMPA"
+requires-python = ">=3.12"
+dependencies = [
+  "aiida-core>=2.9.2,<3",
+  "aiida-orca @ git+https://github.com/ezpzbz/aiida-orca.git@36abfa6917819c3e9ff454cfa89d9fd013634d12",
+  "ase",
+]
+
+[project.entry-points."aiida.calculations"]
+"empa_orca.optimization" = "aiida_empa_orca.calculation:OptimizationCalculation"
+
+[project.entry-points."aiida.parsers"]
+"empa_orca.optimization" = "aiida_empa_orca.parser:OptimizationParser"
+
+[project.entry-points."aiida.workflows"]
+"empa_orca.base" = "aiida_empa_orca.workchains:OptimizationBaseWorkChain"
+"empa_orca.geometry" = "aiida_empa_orca.workchains:GeometryWorkChain"
+
+[tool.setuptools.packages.find]
+where = ["src"]

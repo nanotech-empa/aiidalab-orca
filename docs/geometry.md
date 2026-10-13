@@ -71,6 +71,10 @@ containing the fix. No ORCA binary or wavefunction is distributed here.
 
 ## App flow
 
+New sessions start without a selected molecule or prefilled coordinates. The
+NO doublet test geometry is available through **Load NO doublet example**.
+Calculation review is enabled after a structure has been selected.
+
 The interface has three areas:
 
 - **New calculation**: import a geometry, edit atoms, configure the calculation,

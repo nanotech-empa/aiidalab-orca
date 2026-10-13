@@ -30,11 +30,11 @@ class StructureWidget(ipw.VBox):
         self.summary = ipw.HTML()
         self.upload = ipw.FileUpload(description="Upload geometry", accept=".xyz,.extxyz,.cif,.pdb,.mol,.sdf", multiple=False)
         self.upload.observe(self._upload, names="value")
-        self.xyz = ipw.Textarea(value=services.NO_XYZ, layout=ipw.Layout(width="100%", height="150px"))
+        self.xyz = ipw.Textarea(value="", placeholder="Paste a molecular geometry in XYZ format", layout=ipw.Layout(width="100%", height="150px"))
         apply_xyz = ipw.Button(description="Import XYZ text")
         apply_xyz.on_click(self._import_xyz)
-        example = ipw.Button(description="Load NO doublet example")
-        example.on_click(lambda _: self.set_atoms(services.parse_xyz(services.NO_XYZ)))
+        self.example = ipw.Button(description="Load NO doublet example", layout=ipw.Layout(width="auto"))
+        self.example.on_click(self._load_example)
         self.query = ipw.Text(placeholder="Formula, label, or structure UUID", layout=ipw.Layout(width="400px"))
         search = ipw.Button(description="Find structures", icon="search")
         search.on_click(lambda _: self._search(0))
@@ -53,7 +53,7 @@ class StructureWidget(ipw.VBox):
         self.smiles = SmilesWidget(title="SMILES", add_auxiliary_cell=False)
         self.smiles.observe(self._from_smiles, names="structure")
         self.importers = ipw.Tab(children=[
-            ipw.VBox([self.upload, ipw.HTML("<p>Import one geometry: XYZ, Extended XYZ, CIF, PDB, MOL or SDF.</p>"), self.xyz, apply_xyz, example]),
+            ipw.VBox([self.upload, ipw.HTML("<p>Import one geometry: XYZ, Extended XYZ, CIF, PDB, MOL or SDF.</p>"), self.xyz, apply_xyz, self.example]),
             ipw.VBox([ipw.HTML("<p>Structures from any AiiDA calculation, including ORCA, QE and CP2K.</p>"), ipw.HBox([self.query, search]), self.matches, ipw.HBox([self.previous, self.next, use]), ipw.HBox([self.identifier, load])]),
             ipw.VBox([ipw.HTML("<p>Create a finite molecular model and review its atoms. CDXML supplies a starting geometry; charge and multiplicity must be set in Calculation settings.</p>"), self.cdxml]),
             ipw.VBox([ipw.HTML("<p>Generate a starting molecular conformer with RDKit. Review charge and multiplicity before submitting.</p>"), self.smiles]),
@@ -72,7 +72,12 @@ class StructureWidget(ipw.VBox):
         isolate.on_click(self._isolate)
         editing = ipw.Accordion(children=[ipw.VBox([ipw.HBox([reset, isolate]), self.editor])], selected_index=None)
         editing.set_title(0, "Edit atoms · select atoms in the viewer first")
-        super().__init__([self.importers, self.message, self.summary, self.viewer, editing])
+        self.geometry_panel = ipw.VBox([self.viewer, editing], layout=ipw.Layout(display="none"))
+        self.summary.value = "<p>No molecule selected. Import a structure or load the example to begin.</p>"
+        super().__init__([self.importers, self.message, self.summary, self.geometry_panel])
+
+    def _load_example(self, _=None):
+        self.xyz.value = services.NO_XYZ
         self.set_atoms(services.parse_xyz(services.NO_XYZ))
 
     def set_atoms(self, atoms, source_uuid="", imported=None):
@@ -90,6 +95,7 @@ class StructureWidget(ipw.VBox):
             self.atoms = atoms.copy()
             self.editor.structure = atoms.copy()
             self.viewer.structure = atoms.copy()
+            self.geometry_panel.layout.display = ""
             self.editor.selection = []
             text = f"{atoms.get_chemical_formula()} · {len(atoms)} atoms"
             if any(atoms.pbc):

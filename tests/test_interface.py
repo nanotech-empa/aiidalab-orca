@@ -116,6 +116,16 @@ def test_edit_invalidates_review_and_copy_settings_keeps_geometry(source, monkey
     monkeypatch.setattr(services, "codes", lambda: [("Test ORCA", source.inputs.code.uuid)])
     app = OrcaApp()
     try:
+        assert app.structure.atoms is None and not app.structure.xyz.value
+        assert not app.structure.ready
+        assert app.structure.geometry_panel.layout.display == "none"
+        assert app.next_step.disabled and app.review_button.disabled and app.submit_button.disabled
+        app._review()
+        assert app.review is None and "Import a molecular structure" in app.error.value
+        app.structure.example.click()
+        assert app.structure.atoms.get_chemical_formula() == "NO"
+        assert not app.next_step.disabled and not app.review_button.disabled
+        assert app.structure.geometry_panel.layout.display == ""
         app._review()
         assert app.review and app.review["plan"]["action"] == "reuse"
         changed = app.structure.atoms.copy()

@@ -38,7 +38,7 @@ class OrcaApp(ipw.VBox):
         self.code = ipw.Dropdown(options=services.codes(), description="ORCA code", style=style, layout=width)
         self.force = ipw.Checkbox(value=False, description="Recompute even if a compatible result is available")
         self.label = ipw.Text(value="Molecular geometry", description="Run label", style=style, layout=width)
-        self.review_button = ipw.Button(description="Review calculation", button_style="primary", icon="list")
+        self.review_button = ipw.Button(description="Review calculation", button_style="primary", icon="list", disabled=True)
         self.review_button.on_click(self._review)
         self.plan_html = ipw.HTML("Review the settings to see whether this step will run or reuse a result.")
         self.submit_button = ipw.Button(description="Submit", button_style="success", icon="play", disabled=True)
@@ -63,11 +63,11 @@ class OrcaApp(ipw.VBox):
             ipw.HTML("<p>TightSCF, no dispersion correction. RI-J for PBE; RIJCOSX for HF/hybrids. MaxCore uses 75% of the memory budget divided by the process count. Local direct scheduling does not enforce a hard memory limit.</p>"),
         ])], selected_index=None)
         advanced.set_title(0, "Advanced settings and resources")
-        next_step = ipw.Button(description="Continue to settings", button_style="primary")
-        next_step.on_click(lambda _: setattr(self.steps, "selected_index", 1))
+        self.next_step = ipw.Button(description="Continue to settings", button_style="primary", disabled=True)
+        self.next_step.on_click(lambda _: setattr(self.steps, "selected_index", 1))
         settings_panel = ipw.VBox([self.optimize, self.method, self.basis, self.charge,
                                    self.multiplicity, self.label, advanced, self.review_button])
-        self.steps = ipw.Accordion(children=[ipw.VBox([self.structure, next_step]), settings_panel,
+        self.steps = ipw.Accordion(children=[ipw.VBox([self.structure, self.next_step]), settings_panel,
                                             ipw.VBox([self.plan_html, self.submit_button])], selected_index=0)
         for i, title in enumerate(["1 · Molecular structure", "2 · Calculation settings", "3 · Review and submit"]):
             self.steps.set_title(i, title)
@@ -101,6 +101,7 @@ class OrcaApp(ipw.VBox):
 
     def _invalidate(self, _):
         self.review = None
+        self.next_step.disabled = self.review_button.disabled = not self.structure.ready
         self.submit_button.disabled = True
         self.plan_html.value = "Inputs changed. Review the calculation again before submitting."
 
@@ -115,6 +116,8 @@ class OrcaApp(ipw.VBox):
 
     def _review(self, _=None):
         try:
+            if self.structure.atoms is None:
+                raise ValueError("Import a molecular structure or load an example before reviewing the calculation.")
             if not self.structure.ready:
                 raise ValueError("Create and review the updated molecular model before submitting.")
             self.review = services.prepare(

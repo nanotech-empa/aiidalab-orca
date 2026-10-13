@@ -2,4 +2,6 @@ Optimize a molecular geometry with ORCA, or reuse a stored result. Choose the me
 
 **[Open molecular geometry](./start.ipynb)**
 
+**[Search calculations](./search.ipynb)**
+
 Local geometry prototype. Spectroscopy and Dyson maps are planned next.

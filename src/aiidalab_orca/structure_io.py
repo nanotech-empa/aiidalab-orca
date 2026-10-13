@@ -10,6 +10,7 @@ import ase.io
 import numpy as np
 from aiida import orm
 from aiida.engine import calcfunction
+from aiida.orm.implementation import clean_value
 
 
 @calcfunction
@@ -46,11 +47,13 @@ def load_structure(uuid):
 
 
 def same_geometry(first, second):
+    # AiiDA cleans floats on storage. Use that same representation for both
+    # sides, without introducing a geometric matching tolerance.
     return (np.array_equal(first.numbers, second.numbers)
-            and np.array_equal(first.positions, second.positions)
-            and np.array_equal(first.cell.array, second.cell.array)
+            and clean_value(first.positions) == clean_value(second.positions)
+            and clean_value(first.cell.array) == clean_value(second.cell.array)
             and np.array_equal(first.pbc, second.pbc)
-            and np.array_equal(first.get_masses(), second.get_masses()))
+            and clean_value(first.get_masses()) == clean_value(second.get_masses()))
 
 
 def snapshot_cdxml(importer, atoms):

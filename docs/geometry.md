@@ -79,7 +79,8 @@ The interface has three areas:
 
 - **New calculation**: import a geometry, edit atoms, configure the calculation,
   and review whether it will compute, reuse a result, or keep the supplied geometry.
-  Advanced convergence and resource settings are collapsed initially.
+  Confirm the structure, confirm scientific settings, then choose resources and
+  review the execution plan. Advanced scientific settings are collapsed initially.
 - **Search calculations**: search all recorded ORCA geometry workflows by formula,
   label or UUID, with state, method and date filters and paginated results.
   Dates use Europe/Zurich. Select a run to check the stored data, view results,
@@ -87,6 +88,28 @@ The interface has three areas:
 - **Results**: trajectory, SCF evaluation energies, final coordinates, method
   provenance and, when parsed, ⟨S²⟩; download XYZ or continue from the geometry.
   A workflow UUID can also be opened directly.
+
+The interface uses the shared `aiidalab-widgets-base.WizardAppWidget` and its
+step states, following QE's confirmation, dependency, and back-navigation patterns.
+Each step displays a prerequisite message until earlier steps are confirmed.
+Navigation alone preserves a review; editing a structure invalidates both later
+steps, changing science invalidates settings confirmation and the execution plan,
+and changing resources invalidates only the plan. Validation uses the existing
+backend rules and shows errors next to the affected controls. Submitted inputs
+require **Edit a copy of these inputs** before another submission.
+
+QE's application classes include QE-specific setup and calculation dependencies;
+ORCA uses the common wizard and shared molecular widgets with a small adapter.
+Status/results and history remain separate areas so previous work can be explored
+while preparing a new calculation. The three draft steps correspond to QE's
+structure, configuration, and resources/submission stages. Keeping a geometry
+hides resource controls and requires no code; unused resource fields in the
+backend's settings schema receive its defaults. No spin or method is guessed.
+
+The home-page card provides icon launchers for **New calculation** (`start.ipynb`)
+and **Search calculations** (`search.ipynb`). Both load the AiiDA profile in a
+separate first cell, before building the app. Results use NGL's trajectory controls
+and keep detailed provenance and identifiers in an expandable section.
 
 The structure step accepts one XYZ/Extended XYZ, CIF, PDB, MOL or SDF geometry,
 searches existing `StructureData` from any AiiDA calculation, and reuses the EMPA
@@ -209,6 +232,9 @@ repository artifacts, keep-as-is, force/bypass propagation, and bounded recovery
 from invalid cached data. Interface tests additionally cover search/filter pagination,
 unchanged versus edited structure identity, original file/CDXML provenance, model
 invalidation, explicit periodicity handling, and action-specific availability.
+Wizard tests also check confirmation prerequisites, spin validation, back
+navigation, downstream invalidation, keeping a geometry without a code,
+submission retry, and prevention of accidental duplicate submission.
 Use a fresh test-state directory in shared environments.
 
 The real local integration command is `python examples/no/run_local.py`.
@@ -237,6 +263,17 @@ Starting from an empty session, methane generated from SMILES `C` and a geometry
 loaded from calculation history were also visually checked in the browser,
 including returning to the viewer after changing tabs. The viewer is attached
 when a structure is available, preventing a zero-size canvas on first use.
+
+The guided flow was checked in fresh browser sessions without diagnostic kernel
+commands before submission: SMILES methane (neutral singlet, PBE0/def2-SVP)
+converged through a forced new calculation; file-imported NO reused an existing
+optimization; CDXML ethene was kept unchanged. A separate search session reopened
+the methane result, exercised NGL trajectory controls, reused its geometry,
+copied settings, and moved one selected atom by 0.1 Å with the shared editor.
+Keeping that edited structure created a linked edit record and no CalcJobs.
+Both home-page icon links opened the intended app view. Automated tests also
+ensure that repeated review preserves structure identity at AiiDA's storage
+precision, while a real edit creates a new linked structure.
 
 These checks establish local workflow/UI integration. HF, B3LYP, M06-2X,
 basis convergence, larger systems and numerical comparison to the pentacene

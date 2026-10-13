@@ -7,7 +7,7 @@ from aiida import orm
 from aiida.engine import submit
 
 from aiida_empa_orca.reuse import PROCESS_TYPE
-from aiida_empa_orca.settings import normalize_settings
+from aiida_empa_orca.settings import normalize_settings, validate_molecule
 from aiida_empa_orca.workchains import get_builder, plan_geometry
 
 NO_XYZ = "2\nNO, neutral doublet, stretched test geometry\nN 0 0 0\nO 0 0 1.3\n"
@@ -30,6 +30,17 @@ def codes():
                 and code.computer.scheduler_type == "core.direct" and code.computer.transport_type == "core.local"):
             result.append((f"{label}@{code.computer.label}", str(uuid)))
     return sorted(result)
+
+
+def validate_configuration(atoms, settings, optimize):
+    """Check scientific inputs with the backend's existing validation rules."""
+    # Resources are confirmed in the following step; use their valid defaults
+    # here so a resource error cannot block access to the resource controls.
+    values = {k: v for k, v in settings.items()
+              if k not in ("nprocs", "memory_mb", "wallclock_seconds")}
+    values = normalize_settings(values)
+    if optimize:
+        validate_molecule(orm.StructureData(ase=atoms), values)
 
 
 def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *, atoms=None, imported=None):

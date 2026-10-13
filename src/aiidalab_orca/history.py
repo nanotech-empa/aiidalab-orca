@@ -92,9 +92,9 @@ class HistoryWidget(ipw.VBox):
         self.next.on_click(lambda _: self.refresh(self.offset+self.page_size))
         self.detail = ipw.HTML()
         self.selected_uuid = None
-        self.view = ipw.Button(description="View results", disabled=True)
-        self.geometry = ipw.Button(description="Use final geometry", disabled=True)
-        self.copy = ipw.Button(description="Copy settings", disabled=True)
+        self.view = ipw.Button(description="View results", icon="line-chart", disabled=True)
+        self.geometry = ipw.Button(description="Use final geometry", icon="cubes", disabled=True, layout=ipw.Layout(width="auto"))
+        self.copy = ipw.Button(description="Copy settings", icon="copy", disabled=True)
         self.view.on_click(lambda _: self._view_run(self.selected_uuid))
         self.geometry.on_click(lambda _: self._use_geometry(self.selected_uuid))
         self.copy.on_click(lambda _: self._copy_settings(self.selected_uuid))

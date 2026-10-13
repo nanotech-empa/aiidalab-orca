@@ -233,6 +233,10 @@ The structure/history interface was additionally exercised in the browser: a
 previous NO optimization was found and reused, its final geometry selected, and
 an ethene CDXML uploaded and submitted with keep-as-is. The resulting workflow
 retained the shared CDXML provenance record and launched no calculation.
+Starting from an empty session, methane generated from SMILES `C` and a geometry
+loaded from calculation history were also visually checked in the browser,
+including returning to the viewer after changing tabs. The viewer is attached
+when a structure is available, preventing a zero-size canvas on first use.
 
 These checks establish local workflow/UI integration. HF, B3LYP, M06-2X,
 basis convergence, larger systems and numerical comparison to the pentacene

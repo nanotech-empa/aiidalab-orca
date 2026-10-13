@@ -118,14 +118,14 @@ def test_edit_invalidates_review_and_copy_settings_keeps_geometry(source, monkey
     try:
         assert app.structure.atoms is None and not app.structure.xyz.value
         assert not app.structure.ready
-        assert app.structure.geometry_panel.layout.display == "none"
+        assert not app.structure.geometry_panel.children
         assert app.next_step.disabled and app.review_button.disabled and app.submit_button.disabled
         app._review()
         assert app.review is None and "Import a molecular structure" in app.error.value
         app.structure.example.click()
         assert app.structure.atoms.get_chemical_formula() == "NO"
         assert not app.next_step.disabled and not app.review_button.disabled
-        assert app.structure.geometry_panel.layout.display == ""
+        assert app.structure.viewer in app.structure.geometry_panel.children
         app._review()
         assert app.review and app.review["plan"]["action"] == "reuse"
         changed = app.structure.atoms.copy()

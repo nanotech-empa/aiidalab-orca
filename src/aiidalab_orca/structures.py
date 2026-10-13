@@ -70,9 +70,12 @@ class StructureWidget(ipw.VBox):
         reset.on_click(self._reset)
         isolate = ipw.Button(description="Treat as isolated molecule", layout=ipw.Layout(width="240px"))
         isolate.on_click(self._isolate)
-        editing = ipw.Accordion(children=[ipw.VBox([ipw.HBox([reset, isolate]), self.editor])], selected_index=None)
-        editing.set_title(0, "Edit atoms · select atoms in the viewer first")
-        self.geometry_panel = ipw.VBox([self.viewer, editing], layout=ipw.Layout(display="none"))
+        self.editing = ipw.Accordion(children=[ipw.VBox([ipw.HBox([reset, isolate]), self.editor])], selected_index=None)
+        self.editing.set_title(0, "Edit atoms · select atoms in the viewer first")
+        # Do not render NGL inside a display:none parent: it creates a 0×0
+        # canvas that remains blank when the parent is subsequently revealed.
+        # Attach the viewer only when the first structure is ready.
+        self.geometry_panel = ipw.VBox()
         self.summary.value = "<p>No molecule selected. Import a structure or load the example to begin.</p>"
         super().__init__([self.importers, self.message, self.summary, self.geometry_panel])
 
@@ -95,7 +98,8 @@ class StructureWidget(ipw.VBox):
             self.atoms = atoms.copy()
             self.editor.structure = atoms.copy()
             self.viewer.structure = atoms.copy()
-            self.geometry_panel.layout.display = ""
+            if not self.geometry_panel.children:
+                self.geometry_panel.children = [self.viewer, self.editing]
             self.editor.selection = []
             text = f"{atoms.get_chemical_formula()} · {len(atoms)} atoms"
             if any(atoms.pbc):

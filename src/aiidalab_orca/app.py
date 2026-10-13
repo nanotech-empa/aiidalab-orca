@@ -228,10 +228,12 @@ class OrcaApp(ipw.VBox):
             data = inspect_run(uuid)
             if not data["structure_uuid"]:
                 raise ValueError(data["geometry_status"])
-            self.structure.set_atoms(structure_io.load_structure(data["structure_uuid"]), source_uuid=data["structure_uuid"])
-            self.optimize.value = False
+            atoms = structure_io.load_structure(data["structure_uuid"])
+            # Reveal the structure step before mounting a first-use NGL view.
             self.pages.selected_index = 0
             self.steps.selected_index = 0
+            self.structure.set_atoms(atoms, source_uuid=data["structure_uuid"])
+            self.optimize.value = False
             self.error.value = "<p>Geometry loaded. Review charge and multiplicity in Calculation settings.</p>"
         except Exception as exc:
             self._show_error(exc)

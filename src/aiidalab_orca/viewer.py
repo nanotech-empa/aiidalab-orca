@@ -23,15 +23,29 @@ def molecule(symbols, frames):
     view.control.rotate([0, 0.3826834324, 0, 0.9238795325])
     slider = ipw.IntSlider(description="Geometry", min=0, max=len(frames)-1,
                            value=len(frames)-1, continuous_update=False)
-    ipw.jslink((slider, "value"), (view, "frame"))
+    link = ipw.jslink((slider, "value"), (view, "frame"))
     view.frame = slider.value
-    return ipw.VBox([view, slider])
+    return MolecularView([view, slider], link)
+
+
+class MolecularView(ipw.VBox):
+    def __init__(self, children, link):
+        self._frame_link = link
+        super().__init__(children)
+
+    def close(self):
+        if getattr(self, "_frame_link", None):
+            self._frame_link.unlink()
+            self._frame_link = None
+        super().close()
 
 
 def show_result(data):
     s = data["settings"]
     title = "Optimized geometry" if data["optimized"] else "Supplied geometry · no optimization performed"
     items = [ipw.HTML(f"<h3>{title}</h3><p>{html.escape(data['source_description'])}</p>")]
+    for warning in data.get("warnings", []):
+        items.append(ipw.HTML(f"<p style='color:#a02020'>{html.escape(warning)}</p>"))
     if data.get("source_uuid"):
         items.append(ipw.HTML(f"<p>Reused stored result: <code>{data['source_uuid']}</code></p>"))
     if "summary" in data:
@@ -45,7 +59,7 @@ def show_result(data):
         items.append(molecule(data["symbols"], data.get("frames", [data["positions"]])))
         encoded = base64.b64encode(data["xyz"].encode()).decode()
         items.append(ipw.HTML(f'<a download="geometry.xyz" href="data:text/plain;base64,{encoded}">Download final XYZ</a>'
-                             f'<p>Structure UUID: <code>{data["structure_uuid"]}</code></p>'))
+                             f'<details><summary>Structure identifier</summary><code>{data["structure_uuid"]}</code></details>'))
     if "summary" in data:
         energies = data["summary"]["scf_evaluation_energies_hartree"]
         fig, ax = plt.subplots(figsize=(7.4, 2.7))

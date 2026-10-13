@@ -71,15 +71,52 @@ containing the fix. No ORCA binary or wavefunction is distributed here.
 
 ## App flow
 
-1. Upload/paste a single XYZ, or select an existing AiiDA StructureData UUID.
-2. Choose optimization or keep-as-is; set method, basis, charge, multiplicity,
-   convergence and local resources.
-3. Review whether the step will compute, reuse an existing result, or keep the
-   supplied coordinates. Editing settings invalidates the reviewed plan.
-4. Submit to the daemon. Return later through the previous-runs list or a workflow
-   UUID. View the trajectory, SCF evaluation energies, final coordinates, method
-   provenance and, when parsed, ⟨S²⟩. Download XYZ or select the final geometry as
-   the next input.
+The interface has three areas:
+
+- **New calculation**: import a geometry, edit atoms, configure the calculation,
+  and review whether it will compute, reuse a result, or keep the supplied geometry.
+  Advanced convergence and resource settings are collapsed initially.
+- **Search calculations**: search all recorded ORCA geometry workflows by formula,
+  label or UUID, with state, method and date filters and paginated results.
+  Dates use Europe/Zurich. Select a run to check the stored data, view results,
+  use its final geometry, or copy its settings onto the current input molecule.
+- **Results**: trajectory, SCF evaluation energies, final coordinates, method
+  provenance and, when parsed, ⟨S²⟩; download XYZ or continue from the geometry.
+  A workflow UUID can also be opened directly.
+
+The structure step accepts one XYZ/Extended XYZ, CIF, PDB, MOL or SDF geometry,
+searches existing `StructureData` from any AiiDA calculation, and reuses the EMPA
+CDXML importer and widgets-base SMILES builder and atom editor. The viewer and
+editor receive ASE data; search rows and callbacks retain UUIDs, never ORM nodes.
+Select atoms in the viewer before using the atom editor. Reset restores the
+imported geometry. Periodic inputs retain their periodicity until the user
+explicitly selects **Treat as isolated molecule**; select/extract the appropriate
+molecular fragment first. The ORCA backend rejects periodic input.
+
+Unchanged AiiDA structures retain their existing UUID. Edits create a new structure
+with the original linked as an input of `record_structure_edit`. File imports
+record the original file as `SinglefileData`. CDXML imports use the shared
+`record_cdxml_import` function, recording original/reviewed documents, chemical
+interpretation, generation settings and whether the geometry was edited. These
+records describe a user-reviewed starting model, not an ORCA energy optimization.
+Changing CDXML generation settings invalidates the model and the submission
+review until **Create model** is used again. Charge and multiplicity remain
+explicit user choices for every importer.
+
+The CDXML dependency is pinned to [EMPA widgets PR #12](https://github.com/nanotech-empa/aiidalab-widgets-empa/pull/12),
+revision `8a85258bbb449ff99c1d0ee302fd4b6ae887c254`. The previously installed 0.2.2
+release lacks its graph-validation and `cdxml_storage` APIs. That PR still reports
+version 0.2.2, so a version-number constraint would not identify the required code.
+This app consumes the canonical component revision; it does not modify the shared
+PR stack or its runtime policy. Tests use widgets-base 3.0.0. The app's existing
+Python/AiiDA/AiiDAlab support targets are unchanged.
+
+Selecting a history result checks availability for each action. Missing optimization
+files do not prevent use of an available final geometry. Unreachable storage is
+reported separately from missing/invalid data. Matching formulae are search aids,
+not scientific equivalence: the backend still performs its exact compatibility
+and artifact checks during review and submission. Search does not query remote
+scratch because this geometry operation needs no wavefunction.
 
 Choices are HF, PBE, PBE0, B3LYP, M06-2X; def2-SVP or def2-TZVP; NormalOpt or
 TightOpt. Charge and multiplicity are explicit and checked against the electron
@@ -165,7 +202,10 @@ AIIDA_PATH=/tmp/aiidalab-orca-test-state python -m pytest tests -q
 The AiiDA fixtures create independent SQLite storage. Tests cover spin/geometry
 validation, exact reuse compatibility, explicit reused-data links, missing
 repository artifacts, keep-as-is, force/bypass propagation, and bounded recovery
-from invalid cached data. Use a fresh test-state directory in shared environments.
+from invalid cached data. Interface tests additionally cover search/filter pagination,
+unchanged versus edited structure identity, original file/CDXML provenance, model
+invalidation, explicit periodicity handling, and action-specific availability.
+Use a fresh test-state directory in shared environments.
 
 The real local integration command is `python examples/no/run_local.py`.
 Validated on Linux ARM64, ORCA 6.1.1/Open MPI 4.1.8, Python 3.12.11, AiiDA 2.9.2,
@@ -184,6 +224,11 @@ AiiDAlab 26.9.0, ipywidgets 8.1.8 and nglview 3.0.8:
 - Browser-driven app submission produced a new optimization, then loaded its
   trajectory and energy viewer. Selecting its final geometry and submitting
   keep-as-is also passed, with no calculation and original provenance preserved.
+
+The structure/history interface was additionally exercised in the browser: a
+previous NO optimization was found and reused, its final geometry selected, and
+an ethene CDXML uploaded and submitted with keep-as-is. The resulting workflow
+retained the shared CDXML provenance record and launched no calculation.
 
 These checks establish local workflow/UI integration. HF, B3LYP, M06-2X,
 basis convergence, larger systems and numerical comparison to the pentacene

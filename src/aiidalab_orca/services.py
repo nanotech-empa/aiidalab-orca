@@ -32,8 +32,10 @@ def codes():
     return sorted(result)
 
 
-def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute):
-    if source_uuid.strip():
+def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *, atoms=None, imported=None):
+    if atoms is not None:
+        structure = orm.StructureData(ase=atoms)
+    elif source_uuid.strip():
         structure = orm.load_node(source_uuid.strip())
         if not isinstance(structure, orm.StructureData):
             raise ValueError("The identifier must refer to an AiiDA StructureData")
@@ -43,8 +45,12 @@ def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute):
     settings = normalize_settings(settings)
     code = orm.load_code(code_uuid) if code_uuid else None
     plan = plan_geometry(structure, settings, code, optimize=optimize, force_recompute=force_recompute)
-    structure.store()
-    return {"structure_uuid": structure.uuid, "code_uuid": str(code.uuid) if code else None,
+    if atoms is not None:
+        from .structure_io import store_reviewed_structure
+        structure = orm.load_node(store_reviewed_structure(atoms, source_uuid, imported))
+    else:
+        structure.store()
+    return {"structure_uuid": str(structure.uuid), "code_uuid": str(code.uuid) if code else None,
             "settings": settings, "optimize": optimize, "force_recompute": force_recompute,
             "plan": plan, "formula": structure.get_formula(),
             "source_description": structure_origin(structure)}
@@ -54,6 +60,10 @@ def structure_origin(structure):
     creator = structure.creator
     if creator is None:
         return f"Supplied geometry ({structure.uuid}); no calculation method recorded."
+    if creator.process_label == "record_structure_edit":
+        return f"User-edited geometry based on: {structure_origin(creator.inputs.source_structure)}"
+    if creator.process_label in ("record_structure_import", "record_cdxml_import"):
+        return f"User-reviewed imported starting geometry ({structure.uuid}); no ORCA optimization performed."
     if "parameters" in creator.inputs:
         params = creator.inputs.parameters.get_dict()
         return f"Geometry from {creator.process_label} ({creator.uuid}): " + " ".join(params.get("input_keywords", []))
@@ -103,16 +113,24 @@ def result(uuid):
                 files = child.outputs.retrieved.base.repository
                 if "aiida.out" in files.list_object_names():
                     data["output_tail"] = files.get_object_content("aiida.out")[-6000:]
+    data["warnings"] = []
+    data["source_description"] = ""
     if "structure" in node.outputs:
-        structure = node.outputs.structure
-        atoms = structure.get_ase()
-        handle = io.StringIO()
-        ase.io.write(handle, atoms, format="xyz")
-        data.update(structure_uuid=structure.uuid, xyz=handle.getvalue(),
-                    symbols=atoms.get_chemical_symbols(), positions=atoms.positions.tolist(),
-                    source_description=structure_origin(structure))
+        try:
+            structure = node.outputs.structure
+            atoms = structure.get_ase()
+            handle = io.StringIO()
+            ase.io.write(handle, atoms, format="xyz")
+            data.update(structure_uuid=str(structure.uuid), xyz=handle.getvalue(),
+                        symbols=atoms.get_chemical_symbols(), positions=atoms.positions.tolist(),
+                        source_description=structure_origin(structure))
+        except (KeyError, ValueError, OSError) as exc:
+            data["warnings"].append(f"Final geometry could not be read: {exc}")
     if "trajectory" in node.outputs:
-        data["frames"] = node.outputs.trajectory.get_positions().tolist()
+        try:
+            data["frames"] = node.outputs.trajectory.get_positions().tolist()
+        except (KeyError, ValueError, OSError) as exc:
+            data["warnings"].append(f"Optimization trajectory could not be read: {exc}. Showing the final geometry when available.")
     if "optimization_summary" in node.outputs:
         data["summary"] = node.outputs.optimization_summary.get_dict()
     return data

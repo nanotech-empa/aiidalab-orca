@@ -2,7 +2,7 @@
 
 **Status: first local geometry prototype.** Following the [design discussion](https://github.com/nanotech-empa/aiidalab-orca/issues/1), implementation has started with a small geometry WorkChain and a separate AiiDAlab interface. The broader spectroscopy design below remains under review. CASCI, Dyson orbitals, spectral blends, and electronic-artifact recovery are not implemented yet.
 
-The geometry prototype supports explicit charge/multiplicity, HF or DFT optimization, keeping a supplied geometry, provenance-based result reuse, and a molecular trajectory/energy viewer. See [the geometry implementation and local setup guide](docs/geometry.md). The backend is separately installable from `backend/` and usable without the app. The local starting test is **NO, neutral doublet, PBE/def2-SVP**; pentacene remains the spectroscopy reference target.
+The geometry prototype supports structure import/editing (including the shared CDXML importer), searchable calculation history, explicit charge/multiplicity, HF or DFT optimization, keeping a supplied geometry, provenance-based result reuse, and a molecular trajectory/energy viewer. See [the geometry implementation and local setup guide](docs/geometry.md). The backend is separately installable from `backend/` and usable without the app. The local starting test is **NO, neutral doublet, PBE/def2-SVP**; pentacene remains the spectroscopy reference target.
 
 The intended application would let a researcher start from a molecular geometry, optionally optimize it with DFT or hybrid DFT, and calculate selected molecular properties such as natural orbitals, electron-addition/removal spectra, and Dyson-orbital maps. Existing compatible results should be reusable at every stage.
 

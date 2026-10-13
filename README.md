@@ -14,10 +14,11 @@ These requirements capture the initial discussion and are open to refinement wit
 - Allow the supplied geometry to be kept exactly as it is, including a geometry already optimized elsewhere or in a previous AiiDA calculation.
 - Offer optional molecular geometry optimization using conventional DFT or hybrid DFT. Agree on supported methods and protocols before choosing defaults.
 - Let the user request individual properties and return later to compute additional properties for the same structure.
-- Reuse compatible calculations and their outputs through explicit provenance links and checks of the data and files needed by the next step. Inspect the remote folder or, when appropriate, the retrieved folder and other stored output data. Reuse must work across separate app sessions and independent workflow submissions, with AiiDA caching disabled.
+- Reuse compatible calculations and their outputs through explicit provenance links and checks of the data and files needed by the next step. Inspect the remote folder or, when appropriate, the retrieved folder and other stored output data. Reuse must work across separate app sessions and independent workflow submissions, with AiiDA caching either enabled or disabled.
 - Explain which steps will run, which results will be reused, and why any calculation has to be repeated.
 - Preserve the connection between structures, calculations, files, and derived results through AiiDA provenance.
 - Build small, flexible scientific workflows that can be used separately and combined. Avoid one large workflow that owns every scientific task.
+- Develop and validate this reuse and recovery design in this app first. If it proves useful, adapt the validated approach for other EMPA apps later.
 
 ## 2. Scientific scope to agree
 
@@ -112,7 +113,19 @@ For each requested operation, the backend should check both scientific compatibi
 4. Reuse the verified data, or stage a suitable retrieved copy when the remote copy is gone. If preserved intermediate data can regenerate X, execute only that regeneration step.
 5. If the necessary representation of X is confirmed unavailable, recompute the step or scientifically consistent set of steps that produces it. Inform the user which quantity is missing and which calculations must be repeated; retain the old provenance and record the replacement as new work.
 
-This is explicit dependency resolution based on provenance and the actual inputs of Y. It must work with calculation caching disabled. Whenever the plan requires recomputation, the submitted calculation must execute rather than obtain its outputs from an AiiDA cache hit.
+This is explicit dependency resolution based on provenance and the actual inputs of Y. It remains the same whether calculation caching is enabled or disabled.
+
+### Compatible with caching, independent of caching
+
+AiiDA caching is an optional execution optimization. The backend must find and validate reusable results itself when caching is disabled. When caching is enabled, a cache hit must pass the same checks for the requested operation: cached provenance does not establish that a remote wavefunction still exists. Validate the outputs of newly submitted calculations, including cache hits, before using them downstream.
+
+When the execution plan requires a calculation to run again, set `metadata.disable_cache = True` on the actual producing CalcJob. This is AiiDA's supported per-process override, including for daemon-submitted calculations; it overrides the caching configuration for that process. See the [official instance-level caching documentation](https://aiida.readthedocs.io/projects/aiida-core/en/stable/howto/run_codes.html#instance-level). The orchestration must carry this decision through nested workflows and recovery attempts to every affected CalcJob. Setting a flag only on an outer WorkChain does not propagate it automatically.
+
+For example, if an earlier STM calculation used a wavefunction that has since disappeared from scratch, first look for a suitable preserved copy or a way to regenerate it. If a new electronic calculation is necessary, submit the producing CalcJob with caching disabled, verify its new wavefunction, and link that output to the new STM calculation. Preserve the earlier provenance. A later request should be able to select the newly available result even while older compatible results with missing files remain in the database. A cache hit found to have missing required files follows the same recovery path; it must not cause a loop of repeated cache hits.
+
+An explicit user request to recompute a selected step should follow the same path: skip manual reuse for that step and disable caching on the affected CalcJobs. A workflow control such as `force_recompute`, defaulting to `False` and set to `True` for requested steps, can express that request; it is separate from the profile's caching configuration. No timestamp input is needed to change the scientific input hash. This control and automatic recovery should affect only the requested or necessary steps, subject to the scientific compatibility rules below.
+
+The reuse interfaces, artifact requirements, availability checks, and recovery decisions should be designed for possible adoption by other EMPA apps, while initially being implemented and tested here. Enabling caching globally or changing existing apps is outside this first design effort.
 
 ### Availability and the execution plan
 
@@ -172,12 +185,13 @@ These observations are inputs to the discussion, not an agreed implementation ba
 1. **Agree on scope and reference data.** Resolve the scientific questions for pentacene, identify the first user stories, and decide the publication-comparison protocol and acceptance criteria with Andrés.
 2. **Define component interfaces and retention.** Specify the structures, state data, files, and compatibility rules each component consumes and produces. Decide which existing packages own each part.
 3. **Validate the scientific pipeline.** Use an inexpensive example and then an agreed reference dataset. Check energies, CI truncation, orbital compatibility, Dyson strengths, cube norms, natural occupations, and maps with agreed tolerances and conventions.
-4. **Implement the reusable components and dependency planning.** Verify independent use, composition, file restoration, missing-data behavior, and recovery without a graphical app.
+4. **Implement the reusable components and dependency planning.** Verify independent use, composition, file restoration, missing-data behavior, and recovery without a graphical app, with AiiDA caching both enabled and disabled.
 5. **Build the AiiDAlab interface.** Add structure selection, optional optimization, property selection, execution-plan review, monitoring, and result exploration.
+6. **Evaluate the pilot before wider adoption.** Review the reuse and recovery behavior in this app. If satisfactory, identify the interfaces and tests that can be shared and adapt the approach to other EMPA apps, checking each app's scientific dependencies and artifact requirements.
 
 No workflow implementation should start until the first design discussion has established what we want to support. There is no delivery schedule or finalized package topology yet.
 
-Candidate acceptance cases for the eventual implementation:
+Candidate acceptance cases for the eventual implementation follow. Run the applicable reuse and recovery cases with caching both enabled and disabled; the choice must not change scientific compatibility checks, artifact validation, or the ability to reuse valid existing results.
 
 | Request or event | Expected behavior |
 | --- | --- |
@@ -189,8 +203,11 @@ Candidate acceptance cases for the eventual implementation:
 | Reuse a stored optimized geometry after scratch cleanup | Keep the geometry and regenerate only prerequisites that are actually missing. |
 | Required remote file is gone but a suitable retrieved copy exists | Reuse the retrieved file and preserve its provenance. |
 | A completed calculation exists but a required artifact is absent from both remote and retrieved/stored outputs | Report what is missing and recompute its producing step or the required scientifically consistent set. |
-| Disable AiiDA caching | Explicit provenance-based reuse still works. |
-| Recompute a missing quantity while profile-level caching is enabled | Ensure the required calculation actually runs; a cache hit must not replace the planned recomputation. |
+| Disable AiiDA caching | Explicit provenance-based reuse still works across independent submissions and app sessions. |
+| Recompute a missing quantity while profile-level caching is enabled | The producing CalcJob executes with `metadata.disable_cache=True`; nested workflows and recovery attempts preserve the bypass decision. |
+| Receive a cache hit whose required remote artifact is missing | Detect the missing artifact before downstream use and restore, regenerate, or recompute it through the same recovery policy. |
+| Request the same property after successful regeneration | Select a compatible result with verified available artifacts, even when older unusable candidates remain. |
+| Explicitly request recomputation of a selected step | Skip manual reuse and disable caching for the affected CalcJobs, while preserving compatible results for unaffected steps. |
 | Lose the common reference orbital file | Restore it, or report the scientifically consistent recalculation required. |
 | Temporarily lose SSH access | Report an availability check failure, not deleted results. |
 | Change a method or active-orbital selection | Reuse only unaffected compatible stages. |

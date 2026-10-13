@@ -45,9 +45,19 @@ flowchart TD
 
 This diagram describes dependencies, not a mandatory sequence to execute on every submission. A user with appropriate existing data should be able to enter at any relevant stage.
 
-Questions for scientific review include:
+### First testing target: pentacene
 
-- What is the first reference molecule and where are the geometry, input settings, and reference numerical results?
+**Pentacene is the agreed first system for design and subsequent testing.** The user-supplied starting geometry is included as [`examples/pentacene/pentacene.xyz`](examples/pentacene/pentacene.xyz). The XYZ contains 36 atoms (C22H14), all in the xy plane. This file has not yet been verified as an optimized geometry or as the exact geometry used in the publication.
+
+The scientific reference is Kumar et al., *Multireference Theory of Scanning Tunneling Spectroscopy Beyond One-Electron Molecular Orbitals: Can We Image Molecular Orbitals?*, **J. Am. Chem. Soc. 147**, 24993–25003 (2025), [DOI: 10.1021/jacs.5c08166](https://doi.org/10.1021/jacs.5c08166) ([user-supplied article link](https://pubs.acs.org/jacsat/article/147/28/24993/3738262/Multireference-Theory-of-Scanning-Tunneling)).
+
+The paper describes pentacene using closed-shell PBE0 reference orbitals and CASCI(12,12), and presents natural orbitals, Dyson orbitals, and strengths. Its simulated tunneling maps use PP-STM/PP-SPM. These are useful reference choices for discussion; the supplied M062X/CAS(14,14) setup and meqpy map model must not be assumed to reproduce that protocol automatically. [Paper and methods](https://pubs.acs.org/doi/10.1021/jacs.5c08166)
+
+We should agree with Andrés on two levels of testing: an inexpensive pipeline check using the supplied pentacene structure, and a numerical comparison with the publication using matched geometry, electronic-structure settings, and map assumptions. The initial target is to compare reference occupations, transition energies and strengths, spectra, and selected map shapes. Exact settings, reference outputs, and acceptance tolerances remain to be established from the paper, its supporting information, and the discussion. Both keeping the supplied geometry and optionally optimizing it should be covered in the eventual workflow tests.
+
+### Questions for scientific review
+
+- Which pentacene geometry, basis, active orbitals, input settings, and numerical reference results should define the publication-comparison test?
 - Should the first supported case be a singlet reference with doublet final states, a triplet with doublet/quartet final states, or both? The supplied command and illustrative figure use different reference multiplicities.
 - Is the first release limited to CASCI in a shared orbital basis? Separately optimized CASSCF orbitals would require their own validation and reuse rules.
 - How should the active orbitals be selected, inspected, and recorded? An active-space size such as CAS(14,14) alone does not identify the scientifically appropriate orbitals.
@@ -143,13 +153,13 @@ An initial source review on 13 October 2026 found the following integration poin
 - The notebook selects `_m1.cube` filenames, while the reviewed Dyson CLI names files by the final-state multiplicity. File discovery must agree with the producer and preserve state identity.
 - At `dyson-orca-tools` commit `96658a681815faf1cf260bcb26fe712ca7715103`, the spectrum command overwrites its cube-grid settings with the energy grid before cube writing. A small mocked probe reproduced the resulting type error. This is a software integration observation, not a numerical validation of the scientific implementation.
 - The script's per-process memory settings and total scheduler requests need reconciliation before submitting calculations.
-- A reference dataset and agreed scientific tolerances are still needed. Saved notebook images alone do not establish numerical reproducibility.
+- A pentacene starting geometry is now available and selected as the first testing target. Matched reference outputs and agreed scientific tolerances are still needed; saved notebook images alone do not establish numerical reproducibility.
 
 These observations are inputs to the discussion, not an agreed implementation backlog. Recheck upstream code before preparing any fixes.
 
 ## 8. Proposed sequence after design agreement
 
-1. **Agree on scope and reference data.** Resolve the scientific questions, identify the first user stories, and decide the acceptance criteria with Andrés.
+1. **Agree on scope and reference data.** Resolve the scientific questions for pentacene, identify the first user stories, and decide the publication-comparison protocol and acceptance criteria with Andrés.
 2. **Define component interfaces and retention.** Specify the structures, state data, files, and compatibility rules each component consumes and produces. Decide which existing packages own each part.
 3. **Validate the scientific pipeline.** Use an inexpensive example and then an agreed reference dataset. Check energies, CI truncation, orbital compatibility, Dyson strengths, cube norms, natural occupations, and maps with agreed tolerances and conventions.
 4. **Implement the reusable components and dependency planning.** Verify independent use, composition, file restoration, missing-data behavior, and recovery without a graphical app.

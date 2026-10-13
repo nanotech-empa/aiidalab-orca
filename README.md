@@ -22,6 +22,16 @@ These requirements capture the initial discussion and are open to refinement wit
 - Build small, flexible scientific workflows that can be used separately and combined. Avoid one large workflow that owns every scientific task.
 - Develop and validate this reuse and recovery design in this app first. If it proves useful, adapt the validated approach for other EMPA apps later.
 
+**Interface design baseline:** use [AiiDAlab-QE](https://github.com/aiidalab/aiidalab-qe)
+as the reference for section organization, step confirmation and validation,
+importers/editors, computational resources, submission, search, and results.
+Reuse maintained shared widgets and applicable QE patterns before introducing
+custom ones. Any departure should meet an ORCA-specific need or demonstrate a
+usability improvement, with its rationale and browser validation recorded. The
+draft interface is not yet a claim of parity; the next UI cleanup should compare
+the same user tasks against QE, including returning to earlier steps and
+invalidating dependent settings after an edit.
+
 ## 2. Scientific scope to agree
 
 The initial motivating example combines three kinds of output:

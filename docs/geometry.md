@@ -85,9 +85,9 @@ The interface has three areas:
   label or UUID, with state, method and date filters and paginated results.
   Dates use Europe/Zurich. Select a run to check the stored data, view results,
   use its final geometry, or copy its settings onto the current input molecule.
+  **Advanced search · open by UUID** opens a known workflow directly.
 - **Results**: trajectory, SCF evaluation energies, final coordinates, method
   provenance and, when parsed, ⟨S²⟩; download XYZ or continue from the geometry.
-  A workflow UUID can also be opened directly.
 
 The interface uses the shared `aiidalab-widgets-base.WizardAppWidget` and its
 step states, following QE's confirmation, dependency, and back-navigation patterns.

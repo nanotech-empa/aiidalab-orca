@@ -98,11 +98,20 @@ class HistoryWidget(ipw.VBox):
         self.view.on_click(lambda _: self._view_run(self.selected_uuid))
         self.geometry.on_click(lambda _: self._use_geometry(self.selected_uuid))
         self.copy.on_click(lambda _: self._copy_settings(self.selected_uuid))
+        self.lookup_uuid = ipw.Text(placeholder="Geometry workflow UUID", layout=ipw.Layout(width="100%"))
+        load = ipw.Button(description="Load run", icon="folder-open", disabled=True)
+        load.on_click(lambda _: self._view_run(self.lookup_uuid.value.strip()))
+        self.lookup_uuid.observe(lambda change: setattr(load, "disabled", not change["new"].strip()), names="value")
+        self.advanced = ipw.Accordion(children=[ipw.VBox([
+            ipw.HTML("<p>Open a geometry workflow from this AiiDA database using its UUID.</p>"),
+            self.lookup_uuid, load,
+        ])], selected_index=None)
+        self.advanced.set_title(0, "Advanced search · open by UUID")
         super().__init__([
             ipw.HTML("<h3>Search calculations</h3><p>Find a run, inspect its available data, then choose how to continue.</p>"),
             ipw.HBox([self.query, self.state, self.method, self.search]), ipw.HBox([self.since, self.until]),
             self.message, self.detail, ipw.HBox([self.view, self.geometry, self.copy]),
-            self.rows, ipw.HBox([self.previous, self.next]),
+            self.rows, ipw.HBox([self.previous, self.next]), self.advanced,
         ])
 
     def _search(self, _=None):

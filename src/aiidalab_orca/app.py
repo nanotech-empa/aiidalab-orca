@@ -53,11 +53,6 @@ class OrcaApp(ipw.VBox):
         self.result_box = ipw.VBox()
         refresh = ipw.Button(description="Refresh status", icon="refresh")
         refresh.on_click(lambda _: self._refresh())
-        self.run_uuid = ipw.Text(placeholder="Geometry workflow UUID", layout=ipw.Layout(width="100%"))
-        load = ipw.Button(description="Load run", icon="folder-open")
-        load.on_click(lambda _: self.load_run(self.run_uuid.value.strip()))
-        identifiers = ipw.Accordion(children=[ipw.VBox([self.run_uuid, load])], selected_index=None)
-        identifiers.set_title(0, "Open a workflow by UUID")
         self.use_final = ipw.Button(description="Use final geometry", icon="cubes", disabled=True, layout=ipw.Layout(width="auto"))
         self.use_final.on_click(lambda _: self.use_geometry(self.process_uuid))
         self.copy = ipw.Button(description="Copy settings", icon="copy", disabled=True)
@@ -104,7 +99,7 @@ class OrcaApp(ipw.VBox):
         self.history = HistoryWidget(self.load_run, self.use_geometry, self.copy_settings)
         self.pages = ipw.Tab(children=[self.draft_panel, self.history,
                                       ipw.VBox([ipw.HBox([refresh, self.use_final, self.copy]), self.status,
-                                                self.result_box, identifiers])])
+                                                self.result_box])])
         for i, title in enumerate(["New calculation", "Search calculations", "Results"]):
             self.pages.set_title(i, title)
         self.pages.observe(self._page_changed, names="selected_index")
@@ -269,7 +264,6 @@ class OrcaApp(ipw.VBox):
             self._update_steps()
             self.draft_panel.children = [self.submitted_notice]
             self.pages.selected_index = 2
-            self.run_uuid.value = self.process_uuid
             self.error.value = ""
             self.refresh_status()
             self._start_polling()
@@ -281,7 +275,6 @@ class OrcaApp(ipw.VBox):
         try:
             inspect_run(uuid)
             self.process_uuid = uuid
-            self.run_uuid.value = uuid
             self.pages.selected_index = 2
             self.refresh_status()
             self._start_polling()

@@ -1,0 +1,27 @@
+# Versioned starting protocols, not universal accuracy guarantees.
+# Never change a published protocol's scientific values; add a new version.
+default_protocol: pbe-v1
+default_inputs:
+  method: PBE
+  basis: def2-SVP
+  reference: auto
+  approximation: auto
+  auxiliary_basis: def2/J
+  optimization: NormalOpt
+  scf_convergence: TightSCF
+  grid: default
+  dispersion: default
+  max_geometry_steps: 100
+  max_scf_steps: 200
+  element_settings: {}
+  block_parameters: {}
+protocols:
+  pbe-v1:
+    label: PBE / def2-SVP · v1
+    description: Local geometry starting settings, exercised on neutral NO doublet.
+    overrides: {}
+  pbe0-v1:
+    label: PBE0 / def2-SVP · v1
+    description: Hybrid geometry starting settings, exercised on NO and methane.
+    overrides:
+      method: PBE0

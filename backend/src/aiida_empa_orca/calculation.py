@@ -22,11 +22,7 @@ class OptimizationCalculation(OrcaCalculation):
         return info
 
     def _write_input_file(self, parameters, folder, filename):
-        if self.inputs.maxcore_mb.value < 1:
-            raise ValueError("MaxCore must be positive")
-        super()._write_input_file(parameters, folder, filename)
-        path = folder.get_abs_path(filename)
-        with open(path, encoding="utf8") as handle:
-            content = handle.read()
-        with open(path, "w", encoding="utf8") as handle:
-            handle.write(f"%maxcore {self.inputs.maxcore_mb.value}\n{content}")
+        from .input import render_input
+        content = render_input(parameters.get_dict(), self.inputs.maxcore_mb.value, self._INPUT_COORDS_FILE)
+        with open(folder.get_abs_path(filename), "w", encoding="utf8") as handle:
+            handle.write(content)

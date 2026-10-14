@@ -11,6 +11,7 @@ dependencies = [
   "aiida-core>=2.9.2,<3",
   "aiida-orca @ git+https://github.com/ezpzbz/aiida-orca.git@36abfa6917819c3e9ff454cfa89d9fd013634d12",
   "ase",
+  "PyYAML",
 ]
 
 [project.entry-points."aiida.calculations"]
@@ -25,3 +26,6 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+aiida_empa_orca = ["protocols/*.yaml"]

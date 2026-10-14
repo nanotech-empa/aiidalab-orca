@@ -79,7 +79,7 @@ class HistoryWidget(ipw.VBox):
         self._copy_settings = copy_settings
         self.query = ipw.Text(placeholder="Formula, label, or UUID", layout=ipw.Layout(width="340px"))
         self.state = ipw.Dropdown(options=[("All states", "")] + [(s.capitalize(), s) for s in ["succeeded", "failed", "running", "waiting", "created", "excepted", "killed"]])
-        self.method = ipw.Dropdown(options=[("All methods", "")] + [(m, m) for m in METHODS])
+        self.method = ipw.Combobox(options=METHODS, placeholder="All methods", ensure_option=False)
         self.since = ipw.DatePicker(description="From")
         self.until = ipw.DatePicker(description="To")
         self.search = ipw.Button(description="Search", icon="search", button_style="primary")

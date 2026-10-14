@@ -61,10 +61,12 @@ def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *,
         structure = orm.load_node(store_reviewed_structure(atoms, source_uuid, imported))
     else:
         structure.store()
+    from aiida_empa_orca.input import preview_input
     return {"structure_uuid": str(structure.uuid), "code_uuid": str(code.uuid) if code else None,
             "settings": settings, "optimize": optimize, "force_recompute": force_recompute,
             "plan": plan, "formula": structure.get_formula(),
-            "source_description": structure_origin(structure)}
+            "source_description": structure_origin(structure),
+            "input_files": preview_input(structure, settings) if optimize else {}}
 
 
 def structure_origin(structure):
@@ -124,6 +126,22 @@ def result(uuid):
                 files = child.outputs.retrieved.base.repository
                 if "aiida.out" in files.list_object_names():
                     data["output_tail"] = files.get_object_content("aiida.out")[-6000:]
+    # Read the actual CalcJob input (including a source run for explicit reuse),
+    # rather than regenerating historical input using today's renderer.
+    source = orm.load_node(data["source_uuid"]) if data["source_uuid"] else node
+    seen = set()
+    while "reuse_source" in source.inputs and source.uuid not in seen:
+        seen.add(source.uuid)
+        source = orm.load_node(source.inputs.reuse_source.value)
+    jobs = sorted((c for c in source.called_descendants if isinstance(c, orm.CalcJobNode)), key=lambda c: c.ctime)
+    data["input_files"] = {}
+    if jobs:
+        repository = jobs[-1].base.repository
+        for filename in ("aiida.inp", "aiida.coords.xyz"):
+            try:
+                data["input_files"][filename] = repository.get_object_content(filename)
+            except (FileNotFoundError, OSError):
+                pass
     data["warnings"] = []
     data["source_description"] = ""
     if "structure" in node.outputs:

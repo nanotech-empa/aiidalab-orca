@@ -5,7 +5,8 @@ import html
 
 import ipywidgets as ipw
 
-from aiida_empa_orca.settings import BASES, METHODS, DEFAULTS
+from aiida_empa_orca.settings import DEFAULTS
+from .configuration import GeometrySettings
 from . import services, structure_io
 from .history import HistoryWidget, inspect_run
 from .viewer import show_result
@@ -29,16 +30,12 @@ class OrcaApp(ipw.VBox):
         width = ipw.Layout(width="460px")
         self.structure = StructureWidget()
         self.optimize = ipw.Checkbox(value=True, description="Optimize geometry")
-        self.method = ipw.Dropdown(options=[("M06-2X" if m == "M062X" else m, m) for m in METHODS], value="PBE", description="Method", style=style, layout=width)
-        self.basis = ipw.Dropdown(options=BASES, value="def2-SVP", description="Basis", style=style, layout=width)
-        self.charge = ipw.IntText(value=0, description="Charge", style=style, layout=width)
-        self.multiplicity = ipw.BoundedIntText(value=2, min=1, max=100, description="Multiplicity (2S+1)", style=style, layout=width)
-        self.ri = ipw.Checkbox(value=True, description="RI-J / RIJCOSX with def2/J")
-        self.convergence = ipw.Dropdown(options=["NormalOpt", "TightOpt"], description="Geometry convergence", style=style, layout=width)
+        self.science = GeometrySettings()
+        # Keep familiar control names for the surrounding wizard and tests.
+        for key in ("method", "basis", "charge", "multiplicity", "convergence", "max_steps", "max_scf"):
+            setattr(self, key, getattr(self.science, key))
         self.nprocs = ipw.BoundedIntText(value=2, min=1, max=128, description="Processes", style=style, layout=width)
         self.memory = ipw.BoundedIntText(value=2048, min=256, max=1000000, description="Total memory (MB)", style=style, layout=width)
-        self.max_steps = ipw.BoundedIntText(value=100, min=1, max=2000, description="Max geometry steps", style=style, layout=width)
-        self.max_scf = ipw.BoundedIntText(value=200, min=1, max=2000, description="Max SCF steps", style=style, layout=width)
         self.wallclock = ipw.BoundedIntText(value=30, min=1, max=10080, description="Wall time (minutes)", style=style, layout=width)
         self.code = ipw.Dropdown(options=services.codes(), description="ORCA code", style=style, layout=width)
         self.force = ipw.Checkbox(value=False, description="Recompute even if a compatible result is available", layout=ipw.Layout(width="auto"))
@@ -61,11 +58,6 @@ class OrcaApp(ipw.VBox):
         self.resource_message = ipw.HTML()
         self.settings_summary = ipw.HTML()
         self.resource_hint = ipw.HTML()
-        advanced = ipw.Accordion(children=[ipw.VBox([
-            self.ri, self.convergence, self.max_steps, self.max_scf,
-            ipw.HTML("<p>TightSCF is used. No dispersion correction is added. RI-J for PBE; RIJCOSX for HF and hybrid functionals.</p>"),
-        ])], selected_index=None)
-        advanced.set_title(0, "Advanced scientific settings")
         self.next_step = ipw.Button(description="Confirm structure", button_style="success", icon="check", disabled=True, layout=ipw.Layout(width="auto"))
         self.next_step.on_click(self._confirm_structure)
         self.confirm_settings = ipw.Button(description="Confirm settings", button_style="success", icon="check", disabled=True, layout=ipw.Layout(width="auto"))
@@ -77,8 +69,7 @@ class OrcaApp(ipw.VBox):
         self.resource_controls = ipw.VBox([self.code, self.nprocs, self.memory, self.wallclock, self.force])
         self.structure_step = GeometryStep([self.structure, self.next_step], "Select a molecule to begin.")
         self.settings_step = GeometryStep([
-            self.settings_summary, self.optimize, self.method, self.basis,
-            self.charge, self.multiplicity, advanced, self.science_message,
+            self.settings_summary, self.optimize, self.science, self.science_message,
             ipw.HBox([back_structure, self.confirm_settings]),
         ], "Confirm the molecular structure in step 1 to configure this calculation.")
         self.resources_step = GeometryStep([
@@ -108,20 +99,19 @@ class OrcaApp(ipw.VBox):
             self.error, self.pages,
         ], layout=ipw.Layout(max_width="1100px"))
         self.structure.observe(self._structure_changed, names="revision")
-        for widget in [self.optimize, self.method, self.basis, self.charge, self.multiplicity,
-                       self.ri, self.convergence, self.max_steps, self.max_scf]:
-            widget.observe(self._settings_changed, names="value")
+        self.optimize.observe(self._settings_changed, names="value")
+        self.science.observe(self._settings_changed, names="revision")
         for widget in [self.nprocs, self.memory, self.wallclock, self.code, self.force, self.label]:
             widget.observe(self._invalidate, names="value")
         self.optimize.observe(self._optimization_changed, names="value")
         self._update_steps()
 
     def _settings(self):
-        values = {"method": self.method.value, "basis": self.basis.value, "charge": self.charge.value,
-                "multiplicity": self.multiplicity.value, "ri": self.ri.value,
-                "optimization": self.convergence.value, "nprocs": self.nprocs.value,
-                "memory_mb": self.memory.value, "max_geometry_steps": self.max_steps.value,
-                "max_scf_steps": self.max_scf.value, "wallclock_seconds": self.wallclock.value * 60}
+        # Inactive optimization choices cannot obstruct keeping a structure.
+        values = (self.science.values() if self.optimize.value else
+                  {"charge": self.charge.value, "multiplicity": self.multiplicity.value})
+        values.update(nprocs=self.nprocs.value, memory_mb=self.memory.value,
+                      wallclock_seconds=self.wallclock.value * 60)
         if not self.optimize.value:
             # The backend schema includes resources even for keep-as-is records.
             # Inactive controls must not obstruct keeping a geometry.
@@ -202,8 +192,7 @@ class OrcaApp(ipw.VBox):
         self.steps.selected_index = 0
 
     def _optimization_changed(self, change):
-        for widget in [self.method, self.basis, self.ri, self.convergence, self.max_steps, self.max_scf]:
-            widget.disabled = not change["new"]
+        self.science.optimization_controls.layout.display = "" if change["new"] else "none"
 
     def _page_changed(self, change):
         if change["new"] == 1:
@@ -233,7 +222,9 @@ class OrcaApp(ipw.VBox):
             body = f"<h3>{action}</h3>"
             body += f"<p>{self.review['formula']} · charge {s['charge']} · multiplicity {s['multiplicity']}</p>"
             if self.optimize.value:
-                body += f"<p>{s['method']}/{s['basis']}</p>"
+                from .viewer import settings_details, input_details
+                body += settings_details(s)
+                body += input_details(self.review["input_files"], "Review generated ORCA input")
             if plan["source_uuid"]:
                 body += f"<p>Stored coordinates and history are available; no wavefunction is required for this operation.</p><details><summary>Source workflow</summary><code>{plan['source_uuid']}</code></details>"
             if plan["unavailable"]:
@@ -352,12 +343,9 @@ class OrcaApp(ipw.VBox):
             if self._submitted:
                 self._edit_copy()
             s = data["settings"]
-            mapping = {"method": self.method, "basis": self.basis, "charge": self.charge,
-                       "multiplicity": self.multiplicity, "ri": self.ri, "optimization": self.convergence,
-                       "nprocs": self.nprocs, "memory_mb": self.memory, "max_geometry_steps": self.max_steps,
-                       "max_scf_steps": self.max_scf}
-            for key, widget in mapping.items():
-                widget.value = s[key]
+            self.science.set_values(s)
+            self.nprocs.value = s["nprocs"]
+            self.memory.value = s["memory_mb"]
             self.wallclock.value = (s["wallclock_seconds"]+59)//60
             self.optimize.value = data["optimize"]
             self.force.value = False

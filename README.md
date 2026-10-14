@@ -4,6 +4,23 @@
 
 The geometry prototype supports structure import/editing (including the shared CDXML importer), searchable calculation history, explicit charge/multiplicity, HF or DFT optimization, keeping a supplied geometry, provenance-based result reuse, and a molecular trajectory/energy viewer. See [the geometry implementation and local setup guide](docs/geometry.md). The backend is separately installable from `backend/` and usable without the app. The local starting test is **NO, neutral doublet, PBE/def2-SVP**; pentacene remains the spectroscopy reference target.
 
+Geometry is the first working example of **property → YAML protocol → GUI
+overrides → reviewed effective input**. [Versioned starting protocols](backend/src/aiida_empa_orca/protocols/geometry.yaml)
+hold scientific defaults, following the packaged-protocol approach used by
+`aiida-nanotech-empa`. The GUI edits a per-run copy and previews the generated
+ORCA input; stored runs retain their resolved settings and actual CalcJob input.
+Method/basis suggestions are editable, with advanced reference, convergence,
+RI, grid, dispersion, element-specific basis/ECP and scalar scientific controls.
+These remain starting protocols for review, not universal accuracy guarantees.
+
+**The next scientific priority is the Dyson pipeline**, not a general-purpose
+ORCA input editor. Next come a separate reference-state step with a checked
+wavefunction-artifact contract, followed by CASCI in the common orbital basis,
+Dyson amplitudes/energies, and the spectrum plus energy-selected map viewer.
+Reference-wavefunction import/recovery and nested property blocks belong to those
+components. The geometry example provides the protocol, override, provenance
+and reuse pattern to review with Andrés and Eve before extending it.
+
 The intended application would let a researcher start from a molecular geometry, optionally optimize it with DFT or hybrid DFT, and calculate selected molecular properties such as natural orbitals, electron-addition/removal spectra, and Dyson-orbital maps. Existing compatible results should be reusable at every stage.
 
 The scientific plan and implementation should continue to be reviewed with [Andrés Ortega-Guerrero](https://github.com/AndresOrtegaGuerrero). Please keep initial feedback in the design-review issue under [Issues](https://github.com/nanotech-empa/aiidalab-orca/issues), referring to the relevant README section. This is a request for design and scientific review; it is not an assignment to implement the proposal.

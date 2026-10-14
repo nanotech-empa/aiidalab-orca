@@ -166,7 +166,7 @@ def test_ui_ranges_and_internal_atom_order(aiida_profile):
         widget.set_atoms(Atoms("CHHH", positions=[[0, 0, 0], [1, 0, 0], [1, 1, 0], [1, 1, 1]]))
         editor = widget.constraints
         editor.append()
-        row, kind, indices, target = editor.rows[0]
+        row, kind, indices, target, current = editor.rows[0]
         indices.value = "1 3..4"
         assert [c["atoms"] for c in editor.values()] == [[0], [2], [3]]
         for invalid in ("0", "4..2", "1 20", "2..999999999"):
@@ -179,9 +179,36 @@ def test_ui_ranges_and_internal_atom_order(aiida_profile):
         assert editor.values() == [{"kind": "angle", "atoms": [0, 2, 1], "value": 105.5}]
         target.value = ""
         assert "value" not in editor.values()[0]
+        assert "Current: 45.00°" in current.value
+        # The measurement remains independent of the requested target.
+        target.value = "100"
+        assert "Current: 45.00°" in current.value
+        kind.value = "distance"
+        indices.value = "1 2"
+        assert "Current: 1.0000 Å" in current.value
+        changed = widget.atoms.copy()
+        changed.positions[1, 0] = 1.2
+        widget.editor.structure = changed
+        assert "Current: 1.2000 Å" in current.value
+        kind.value = "angle"
+        indices.value = "1 2 3"
+        assert "Current: 78.69°" in current.value
+        kind.value = "dihedral"
+        indices.value = "1 2 3 4"
+        assert "Current: 90.00°" in current.value
+        changed.positions[3, 2] = -1
+        widget.editor.structure = changed
+        assert "Current: -90.00°" in current.value
+        indices.value = "1 2 3 99"
+        assert "Current: unavailable" in current.value
+        changed.positions[2] = [2.4, 0, 0]
+        widget.editor.structure = changed
+        indices.value = "1 2 3 4"
+        assert "Current: unavailable" in current.value
         kind.value = "xyz"
         indices.value = "1"
         target.value = "123"  # A hidden previous target cannot change Cartesian semantics.
+        editor.confirm.click()
         assert "value" not in editor.values()[0]
     finally:
         widget.close()

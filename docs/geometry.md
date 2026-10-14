@@ -211,8 +211,12 @@ the dihedral axis. Check that order when taking atoms from the viewer selection.
 
 Frozen Cartesian components retain their initial coordinates. A blank internal
 coordinate target retains its initial value; an explicit target uses angstrom
-for distances or degrees for angles/dihedrals. This first interface accepts
-positive distances, angles strictly between 0 and 180 degrees, and dihedrals
+for distances or degrees for angles/dihedrals. Each internal-coordinate row also
+shows **Current**, measured from the displayed geometry using that row's ordered
+atom numbers. It updates when the atoms or geometry change and remains visible
+when a different target is entered. Undefined measurements are explicitly
+unavailable. Dihedrals are displayed in the same signed range as their targets.
+This first interface accepts positive distances, angles strictly between 0 and 180 degrees, and dihedrals
 between -180 and 180 degrees. Linear/undefined dihedrals, missing atoms,
 contradictory duplicate internal constraints and fully frozen Cartesian
 geometries are rejected before submission. It does not prove that every

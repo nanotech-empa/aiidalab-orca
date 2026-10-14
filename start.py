@@ -16,7 +16,7 @@ def get_start_widget(appbase, jupbase):
           <p style="margin:0;color:#495b66">Prepare, optimize, and reuse molecules with AiiDA provenance.</p></div>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:16px">
-        <a href="{app}/start.ipynb" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:16px;padding:18px 24px;border:1px solid #d4e4eb;border-radius:8px;background:#f1f7fa;text-decoration:none;color:#225c76;min-width:240px">
+        <a href="{app}/orca.ipynb" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:16px;padding:18px 24px;border:1px solid #d4e4eb;border-radius:8px;background:#f1f7fa;text-decoration:none;color:#225c76;min-width:240px">
           <i class="fa fa-cubes" aria-hidden="true" style="font-size:34px"></i>
           <span><strong style="font-size:17px">New calculation</strong><br>Import, edit, and optimize a molecule</span>
         </a>

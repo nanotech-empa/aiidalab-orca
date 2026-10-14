@@ -57,8 +57,8 @@ from `%pal`. This milestone deliberately supports local execution only.
 
 After installing new entry points, refresh the AiiDA daemon at a suitable point
 after checking existing work. Deploy this checkout as `~/apps/orca` (a symlink is
-fine), then open `start.ipynb` in AiiDAlab app mode. On the development instance:
-`http://localhost:8888/apps/apps/orca/start.ipynb`.
+fine), then open `orca.ipynb` in AiiDAlab app mode. On the development instance:
+`http://localhost:8888/apps/apps/orca/orca.ipynb`.
 
 The tested ORCA 6.1.1 parser requires the unreleased
 [`aiida-orca` PR 89 revision](https://github.com/ezpzbz/aiida-orca/pull/89)
@@ -106,7 +106,7 @@ structure, configuration, and resources/submission stages. Keeping a geometry
 hides resource controls and requires no code; unused resource fields in the
 backend's settings schema receive its defaults. No spin or method is guessed.
 
-The home-page card provides icon launchers for **New calculation** (`start.ipynb`)
+The home-page card provides icon launchers for **New calculation** (`orca.ipynb`)
 and **Search calculations** (`search.ipynb`). Both load the AiiDA profile in a
 separate first cell, before building the app. Results use NGL's trajectory controls
 and keep detailed provenance and identifiers in an expandable section.

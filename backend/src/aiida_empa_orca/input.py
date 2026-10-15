@@ -13,6 +13,7 @@ def render_input(parameters, maxcore_mb, coordinate_filename):
         for name, values in sorted(parameters.get("input_blocks", {}).items())
     }}
     text = f"%maxcore {maxcore_mb}\n{render_orca_input(parameters)}"
+    text += "\n%output Print[P_OrbEn] 2 end\n"
     text += f"\n* xyzfile {parameters['charge']} {parameters['multiplicity']} {coordinate_filename}\n"
     after = render_blocks_after_coordinates(parameters)
     return text + (f"\n{after}\n" if after else "")

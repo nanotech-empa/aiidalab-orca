@@ -24,7 +24,7 @@ OUTPUT = 'Program Version 6.1.1\nSCF CONVERGED AFTER 12 CYCLES\nFINAL SINGLE POI
 @pytest.fixture
 def electronic_source(aiida_profile_clean, aiida_localhost, tmp_path):
     """Factory with explicit CalcJob provenance and disposable electronic files."""
-    def make(optimization=False):
+    def make(optimization=False, output=OUTPUT):
         code = orm.InstalledCode(computer=aiida_localhost, filepath_executable='/bin/true').store()
         initial = orm.StructureData(ase=Atoms('NO', positions=[[0,0,0],[0,0,1.3]])).store()
         final = (orm.StructureData(ase=Atoms('NO', positions=[[0,0,0],[0,0,1.16]])).store()
@@ -47,8 +47,8 @@ def electronic_source(aiida_profile_clean, aiida_localhost, tmp_path):
         for name in reference.ELECTRONIC_FILES:
             (folder/name).write_bytes(b'test artifact\n')
         retrieved = orm.FolderData()
-        retrieved.base.repository.put_object_from_filelike(io.StringIO(OUTPUT), 'aiida.out')
-        summary = reference_summary(OUTPUT)
+        retrieved.base.repository.put_object_from_filelike(io.StringIO(output), 'aiida.out')
+        summary = reference_summary(output)
         outputs = {'output_parameters': orm.Dict(dict={}), 'retrieved': retrieved,
                    'remote_folder': orm.RemoteData(computer=aiida_localhost, remote_path=str(folder))}
         if optimization:

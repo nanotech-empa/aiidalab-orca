@@ -66,7 +66,11 @@ class OrcaApp(ipw.VBox):
         back_structure.on_click(lambda _: setattr(self.steps, "selected_index", 0))
         back_settings = ipw.Button(description="Back to settings", icon="arrow-left", layout=ipw.Layout(width="auto"))
         back_settings.on_click(lambda _: setattr(self.steps, "selected_index", 1))
-        self.resource_controls = ipw.VBox([self.code, self.nprocs, self.memory, self.wallclock, self.force])
+        from .storage import WavefunctionStorage
+        self.wavefunction_storage = WavefunctionStorage()
+        storage_panel = ipw.Accordion(children=[self.wavefunction_storage], selected_index=None)
+        storage_panel.set_title(0, "Wavefunction storage")
+        self.resource_controls = ipw.VBox([self.code, self.nprocs, self.memory, self.wallclock, self.force, storage_panel])
         self.structure_step = GeometryStep([self.structure, self.next_step], "Select a molecule to begin.")
         self.settings_step = GeometryStep([
             self.settings_summary, self.optimize, self.mode_hint, self.science, self.science_message,
@@ -104,6 +108,7 @@ class OrcaApp(ipw.VBox):
         self.structure.constraints.observe(self._settings_changed, names="revision")
         for widget in [self.nprocs, self.memory, self.wallclock, self.code, self.force, self.label]:
             widget.observe(self._invalidate, names="value")
+        self.wavefunction_storage.observe(self._invalidate, names="revision")
         self.optimize.observe(self._optimization_changed, names="value")
         self._update_steps()
 
@@ -212,7 +217,7 @@ class OrcaApp(ipw.VBox):
             self.review = services.prepare(
                 self.structure.xyz_text(), self.structure.source_uuid, self._settings(),
                 self.code.value, self.optimize.value, self.force.value,
-                atoms=self.structure.atoms, imported=self.structure.imported,
+                atoms=self.structure.atoms, imported=self.structure.imported, storage=self.wavefunction_storage.values(),
             )
             self.structure.mark_stored(self.review["structure_uuid"])
             plan = self.review["plan"]
@@ -224,6 +229,10 @@ class OrcaApp(ipw.VBox):
             body = f"<h3>{action}</h3>"
             body += f"<p>{self.review['formula']} · charge {s['charge']} · multiplicity {s['multiplicity']}</p>"
             from .viewer import settings_details, input_details
+            if self.review.get("storage"):
+                policy = self.review["storage"]["policy"]
+                body += (f"<p>Wavefunction preservation: retrieve bundles up to {policy['threshold_mb']:g} MiB; "
+                         f"stash larger bundles under <code>{html.escape(policy['stash_directory'])}</code>.</p>")
             body += settings_details(s, single_point=not self.optimize.value)
             body += input_details(self.review["input_files"], "Review generated ORCA input")
             if plan["source_uuid"]:
@@ -294,7 +303,7 @@ class OrcaApp(ipw.VBox):
         self.use_final.disabled = "structure_uuid" not in data
         old = self.result_box.children
         if data["finished"]:
-            if data["successful"]:
+            if data.get("scientific_success", data["successful"]):
                 self.result_box.children = [show_result(data)]
             else:
                 message = data["exit_message"] or "Workflow did not finish successfully"

@@ -5,6 +5,7 @@ from aiida.common import AttributeDict
 from aiida.engine import BaseRestartWorkChain, ToContext, WorkChain, if_
 from aiida_orca.workchains.base import OrcaBaseWorkChain
 
+from .artifacts import ElectronicStorageMixin
 from .calculation import OptimizationCalculation
 from .reuse import RESULT_TYPES, discover_results, validate_outputs, validate_result
 from .settings import normalize_settings, orca_parameters, signature, validate_molecule
@@ -26,7 +27,7 @@ class OptimizationBaseWorkChain(OrcaBaseWorkChain):
         self.ctx.inputs = AttributeDict(self.exposed_inputs(self._process_class, "orca"))
 
 
-class GeometryWorkChain(WorkChain):
+class GeometryWorkChain(ElectronicStorageMixin, WorkChain):
     """One geometry step, with an explicit, provenance-linked reuse input."""
 
     @classmethod
@@ -45,10 +46,11 @@ class GeometryWorkChain(WorkChain):
             spec.input(f"reuse.{name}", valid_type=data_type, required=False)
             spec.output(name, valid_type=data_type, required=name == "structure")
         spec.output("remote_folder", valid_type=orm.RemoteData, required=False)
+        cls.storage_spec(spec)
         spec.outline(cls.setup, if_(cls.needs_calculation)(
             cls.run_optimization, cls.inspect_optimization,
             if_(cls.needs_cache_regeneration)(cls.run_optimization, cls.inspect_optimization),
-        ), cls.results)
+        ), cls.results, if_(cls.should_preserve)(cls.preserve_electronic, cls.inspect_preservation))
         spec.exit_code(400, "ERROR_INVALID_INPUT", message="Invalid geometry settings; see workflow report.")
         spec.exit_code(401, "ERROR_REUSE_UNAVAILABLE", message="The selected reusable result changed or is unavailable. Review a new execution plan before recomputing.")
         spec.exit_code(402, "ERROR_OPTIMIZATION_FAILED", message="ORCA optimization failed; inspect the child calculation output and report.")
@@ -56,6 +58,7 @@ class GeometryWorkChain(WorkChain):
 
     def setup(self):
         try:
+            self.validate_storage_inputs()
             self.ctx.settings = normalize_settings(self.inputs.settings.get_dict())
             if self.inputs.optimize.value:
                 validate_molecule(self.inputs.structure, self.ctx.settings)

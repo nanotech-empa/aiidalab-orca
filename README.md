@@ -1,8 +1,8 @@
 # AiiDAlab ORCA: molecular spectroscopy
 
-**Status: local geometry and SCF prototype.** Following the [design discussion](https://github.com/nanotech-empa/aiidalab-orca/issues/1), the app now combines small, independent geometry and electronic-reference WorkChains. The broader spectroscopy design below remains under review. Cubes, CASCI, Dyson orbitals and spectral blends are not implemented yet.
+**Status: local geometry, SCF, and orbital-property prototype.** Following the [design discussion](https://github.com/nanotech-empa/aiidalab-orca/issues/1), the app now combines small, independent geometry and electronic-reference WorkChains. The broader spectroscopy design below remains under review. Orbital and spin-density cubes, reduced previews, wavefunction preservation, and energy-level viewing are implemented. CASCI, Dyson orbitals and spectral blends remain next steps.
 
-**ORCA · Electronic structure** supports structure import/editing (including the shared CDXML importer), searchable calculation history, explicit charge/multiplicity, HF/DFT optimization with optional Cartesian/distance/angle/dihedral constraints, and single-point SCF calculations at fixed geometry. Unchecking **Optimize geometry** now runs SCF and returns its energy and remote orbital/density files. See [the geometry and local setup guide](docs/geometry.md) and [the SCF/reference workflow](docs/reference.md). The backend is separately installable from `backend/` and usable without the app. The local starting test is **NO, neutral doublet, PBE/def2-SVP**; pentacene remains the spectroscopy reference target.
+**ORCA · Electronic structure** supports structure import/editing (including the shared CDXML importer), searchable calculation history, explicit charge/multiplicity, HF/DFT optimization with optional Cartesian/distance/angle/dihedral constraints, and single-point SCF calculations at fixed geometry. Unchecking **Optimize geometry** now runs SCF and returns its energy and remote orbital/density files. See [the geometry and local setup guide](docs/geometry.md), [the SCF/reference workflow](docs/reference.md), and [wavefunction storage, orbital levels and cubes](docs/orbitals.md). The backend is separately installable from `backend/` and usable without the app. The local starting test is **NO, neutral doublet, PBE/def2-SVP**; pentacene remains the spectroscopy reference target.
 
 Geometry is the first working example of **property → YAML protocol → GUI
 overrides → reviewed effective input**. [Versioned starting protocols](backend/src/aiida_empa_orca/protocols/geometry.yaml)
@@ -16,10 +16,11 @@ These remain starting protocols for review, not universal accuracy guarantees.
 **The next scientific priority is the Dyson pipeline**, not a general-purpose
 ORCA input editor. The reference-state step now checks electronic-file availability
 and can reuse an earlier SCF or the matching final state of an optimization.
-Next come orbital/density cubes with reduced previews and full-resolution stashing,
-then CASCI in the common orbital basis, Dyson amplitudes/energies, and the spectrum
-plus energy-selected map viewer. Wavefunction import/archive restoration and nested
-property blocks need further components. The geometry example provides the protocol, override, provenance
+The orbital/density cube step now provides reduced previews and full-resolution
+stashing, with restoration from preserved wavefunction bundles. Next come CASCI
+in the common orbital basis, Dyson amplitudes/energies, and the spectrum plus
+energy-selected map viewer. External wavefunction imports and nested property
+blocks need further components. The geometry example provides the protocol, override, provenance
 and reuse pattern to review with Andrés and Eve before extending it.
 
 The intended application would let a researcher start from a molecular geometry, optionally optimize it with DFT or hybrid DFT, and calculate selected molecular properties such as natural orbitals, electron-addition/removal spectra, and Dyson-orbital maps. Existing compatible results should be reusable at every stage.

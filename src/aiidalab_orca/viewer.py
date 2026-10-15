@@ -88,6 +88,19 @@ def show_result(data):
         items.append(ipw.HTML(f"<p><b>{html.escape(text)}</b></p>"))
     if data["optimized"] or scf:
         items.append(ipw.HTML(settings_details(s, single_point=scf) + input_details(data.get("input_files", {}))))
+    if data.get("levels"):
+        from .levels import EnergyLevels
+        energy_view = EnergyLevels(data["levels"])
+        items.append(energy_view)
+        from .orbitals import OrbitalProperties
+        properties = ipw.Accordion(children=[ipw.VBox()], selected_index=None)
+        def open_properties(change):
+            if change["new"] == 0 and not isinstance(properties.children[0], OrbitalProperties):
+                properties.children[0].close()
+                properties.children = [OrbitalProperties(data, energy_view)]
+        properties.observe(open_properties, names="selected_index")
+        properties.set_title(0, "Orbitals and spin density")
+        items.append(properties)
     if data.get("artifact_status"):
         items.append(ipw.HTML(f"<p><b>Electronic files:</b> {html.escape(data['artifact_status'])}</p>"))
     if "positions" in data:

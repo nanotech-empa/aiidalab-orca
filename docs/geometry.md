@@ -71,15 +71,79 @@ containing the fix. No ORCA binary or wavefunction is distributed here.
 
 ## App flow
 
-1. Upload/paste a single XYZ, or select an existing AiiDA StructureData UUID.
-2. Choose optimization or keep-as-is; set method, basis, charge, multiplicity,
-   convergence and local resources.
-3. Review whether the step will compute, reuse an existing result, or keep the
-   supplied coordinates. Editing settings invalidates the reviewed plan.
-4. Submit to the daemon. Return later through the previous-runs list or a workflow
-   UUID. View the trajectory, SCF evaluation energies, final coordinates, method
-   provenance and, when parsed, ⟨S²⟩. Download XYZ or select the final geometry as
-   the next input.
+New sessions start without a selected molecule or prefilled coordinates. The
+NO doublet test geometry is available through **Load NO doublet example**.
+Calculation review is enabled after a structure has been selected.
+
+The interface has three areas:
+
+- **New calculation**: import a geometry, edit atoms, configure the calculation,
+  and review whether it will compute, reuse a result, or keep the supplied geometry.
+  Confirm the structure, confirm scientific settings, then choose resources and
+  review the execution plan. Advanced scientific settings are collapsed initially.
+- **Search calculations**: search all recorded ORCA geometry workflows by formula,
+  label or UUID, with state, method and date filters and paginated results.
+  Dates use Europe/Zurich. Select a run to check the stored data, view results,
+  use its final geometry, or copy its settings onto the current input molecule.
+  **Advanced search · open by UUID** opens a known workflow directly.
+- **Results**: trajectory, SCF evaluation energies, final coordinates, method
+  provenance and, when parsed, ⟨S²⟩; download XYZ or continue from the geometry.
+
+The interface uses the shared `aiidalab-widgets-base.WizardAppWidget` and its
+step states, following QE's confirmation, dependency, and back-navigation patterns.
+Each step displays a prerequisite message until earlier steps are confirmed.
+Navigation alone preserves a review; editing a structure invalidates both later
+steps, changing science invalidates settings confirmation and the execution plan,
+and changing resources invalidates only the plan. Validation uses the existing
+backend rules and shows errors next to the affected controls. Submitted inputs
+require **Edit a copy of these inputs** before another submission.
+
+QE's application classes include QE-specific setup and calculation dependencies;
+ORCA uses the common wizard and shared molecular widgets with a small adapter.
+Status/results and history remain separate areas so previous work can be explored
+while preparing a new calculation. The three draft steps correspond to QE's
+structure, configuration, and resources/submission stages. Keeping a geometry
+hides resource controls and requires no code; unused resource fields in the
+backend's settings schema receive its defaults. No spin or method is guessed.
+
+The home-page card provides icon launchers for **New calculation** (`start.ipynb`)
+and **Search calculations** (`search.ipynb`). Both load the AiiDA profile in a
+separate first cell, before building the app. Results use NGL's trajectory controls
+and keep detailed provenance and identifiers in an expandable section.
+
+The structure step accepts one XYZ/Extended XYZ, CIF, PDB, MOL or SDF geometry,
+searches existing `StructureData` from any AiiDA calculation, and reuses the EMPA
+CDXML importer and widgets-base SMILES builder and atom editor. The viewer and
+editor receive ASE data; search rows and callbacks retain UUIDs, never ORM nodes.
+Select atoms in the viewer before using the atom editor. Reset restores the
+imported geometry. Periodic inputs retain their periodicity until the user
+explicitly selects **Treat as isolated molecule**; select/extract the appropriate
+molecular fragment first. The ORCA backend rejects periodic input.
+
+Unchanged AiiDA structures retain their existing UUID. Edits create a new structure
+with the original linked as an input of `record_structure_edit`. File imports
+record the original file as `SinglefileData`. CDXML imports use the shared
+`record_cdxml_import` function, recording original/reviewed documents, chemical
+interpretation, generation settings and whether the geometry was edited. These
+records describe a user-reviewed starting model, not an ORCA energy optimization.
+Changing CDXML generation settings invalidates the model and the submission
+review until **Create model** is used again. Charge and multiplicity remain
+explicit user choices for every importer.
+
+The CDXML dependency is pinned to [EMPA widgets PR #12](https://github.com/nanotech-empa/aiidalab-widgets-empa/pull/12),
+revision `8a85258bbb449ff99c1d0ee302fd4b6ae887c254`. The previously installed 0.2.2
+release lacks its graph-validation and `cdxml_storage` APIs. That PR still reports
+version 0.2.2, so a version-number constraint would not identify the required code.
+This app consumes the canonical component revision; it does not modify the shared
+PR stack or its runtime policy. Tests use widgets-base 3.0.0. The app's existing
+Python/AiiDA/AiiDAlab support targets are unchanged.
+
+Selecting a history result checks availability for each action. Missing optimization
+files do not prevent use of an available final geometry. Unreachable storage is
+reported separately from missing/invalid data. Matching formulae are search aids,
+not scientific equivalence: the backend still performs its exact compatibility
+and artifact checks during review and submission. Search does not query remote
+scratch because this geometry operation needs no wavefunction.
 
 Choices are HF, PBE, PBE0, B3LYP, M06-2X; def2-SVP or def2-TZVP; NormalOpt or
 TightOpt. Charge and multiplicity are explicit and checked against the electron
@@ -165,7 +229,13 @@ AIIDA_PATH=/tmp/aiidalab-orca-test-state python -m pytest tests -q
 The AiiDA fixtures create independent SQLite storage. Tests cover spin/geometry
 validation, exact reuse compatibility, explicit reused-data links, missing
 repository artifacts, keep-as-is, force/bypass propagation, and bounded recovery
-from invalid cached data. Use a fresh test-state directory in shared environments.
+from invalid cached data. Interface tests additionally cover search/filter pagination,
+unchanged versus edited structure identity, original file/CDXML provenance, model
+invalidation, explicit periodicity handling, and action-specific availability.
+Wizard tests also check confirmation prerequisites, spin validation, back
+navigation, downstream invalidation, keeping a geometry without a code,
+submission retry, and prevention of accidental duplicate submission.
+Use a fresh test-state directory in shared environments.
 
 The real local integration command is `python examples/no/run_local.py`.
 Validated on Linux ARM64, ORCA 6.1.1/Open MPI 4.1.8, Python 3.12.11, AiiDA 2.9.2,
@@ -184,6 +254,26 @@ AiiDAlab 26.9.0, ipywidgets 8.1.8 and nglview 3.0.8:
 - Browser-driven app submission produced a new optimization, then loaded its
   trajectory and energy viewer. Selecting its final geometry and submitting
   keep-as-is also passed, with no calculation and original provenance preserved.
+
+The structure/history interface was additionally exercised in the browser: a
+previous NO optimization was found and reused, its final geometry selected, and
+an ethene CDXML uploaded and submitted with keep-as-is. The resulting workflow
+retained the shared CDXML provenance record and launched no calculation.
+Starting from an empty session, methane generated from SMILES `C` and a geometry
+loaded from calculation history were also visually checked in the browser,
+including returning to the viewer after changing tabs. The viewer is attached
+when a structure is available, preventing a zero-size canvas on first use.
+
+The guided flow was checked in fresh browser sessions without diagnostic kernel
+commands before submission: SMILES methane (neutral singlet, PBE0/def2-SVP)
+converged through a forced new calculation; file-imported NO reused an existing
+optimization; CDXML ethene was kept unchanged. A separate search session reopened
+the methane result, exercised NGL trajectory controls, reused its geometry,
+copied settings, and moved one selected atom by 0.1 Å with the shared editor.
+Keeping that edited structure created a linked edit record and no CalcJobs.
+Both home-page icon links opened the intended app view. Automated tests also
+ensure that repeated review preserves structure identity at AiiDA's storage
+precision, while a real edit creates a new linked structure.
 
 These checks establish local workflow/UI integration. HF, B3LYP, M06-2X,
 basis convergence, larger systems and numerical comparison to the pentacene

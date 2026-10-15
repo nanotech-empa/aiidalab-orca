@@ -13,6 +13,9 @@ dependencies = [
   "ipywidgets>=8,<9",
   "nglview>=3",
   "matplotlib",
+  "aiidalab-widgets-base",
+  # Unreleased CDXML graph validation and provenance API: EMPA widgets PR #12.
+  "aiidalab-widgets-empa @ git+https://github.com/nanotech-empa/aiidalab-widgets-empa.git@8a85258bbb449ff99c1d0ee302fd4b6ae887c254",
 ]
 
 [project.urls]

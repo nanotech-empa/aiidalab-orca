@@ -21,19 +21,21 @@ def molecule(symbols, frames):
     # A slight camera tilt avoids viewing the NO test molecule end-on along z.
     # This changes only the camera, never the stored coordinates.
     view.control.rotate([0, 0.3826834324, 0, 0.9238795325])
-    slider = ipw.IntSlider(description="Geometry", min=0, max=len(frames)-1,
-                           value=len(frames)-1, continuous_update=False)
-    ipw.jslink((slider, "value"), (view, "frame"))
-    view.frame = slider.value
-    return ipw.VBox([view, slider])
+    # NGL already provides playback and a frame slider. Keep a single control.
+    view.frame = len(frames)-1
+    return view
 
 
 def show_result(data):
     s = data["settings"]
     title = "Optimized geometry" if data["optimized"] else "Supplied geometry · no optimization performed"
-    items = [ipw.HTML(f"<h3>{title}</h3><p>{html.escape(data['source_description'])}</p>")]
+    items = [ipw.HTML(f"<h3>{title}</h3>")]
+    provenance = f"<p>{html.escape(data['source_description'])}</p>"
+    for warning in data.get("warnings", []):
+        items.append(ipw.HTML(f"<p style='color:#a02020'>{html.escape(warning)}</p>"))
     if data.get("source_uuid"):
-        items.append(ipw.HTML(f"<p>Reused stored result: <code>{data['source_uuid']}</code></p>"))
+        items.append(ipw.HTML("<p><b>Reused an available optimization.</b> No new ORCA calculation was needed.</p>"))
+        provenance += f"<p>Source workflow: <code>{data['source_uuid']}</code></p>"
     if "summary" in data:
         summary = data["summary"]
         text = (f"{s['method']}/{s['basis']} · charge {s['charge']} · multiplicity {s['multiplicity']}"
@@ -42,10 +44,12 @@ def show_result(data):
             text += f" · ⟨S²⟩ = {summary['spin_squared']:.5f}"
         items.append(ipw.HTML(f"<p><b>{html.escape(text)}</b></p>"))
     if "positions" in data:
+        if len(data.get("frames", [])) > 1:
+            items.append(ipw.HTML("<p>Showing the final geometry. Move the pointer over the molecule to play or step through the trajectory.</p>"))
         items.append(molecule(data["symbols"], data.get("frames", [data["positions"]])))
         encoded = base64.b64encode(data["xyz"].encode()).decode()
-        items.append(ipw.HTML(f'<a download="geometry.xyz" href="data:text/plain;base64,{encoded}">Download final XYZ</a>'
-                             f'<p>Structure UUID: <code>{data["structure_uuid"]}</code></p>'))
+        items.append(ipw.HTML(f'<a download="geometry.xyz" href="data:text/plain;base64,{encoded}"><i class="fa fa-download" aria-hidden="true"></i> Download final XYZ</a>'))
+        provenance += f'<p>Structure: <code>{data["structure_uuid"]}</code></p>'
     if "summary" in data:
         energies = data["summary"]["scf_evaluation_energies_hartree"]
         fig, ax = plt.subplots(figsize=(7.4, 2.7))
@@ -57,4 +61,5 @@ def show_result(data):
         fig.savefig(stream, format="png", dpi=140)
         plt.close(fig)
         items.append(ipw.Image(value=stream.getvalue(), format="png"))
+    items.append(ipw.HTML(f"<details><summary>Provenance and identifiers</summary>{provenance}</details>"))
     return ipw.VBox(items)

@@ -40,7 +40,7 @@ def test_render_stages_one_cube_and_retrieves_only_image(aiida_profile,aiida_loc
         finally:process.close()
 
 
-def test_wavefunction_status_distinguishes_missing_from_unavailable(electronic_source,monkeypatch):
+def test_wavefunction_status_distinguishes_missing_from_unavailable(electronic_source,monkeypatch):  # noqa: F811 (pytest fixture)
     from aiida_empa_orca.reference import ArtifactUnavailable
     uuid,folder=electronic_source()
     result=property_services.wavefunction_status(uuid)

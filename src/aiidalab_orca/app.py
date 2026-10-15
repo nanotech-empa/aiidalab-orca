@@ -11,6 +11,19 @@ from .history import HistoryWidget, inspect_run
 from .viewer import show_result
 
 
+# Classic Notebook auto-scrolls tall outputs as widgets expand. Scope this to
+# the app's containing output, including existing notebook copies; retain the
+# normal scroll behavior of lists, text fields and other notebook outputs.
+_APP_STYLE = """<style>
+.output_scroll:has(.aiidalab-orca-app) {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+}
+</style>"""
+
+
 class OrcaApp(ipw.VBox):
     def __init__(self):
         # The notebook loads its profile before constructing the app. Import
@@ -99,9 +112,10 @@ class OrcaApp(ipw.VBox):
             self.pages.set_title(i, title)
         self.pages.observe(self._page_changed, names="selected_index")
         super().__init__([
-            ipw.HTML("<div style='border-left:5px solid #237b98;padding:10px 20px;background:#f5f7fa'><h2 style='margin:0'>ORCA · Electronic structure</h2><p>Single-point SCF and geometry optimization with AiiDA provenance.</p></div>"),
+            ipw.HTML(_APP_STYLE + "<div style='border-left:5px solid #237b98;padding:10px 20px;background:#f5f7fa'><h2 style='margin:0'>ORCA · Electronic structure</h2><p>Single-point SCF and geometry optimization with AiiDA provenance.</p></div>"),
             self.error, self.pages,
         ], layout=ipw.Layout(max_width="1100px"))
+        self.add_class("aiidalab-orca-app")
         self.structure.observe(self._structure_changed, names="revision")
         self.optimize.observe(self._settings_changed, names="value")
         self.science.observe(self._settings_changed, names="revision")

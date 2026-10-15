@@ -101,6 +101,15 @@ def show_result(data):
         properties.observe(open_properties, names="selected_index")
         properties.set_title(0, "Orbitals and spin density")
         items.append(properties)
+        from .casci import CasciStates
+        states = ipw.Accordion(children=[ipw.VBox()], selected_index=None)
+        def open_states(change):
+            if change["new"] == 0 and not isinstance(states.children[0], CasciStates):
+                states.children[0].close()
+                states.children = [CasciStates(data)]
+        states.observe(open_states, names="selected_index")
+        states.set_title(0, "CASCI states · fixed geometry (draft)")
+        items.append(states)
     if data.get("artifact_status"):
         items.append(ipw.HTML(f"<p><b>Electronic files:</b> {html.escape(data['artifact_status'])}</p>"))
     if "positions" in data:

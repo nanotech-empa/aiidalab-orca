@@ -176,9 +176,9 @@ remote machine. WFN policies recorded with the reference are inherited; cube
 retention has its own directory and is never used to overwrite that policy.
 
 **Validation boundary:** local direct execution and browser submission have
-been exercised. Daint execution has not yet been tested. The initial SCF/GEO_OPT
+been exercised. The intended ORCA and HQ-rendering computer is **tigu**; remote execution there has not yet been tested. The initial SCF/GEO_OPT
 workflows still have their local-only milestone guard; lifting that guard,
-exposing Slurm allocation settings there, and installing/testing the matching
-ORCA/ORCA tools/render wrappers through `aiidalab-alps-files` and the setup app
-are prerequisites for a full Daint deployment. This change does not claim a
-working Daint installation or modify existing remote codes.
+exposing the target scheduler allocation settings there, and installing/testing the matching
+ORCA/ORCA tools/render wrappers through the tigu computer/code setup
+are prerequisites for deployment on tigu. This change does not claim a
+working tigu installation or modify existing remote codes.

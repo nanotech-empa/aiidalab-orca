@@ -254,3 +254,21 @@ Candidate acceptance cases for the eventual implementation follow. Run the appli
 The geometry prototype separates `aiida-empa-orca` (backend) from `aiidalab-orca` (interface), initially in this repository. It targets Python >=3.12, AiiDA >=2.9.2, and AiiDAlab >=26.9.0. Future spectroscopy package boundaries remain design decisions. The application should reuse maintained scientific packages rather than duplicate their numerical implementations.
 
 This draft was prepared with Codex assistance from the initial discussion and source inspection. It awaits scientific and design review.
+
+## Software attribution and scientific acknowledgements
+
+Please credit [aiidalab-orca](https://github.com/nanotech-empa/aiidalab-orca) and its
+[contributors](https://github.com/nanotech-empa/aiidalab-orca/graphs/contributors),
+and identify the release or immutable commit used. Existing author,
+contributor and funding acknowledgements remain authoritative.
+
+For research carried out using this environment or the resulting workflows,
+acknowledge [AiiDA](https://github.com/nanotech-empa/.github/blob/main/CITATION_GUIDANCE.md#aiida) and [AiiDAlab](https://github.com/nanotech-empa/.github/blob/main/CITATION_GUIDANCE.md#aiidalab)
+when each platform was actually used, following their respective citation
+guidance. Cite the scientific software and methods actually used as well.
+
+The proposed integrations retain their own authorship, licences and citation instructions: [aiida-orca](https://github.com/ezpzbz/aiida-orca), [dyson-orca-tools](https://github.com/AndresOrtegaGuerrero/dyson-orca-tools), and [meqpy](https://github.com/nanotech-empa/meqpy). Preserve the Kumar et al. scientific reference above. The application design does not establish that these integrations have been implemented or validated.
+
+The [shared credit guide](https://github.com/nanotech-empa/.github/blob/main/CITATION_GUIDANCE.md) keeps software attribution, licence
+compliance and scientific citation requests separate. Scientific citation
+requests are not additional MIT licence conditions.

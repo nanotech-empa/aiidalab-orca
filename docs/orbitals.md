@@ -156,7 +156,12 @@ current 3D camera, isovalues, colours, image dimensions and opacity. Full cubes
 are checked and staged on their storage computer; only the PNG and log are
 retrieved. Deleted or missing full cubes produce an actionable error instead of
 silently substituting a preview. Previously rendered images can be reopened.
-The linked slicing plane is exported separately; it is not part of the 3D render.
+When **Show slicing plane in 3D** is checked, the render includes the plane with
+its saved geometry and colour range. It samples the selected preview/full cube
+using the viewer's linear interpolation and boundary convention; isolated-grid
+areas outside the cube remain empty. The plane resolution is the saved 2D slice
+resolution. Older saved views already containing `show_plane` and `plane` settings
+work without resaving. The flat 2D plot can still be exported separately as a PNG.
 
 Rendering uses the existing cubehandler rendering PR:
 <https://github.com/nanotech-empa/cubehandler/pull/14>. This draft adds its image

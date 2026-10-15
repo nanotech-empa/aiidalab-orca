@@ -6,6 +6,7 @@ import json
 
 from aiida import orm
 from aiida.engine import submit
+from aiidalab_widgets_empa.cube_views import render_settings_from_view
 from aiida_empa_orca.artifacts import remote_files
 from aiida_empa_orca.rendering import CubeRenderCalculation, calcjob_options, render_settings, source_cube
 
@@ -103,7 +104,7 @@ def save_view(property_uuid, filename, quality, name, visualization, identifier=
         raise ValueError('Select preview or full-resolution cubes')
     if visualization.get('version') != 1:
         raise ValueError('Unsupported visualization version')
-    render_settings(visualization['render'])
+    render_settings(render_settings_from_view(visualization))
     # Detach mutable UI dictionaries and reject nonfinite/nonserializable values.
     visualization = json.loads(json.dumps(visualization, allow_nan=False))
     if identifier is not None:
@@ -130,7 +131,7 @@ def render_saved_views(property_uuid, identifiers):
             record = saved_view(property_uuid, identifier)
             name = record['name']
             uuid = submit_render(property_uuid, record['filename'], record['quality'],
-                                 record['visualization']['render'], view_name=name)
+                                 render_settings_from_view(record['visualization']), view_name=name)
             submitted.append({'name': name, 'uuid': uuid})
         except Exception as exc:
             errors.append({'name': name, 'message': str(exc)})

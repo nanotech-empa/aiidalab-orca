@@ -1,5 +1,6 @@
 """Render cube images on the source computer through a dedicated CalcJob."""
 import math
+import json
 import re
 from pathlib import PurePosixPath
 
@@ -11,7 +12,7 @@ from .artifacts import remote_files
 
 def render_settings(values):
     p = dict(values)
-    if set(p) != {'orientation', 'iso', 'width', 'height', 'background', 'opacity'}:
+    if set(p) - {'slice_plane'} != {'orientation', 'iso', 'width', 'height', 'background', 'opacity'}:
         raise ValueError('Incomplete or unknown render settings')
     if len(p['orientation']) != 16 or not all(math.isfinite(v) for v in p['orientation']):
         raise ValueError('A finite 16-element camera matrix is required')
@@ -22,6 +23,20 @@ def render_settings(values):
         raise ValueError('Render dimensions must be 320–4096 pixels')
     if not re.fullmatch(r'#[0-9a-fA-F]{6}', p['background']) or not 0 <= p['opacity'] <= 1:
         raise ValueError('Invalid background or opacity')
+    if 'slice_plane' in p:
+        plane=p['slice_plane']
+        if not isinstance(plane,dict) or set(plane)!={'center','normal','offset','width','height','resolution','vmin','vmax','periodic'}:
+            raise ValueError('Incomplete or unknown slicing-plane settings')
+        if any(len(plane[key])!=3 or not all(math.isfinite(v) for v in plane[key]) for key in ('center','normal')):
+            raise ValueError('Plane center and normal must contain three finite numbers')
+        if sum(v*v for v in plane['normal']) < 1e-24:
+            raise ValueError('Plane normal must be nonzero')
+        if not all(math.isfinite(plane[key]) for key in ('offset','width','height','vmin','vmax')):
+            raise ValueError('Plane dimensions and colour limits must be finite')
+        if min(plane['width'],plane['height'])<=0 or plane['vmin']>plane['vmax']:
+            raise ValueError('Invalid plane dimensions or colour range')
+        if type(plane['resolution']) is not int or not 16<=plane['resolution']<=1024 or type(plane['periodic']) is not bool:
+            raise ValueError('Invalid plane resolution or boundary setting')
     return p
 
 
@@ -90,6 +105,10 @@ class CubeRenderCalculation(engine.CalcJob):
             code.cmdline_params += ['--iso', f'{value}:{colour}']
         code.cmdline_params += ['--format', 'png', '--output', 'render.png', '--width', str(p['width']),
                                 '--height', str(p['height']), '--background', p['background'], '--opacity', str(p['opacity'])]
+        if 'slice_plane' in p:
+            with folder.open('slice-plane.json','w') as handle:
+                json.dump(p['slice_plane'],handle,allow_nan=False)
+            code.cmdline_params += ['--slice-plane','slice-plane.json']
         code.stdout_name, code.join_files = 'render.log', True
         info.codes_info = [code]
         info.retrieve_list = ['render.png', 'render.log']

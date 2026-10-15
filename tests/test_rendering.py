@@ -13,6 +13,7 @@ from test_reference import electronic_source  # noqa: F401
 
 SETTINGS=dict(orientation=[20.,0,0,0,0,20.,0,0,0,0,20.,0,0,0,0,1.],
               iso=[[.03,'#2563B7'],[-.03,'#E3AE3B']],width=640,height=480,background='#FFFFFF',opacity=.65)
+PLANE=dict(center=[0.,0.,0.],normal=[0.,0.,1.],offset=.2,width=3.,height=4.,resolution=64,vmin=-.1,vmax=.1,periodic=False)
 
 
 def test_render_stages_one_cube_and_retrieves_only_image(aiida_profile,aiida_localhost,aiida_manager,tmp_path):
@@ -20,7 +21,7 @@ def test_render_stages_one_cube_and_retrieves_only_image(aiida_profile,aiida_loc
     manifest=orm.Dict(dict={'retention':'stash','cubes':[{'filename':'a.cube','full':{'size_bytes':12}}]})
     for kind in ('repository','folder','stash'):
         b=CubeRenderCalculation.get_builder()
-        b.code=code;b.source_manifest=manifest;b.filename=orm.Str('a.cube');b.settings=orm.Dict(dict=SETTINGS)
+        b.code=code;b.source_manifest=manifest;b.filename=orm.Str('a.cube');b.settings=orm.Dict(dict={**SETTINGS,'slice_plane':PLANE})
         b.metadata.options.resources={'num_machines':1,'num_mpiprocs_per_machine':1}
         if kind=='repository':
             source=orm.FolderData();source.base.repository.put_object_from_filelike(io.BytesIO(b'preview'), 'previews/a.cube')
@@ -33,10 +34,14 @@ def test_render_stages_one_cube_and_retrieves_only_image(aiida_profile,aiida_loc
         try:
             with SandboxFolder() as folder:
                 info=process.prepare_for_submission(folder)
+                import json
+                with folder.open('slice-plane.json') as handle:
+                    assert json.load(handle)==PLANE
             assert info.retrieve_list==['render.png','render.log']
             copies=info.local_copy_list if kind=='repository' else info.remote_copy_list
             assert len(copies)==1 and copies[0][2]=='input.cube'
             assert info.codes_info[0].cmdline_params[:2]==['render','input.cube']
+            assert info.codes_info[0].cmdline_params[-2:]==['--slice-plane','slice-plane.json']
         finally:process.close()
 
 
@@ -85,7 +90,7 @@ def test_saved_visualizations_persist_and_render_their_own_snapshots(aiida_profi
     manifest.base.links.add_incoming(calculation,link_type=LinkType.CREATE,link_label='manifest')
     manifest.store()
     attributes=manifest.base.attributes.all
-    state={'version':1,'render':deepcopy(SETTINGS),'plane':{'normal':[0,0,1]}}
+    state={'version':1,'render':deepcopy(SETTINGS),'plane':PLANE,'show_plane':True}
     first=service.save_view(calculation.uuid,'a.cube','full','Front',state)
     state['render']['background']='#123456'
     second=service.save_view(calculation.uuid,'spin.cube','preview','Side',state)
@@ -102,6 +107,7 @@ def test_saved_visualizations_persist_and_render_their_own_snapshots(aiida_profi
     assert [(row[0],row[1],row[3]) for row in submitted]==[
         ('a.cube','full','Front'),('spin.cube','preview','Side')]
     assert submitted[1][2]['background']=='#123456'
+    assert submitted[0][2]['slice_plane']==PLANE  # Old snapshots are upgraded only at submission.
     service.save_view(calculation.uuid,'a.cube','full','Updated',state,first)
     assert len(service.saved_views(calculation.uuid))==2
     assert service.saved_view(calculation.uuid,first)['name']=='Updated'

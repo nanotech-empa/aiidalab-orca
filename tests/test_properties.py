@@ -48,11 +48,11 @@ def test_energy_range_occupations_and_overlap_are_spin_resolved():
     from aiidalab_orca.levels import EnergyLevels
     widget = EnergyLevels(levels)
     try:
-        assert [widget.lower.value, widget.upper.value] == levels['default_range_ev']
+        assert [widget.lower.value, widget.upper.value] == [-6.44, -3.08]
         widget.lower.value = -30
         assert 'MO 0' in widget.plot.value
         widget.reset()
-        assert widget.lower.value == levels['homo_ev'] - 1
+        assert widget.lower.value == round(levels['homo_ev'] - 1, 2)
         widget.upper.value = widget.lower.value
         assert 'maximum greater' in widget.error.value
     finally:

@@ -28,7 +28,7 @@ class OrbitalProperties(ipw.VBox):
         for channel in self.levels['channels']:
             for level in channel:
                 spin='α' if level['spin']==0 else 'β'
-                label=f"{spin} MO {level['index']} · {level['energy_ev']:.3f} eV · occ {level['occupation']:g}"
+                label=f"{spin} MO {level['index']} · {level['energy_ev']:.2f} eV · occ {level['occupation']:g}"
                 options.append((label,(level['spin'],level['index'])))
         style={'description_width':'140px'}
         self.orbitals=ipw.SelectMultiple(options=options,description='Orbitals',style=style,layout=ipw.Layout(width='95%',height='170px'))

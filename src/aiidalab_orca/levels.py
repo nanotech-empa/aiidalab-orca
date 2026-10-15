@@ -12,9 +12,10 @@ class EnergyLevels(ipw.VBox):
     def __init__(self, levels):
         self.levels = levels
         lower, upper = levels['default_range_ev']
-        self.lower = ipw.FloatText(value=lower, description='Minimum (eV)', layout=ipw.Layout(width='230px'))
-        self.upper = ipw.FloatText(value=upper, description='Maximum (eV)', layout=ipw.Layout(width='230px'))
-        reset = ipw.Button(description='HOMO − 1 / LUMO + 1', icon='undo', layout=ipw.Layout(width='auto'))
+        style = {'description_width': '105px'}
+        self.lower = ipw.FloatText(value=round(lower, 2), step=.01, description='Minimum (eV)', style=style, layout=ipw.Layout(width='240px'))
+        self.upper = ipw.FloatText(value=round(upper, 2), step=.01, description='Maximum (eV)', style=style, layout=ipw.Layout(width='240px'))
+        reset = ipw.Button(description='Reset: HOMO − 1 eV to LUMO + 1 eV', icon='undo', layout=ipw.Layout(width='auto', flex='0 0 auto'))
         reset.on_click(self.reset)
         self.plot = ipw.HTML()
         self.error = ipw.HTML()
@@ -32,10 +33,14 @@ class EnergyLevels(ipw.VBox):
         self.redraw()
 
     def reset(self, _=None):
-        self.lower.value, self.upper.value = self.levels['default_range_ev']
+        self.lower.value, self.upper.value = [round(value, 2) for value in self.levels['default_range_ev']]
         self.redraw()
 
     def redraw(self, _=None):
+        for control in (self.lower, self.upper):
+            if math.isfinite(control.value) and control.value != round(control.value, 2):
+                control.value = round(control.value, 2)
+                return
         lo, hi = self.lower.value, self.upper.value
         if not all(math.isfinite(v) for v in (lo, hi)) or hi <= lo:
             self.error.value = '<p style="color:#a02020">Enter a finite maximum greater than the minimum.</p>'

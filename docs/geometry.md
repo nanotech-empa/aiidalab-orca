@@ -158,18 +158,20 @@ Changes to a published protocol should receive a new version identifier.
 
 PBE/def2-SVP and PBE0/def2-SVP are the initial starting protocols. Their existing
 scientific defaults are preserved: TightSCF, NormalOpt, no extra dispersion or
-grid keyword. Suggestions include HF, PBE, PBE0, B3LYP and M062X (ORCA's spelling
-of M06-2X); method and basis controls also accept typed ORCA names.
+grid keyword. Method and basis controls provide documented suggestions and also
+accept typed ORCA names. SCF and geometry convergence are visible in the main
+settings, including TightSCF/VeryTightSCF and TightOpt/VeryTightOpt as requested
+in the [design review](https://github.com/nanotech-empa/aiidalab-orca/issues/1#issuecomment-6176333944).
 
 Charge and multiplicity are explicit and checked against nuclear electron count.
 Automatic reference selection uses UHF/UKS for multiplicity >1 and RHF/RKS for
 singlets; experts can choose an explicit compatible reference, including UKS
 for a singlet. This choice alone does **not** construct a broken-symmetry state.
 ROHF/ROKS, QRO and imported wavefunctions require further workflow support.
-The automatic RI choice uses def2/J with RI-J for PBE and RIJCOSX for the listed
-HF/hybrids, following the
+The automatic RI choice uses RI-J for the listed pure DFT functionals and
+RIJCOSX for HF and the listed hybrids, with def2/J as the default auxiliary basis, following the
 [ORCA 6.1 RI documentation](https://www.faccts.de/docs/orca/6.1/manual/contents/essentialelements/RI.html).
-Custom functionals and modified functional parameters require an explicit RI
+Unlisted functionals and modified functional parameters require an explicit RI
 choice; their exchange content is not guessed. Auxiliary basis, SCF/geometry
 convergence, iteration limits, numerical grid and added dispersion are editable.
 “No extra correction” does not remove dispersion intrinsic to a named functional.
@@ -197,6 +199,48 @@ CalcJob input**, including the source calculation for reused results. Schema 2
 records protocol identity and every resolved setting on the workflow, with the
 effective ORCA parameters on its CalcJob. Legacy schema 1 remains readable and
 compatible with equivalent protocol inputs; existing nodes are never rewritten.
+
+### Documented choices
+
+[`choices.py`](../backend/src/aiida_empa_orca/choices.py) centralizes suggestions
+for configuration, element overrides and calculation search, checked against
+the ORCA 6.1 manual. It leaves the historical schema-1 choices unchanged.
+
+- **Methods:** HF; pure GGAs and meta-GGAs (including BP86, TPSS, SCANFUNC,
+  R2SCAN and M06L); global hybrids (including PBE0, B3LYP, M062X and TPSSh);
+  and range-separated hybrids such as CAM-B3LYP, LC-PBE and WB97X.
+  Spellings and exchange classification follow the
+  [DFT tables](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/DensityFunctionalTheory.html).
+- **Orbital bases:** def2 and diffuse/minimally augmented variants, dhf,
+  cc-pVnZ/aug-cc-pVnZ through quadruple-zeta, pcseg/aug-pcseg and common Pople
+  families. ECP suggestions include def2-ECP and dhf-ECP. Availability depends
+  on the elements, as listed in the
+  [basis tables](https://www.faccts.de/docs/orca/6.1/manual/contents/essentialelements/basisset.html).
+- **Convergence:** SloppySCF, LooseSCF, MediumSCF, NormalSCF, StrongSCF,
+  TightSCF, VeryTightSCF and ExtremeSCF from the
+  [SCF manual](https://www.faccts.de/docs/orca/6.1/manual/contents/essentialelements/scf.html);
+  LooseOpt, NormalOpt (equivalent to Opt), TightOpt and VeryTightOpt from the
+  [geometry manual](https://www.faccts.de/docs/orca/6.1/manual/contents/structurereactivity/optimizations.html).
+- **Dispersion:** no extra correction, D3BJ, D3ZERO and D4, following the
+  [dispersion manual](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/dispersioncorrections.html).
+  ORCA checks whether parameters exist for the chosen functional.
+
+These are suggestions for ordinary molecular HF/DFT optimization, not a claim
+that every combination is validated. Composite “3c” methods, double hybrids,
+and bases requiring a separately chosen relativistic Hamiltonian need dedicated
+support before being suggested. Functionals with built-in dispersion are also
+left to expert input to avoid implying that an arbitrary extra correction is
+appropriate. SCAN and Minnesota functionals may require finer integration grids;
+the grid remains an explicit choice. The manual links are available in the GUI.
+
+The expanded choices were checked with 59 automated tests and a fresh-browser
+NO neutral-doublet optimization using CAM-B3LYP/def2-SVP, automatic RIJCOSX,
+VeryTightSCF and VeryTightOpt on ORCA 6.1.1 ARM64. Workflow
+`69f3de28-0e7a-4c74-a367-608fcc728f93` finished successfully in one uncached
+CalcJob, with an N–O distance of 1.142536 Å. The input preview matched the stored
+CalcJob input exactly; copying its settings preserved the choices and proposed
+reuse of the completed optimization. This is an integration check, not a
+benchmark of all suggested method/basis combinations.
 
 ### Geometry constraints
 

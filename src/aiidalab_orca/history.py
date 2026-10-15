@@ -7,7 +7,7 @@ import ipywidgets as ipw
 from aiida import orm
 
 from aiida_empa_orca.reuse import PROCESS_TYPE, validate_outputs
-from aiida_empa_orca.settings import METHODS
+from aiida_empa_orca.choices import METHODS
 from .structure_io import formula_from_attributes
 
 

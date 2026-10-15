@@ -12,6 +12,8 @@ import numpy as np
 import yaml
 from ase.data import atomic_numbers
 
+from .choices import DISPERSION, HYBRID_DFT, OPTIMIZATION, PURE_DFT, SCF_CONVERGENCE
+
 _DOCUMENT = yaml.safe_load(files("aiida_empa_orca").joinpath("protocols/geometry.yaml").read_text())
 DEFAULT_PROTOCOL = _DOCUMENT["default_protocol"]
 PROTOCOLS = {name: {"label": entry["label"], "description": entry["description"],
@@ -19,10 +21,7 @@ PROTOCOLS = {name: {"label": entry["label"], "description": entry["description"]
              for name, entry in _DOCUMENT["protocols"].items()}
 REFERENCES = ("auto", "RKS", "UKS", "RHF", "UHF")
 APPROXIMATIONS = ("auto", "RI", "RIJCOSX", "NoRI")
-SCF_CONVERGENCE = ("NormalSCF", "TightSCF", "VeryTightSCF")
-OPTIMIZATION = ("NormalOpt", "TightOpt", "VeryTightOpt")
 GRIDS = ("default", "DEFGRID1", "DEFGRID2", "DEFGRID3")
-DISPERSION = ("default", "D3BJ", "D4")
 # A scalar extension cannot replace controls owned by the geometry procedure or
 # introduce file dependencies. Nested/array inputs need dedicated data models.
 OWNED = {
@@ -138,9 +137,9 @@ def approximation(s):
     if s["block_parameters"].get("method"):
         raise ValueError("Choose the RI approximation explicitly when changing functional parameters")
     method = s["method"].upper()
-    if method == "PBE":
+    if method in PURE_DFT:
         return "RI"
-    if method in {"HF", "PBE0", "B3LYP", "M062X"}:
+    if method == "HF" or method in HYBRID_DFT:
         return "RIJCOSX"
     raise ValueError("Choose the RI approximation explicitly for this custom functional")
 

@@ -14,10 +14,10 @@ dependencies = [
   "nglview>=3",
   "matplotlib",
   # Rendering CLI and image options, absent from cubehandler 0.2.1 (PR #14).
-  "cubehandler @ git+https://github.com/nanotech-empa/cubehandler.git@cc3664e3d900d4a8ef9970222f005ccd47f44e1b",
+  "cubehandler @ git+https://github.com/nanotech-empa/cubehandler.git@926372d5480a9fec1de021dcf7149e5a2a022290",
   "aiidalab-widgets-base",
   # Shared cube viewer (PR #14), retaining the CDXML series (PR #12).
-  "aiidalab-widgets-empa[cube] @ git+https://github.com/nanotech-empa/aiidalab-widgets-empa.git@9c57deaa91b6b26d832b2e73fab404ec176b96b7",
+  "aiidalab-widgets-empa[cube] @ git+https://github.com/nanotech-empa/aiidalab-widgets-empa.git@8fe3b96577170efe2710ae58798bc97b9d4c39ae",
 ]
 
 [project.urls]

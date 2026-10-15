@@ -12,7 +12,7 @@ from .artifacts import remote_files
 
 def render_settings(values):
     p = dict(values)
-    if set(p) - {'slice_plane'} != {'orientation', 'iso', 'width', 'height', 'background', 'opacity'}:
+    if set(p) - {'slice_plane', 'lighting'} != {'orientation', 'iso', 'width', 'height', 'background', 'opacity'}:
         raise ValueError('Incomplete or unknown render settings')
     if len(p['orientation']) != 16 or not all(math.isfinite(v) for v in p['orientation']):
         raise ValueError('A finite 16-element camera matrix is required')
@@ -23,6 +23,11 @@ def render_settings(values):
         raise ValueError('Render dimensions must be 320–4096 pixels')
     if not re.fullmatch(r'#[0-9a-fA-F]{6}', p['background']) or not 0 <= p['opacity'] <= 1:
         raise ValueError('Invalid background or opacity')
+    if 'lighting' in p:
+        lighting=p['lighting']
+        if (not isinstance(lighting,dict) or set(lighting)!={'ambient','direct','gloss'} or
+                any(not isinstance(v,(int,float)) or not math.isfinite(v) or not 0<=v<=1 for v in lighting.values())):
+            raise ValueError('Lighting requires ambient, direct and gloss values between 0 and 1')
     if 'slice_plane' in p:
         plane=p['slice_plane']
         if not isinstance(plane,dict) or set(plane)!={'center','normal','offset','width','height','resolution','vmin','vmax','periodic'}:
@@ -109,6 +114,10 @@ class CubeRenderCalculation(engine.CalcJob):
             with folder.open('slice-plane.json','w') as handle:
                 json.dump(p['slice_plane'],handle,allow_nan=False)
             code.cmdline_params += ['--slice-plane','slice-plane.json']
+        if 'lighting' in p:
+            with folder.open('lighting.json','w') as handle:
+                json.dump(p['lighting'],handle,allow_nan=False)
+            code.cmdline_params += ['--lighting','lighting.json']
         code.stdout_name, code.join_files = 'render.log', True
         info.codes_info = [code]
         info.retrieve_list = ['render.png', 'render.log']

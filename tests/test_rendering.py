@@ -21,7 +21,8 @@ def test_render_stages_one_cube_and_retrieves_only_image(aiida_profile,aiida_loc
     manifest=orm.Dict(dict={'retention':'stash','cubes':[{'filename':'a.cube','full':{'size_bytes':12}}]})
     for kind in ('repository','folder','stash'):
         b=CubeRenderCalculation.get_builder()
-        b.code=code;b.source_manifest=manifest;b.filename=orm.Str('a.cube');b.settings=orm.Dict(dict={**SETTINGS,'slice_plane':PLANE})
+        lighting=dict(ambient=.4,direct=.6,gloss=.2)
+        b.code=code;b.source_manifest=manifest;b.filename=orm.Str('a.cube');b.settings=orm.Dict(dict={**SETTINGS,'slice_plane':PLANE,'lighting':lighting})
         b.metadata.options.resources={'num_machines':1,'num_mpiprocs_per_machine':1}
         if kind=='repository':
             source=orm.FolderData();source.base.repository.put_object_from_filelike(io.BytesIO(b'preview'), 'previews/a.cube')
@@ -37,12 +38,21 @@ def test_render_stages_one_cube_and_retrieves_only_image(aiida_profile,aiida_loc
                 import json
                 with folder.open('slice-plane.json') as handle:
                     assert json.load(handle)==PLANE
+                with folder.open('lighting.json') as handle:
+                    assert json.load(handle)==lighting
             assert info.retrieve_list==['render.png','render.log']
             copies=info.local_copy_list if kind=='repository' else info.remote_copy_list
             assert len(copies)==1 and copies[0][2]=='input.cube'
             assert info.codes_info[0].cmdline_params[:2]==['render','input.cube']
-            assert info.codes_info[0].cmdline_params[-2:]==['--slice-plane','slice-plane.json']
+            assert info.codes_info[0].cmdline_params[-4:]==['--slice-plane','slice-plane.json','--lighting','lighting.json']
         finally:process.close()
+
+
+@pytest.mark.parametrize('lighting',[dict(ambient=.4,direct=.6,gloss=float('nan')),dict(ambient=.4),dict(ambient=.4,direct=.6,gloss=2)])
+def test_invalid_lighting_does_not_submit(lighting):
+    from aiida_empa_orca.rendering import render_settings
+    with pytest.raises(ValueError,match='Lighting'):
+        render_settings({**SETTINGS,'lighting':lighting})
 
 
 def test_wavefunction_status_distinguishes_missing_from_unavailable(electronic_source,monkeypatch):  # noqa: F811 (pytest fixture)

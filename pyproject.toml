@@ -17,7 +17,7 @@ dependencies = [
   "cubehandler @ git+https://github.com/nanotech-empa/cubehandler.git@117736a5d61a3571d9f7d06054a6238d48c5a516",
   "aiidalab-widgets-base",
   # Shared cube viewer (PR #14), retaining the CDXML series (PR #12).
-  "aiidalab-widgets-empa[cube] @ git+https://github.com/nanotech-empa/aiidalab-widgets-empa.git@1c6aedb352882f49e2637e75bef359bd452449ad",
+  "aiidalab-widgets-empa[cube] @ git+https://github.com/nanotech-empa/aiidalab-widgets-empa.git@bb327f4aa842f5a993d90122c3b77070cb48adcf",
 ]
 
 [project.urls]

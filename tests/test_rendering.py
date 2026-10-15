@@ -73,3 +73,74 @@ def test_helper_options_keep_slurm_account_and_queue(aiida_profile):
     assert options['account']=='project123' and options['queue_name']=='normal'
     assert options['resources']=={'num_machines':1,'num_mpiprocs_per_machine':1}
     assert options['withmpi'] is False
+
+
+def test_saved_visualizations_persist_and_render_their_own_snapshots(aiida_profile,monkeypatch):
+    from copy import deepcopy
+    from aiida.common import LinkType
+    from aiidalab_orca import render_services as service
+
+    calculation=orm.CalcJobNode().store()
+    manifest=orm.Dict(dict={'retention':'stash','cubes':[{'filename':'a.cube'},{'filename':'spin.cube'}]})
+    manifest.base.links.add_incoming(calculation,link_type=LinkType.CREATE,link_label='manifest')
+    manifest.store()
+    attributes=manifest.base.attributes.all
+    state={'version':1,'render':deepcopy(SETTINGS),'plane':{'normal':[0,0,1]}}
+    first=service.save_view(calculation.uuid,'a.cube','full','Front',state)
+    state['render']['background']='#123456'
+    second=service.save_view(calculation.uuid,'spin.cube','preview','Side',state)
+    state['render']['background']='#000000'
+    assert service.saved_view(str(calculation.uuid),first)['visualization']['render']['background']=='#FFFFFF'
+    assert len(service.saved_views(str(calculation.uuid)))==2
+    submitted=[]
+    def submit(uuid,filename,quality,settings,*,view_name):
+        submitted.append((filename,quality,settings,view_name))
+        return str(len(submitted))
+    monkeypatch.setattr(service,'submit_render',submit)
+    report=service.render_saved_views(str(calculation.uuid),[first,second])
+    assert len(report['submitted'])==2 and not report['errors']
+    assert [(row[0],row[1],row[3]) for row in submitted]==[
+        ('a.cube','full','Front'),('spin.cube','preview','Side')]
+    assert submitted[1][2]['background']=='#123456'
+    service.save_view(calculation.uuid,'a.cube','full','Updated',state,first)
+    assert len(service.saved_views(calculation.uuid))==2
+    assert service.saved_view(calculation.uuid,first)['name']=='Updated'
+    service.remove_view(calculation.uuid,first)
+    assert [row['id'] for row in service.saved_views(calculation.uuid)]==[second]
+    with pytest.raises(ValueError,match='removed'):
+        service.saved_view(calculation.uuid,first)
+    # Saving UI state never modifies the scientific attributes or creates jobs.
+    assert orm.load_node(manifest.uuid).base.attributes.all==attributes
+
+
+def test_batch_render_reports_missing_source_without_substituting_preview(aiida_profile,monkeypatch):
+    from aiidalab_orca import render_services as service
+    records={'missing':dict(name='Missing full cube',filename='a.cube',quality='full',visualization={'render':SETTINGS}),
+             'available':dict(name='Available preview',filename='b.cube',quality='preview',visualization={'render':SETTINGS})}
+    monkeypatch.setattr(service,'saved_view',lambda uuid,key: records[key])
+    def submit(uuid,filename,quality,settings,*,view_name):
+        if quality=='full':raise ValueError('Full cubes were deleted')
+        return 'submitted-uuid'
+    monkeypatch.setattr(service,'submit_render',submit)
+    result=service.render_saved_views('property-uuid',['missing','available'])
+    assert result['submitted']==[{'name':'Available preview','uuid':'submitted-uuid'}]
+    assert result['errors']==[{'name':'Missing full cube','message':'Full cubes were deleted'}]
+
+
+def test_batch_panel_shows_a_failure_even_if_last_image_succeeds(monkeypatch):
+    from aiidalab_orca import render_services as service
+    from aiidalab_orca.rendering import RenderPanel
+    monkeypatch.setattr(service,'renders',lambda uuid: [])
+    def result(uuid,*,include_image=True):
+        return dict(state='finished',finished=True,success=uuid=='good',
+                    message='Renderer failed' if uuid=='bad' else '',image=b'png',filename='b.cube')
+    monkeypatch.setattr(service,'result',result)
+    panel=RenderPanel('property-uuid','a.cube')
+    panel.process_uuid='good'
+    panel._batch_jobs={'bad':'First view','good':'Second view'}
+    panel._pending=['bad','good']
+    assert panel._update()
+    assert 'First view: failed: Renderer failed' in panel.status.value
+    assert 'Second view: finished' in panel.status.value
+    assert 'b.cube.png' in panel.download.value
+    panel.close()

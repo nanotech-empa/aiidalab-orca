@@ -1,5 +1,8 @@
 """Short-lived provenance and file access for rendered cube images."""
 from pathlib import PurePosixPath
+from datetime import datetime, timezone
+from uuid import uuid4, UUID
+import json
 
 from aiida import orm
 from aiida.engine import submit
@@ -29,7 +32,7 @@ def render_source(property_uuid, filename, quality):
     return {'kind':'stash' if manifest['retention']=='stash' else 'folder', 'uuid':str(source.uuid)}
 
 
-def submit_render(property_uuid, filename, quality, settings):
+def submit_render(property_uuid, filename, quality, settings, *, view_name=None):
     location = render_source(property_uuid, filename, quality)
     p = render_settings(settings)
     node = orm.load_node(property_uuid)
@@ -49,12 +52,12 @@ def submit_render(property_uuid, filename, quality, settings):
     builder.settings = orm.Dict(dict=p)
     builder['source_'+location['kind']] = orm.load_node(location['uuid'])
     builder.metadata.options = calcjob_options(node.outputs.remote_folder)
-    builder.metadata.label = f'{filename} · {quality} render'
+    builder.metadata.label = f'{view_name + " · " if view_name else ""}{filename} · {quality} render'
     builder.metadata.disable_cache = True
     return str(submit(builder).uuid)
 
 
-def renders(property_uuid, filename):
+def renders(property_uuid, filename=None):
     node = orm.load_node(property_uuid)
     query = orm.QueryBuilder().append(orm.Dict, filters={'uuid':node.outputs.manifest.uuid}, tag='manifest').append(
         orm.CalcJobNode, with_incoming='manifest', edge_filters={'label':'source_manifest'}, tag='render',
@@ -62,18 +65,87 @@ def renders(property_uuid, filename):
     result=[]
     for uuid, date in query.order_by({'render':{'ctime':'desc'}}).all():
         run=orm.load_node(uuid)
-        if run.inputs.filename.value == filename:
-            result.append((f'{date:%Y-%m-%d %H:%M} · {run.process_state.value} · {str(uuid)[:8]}',str(uuid)))
+        if filename is None or run.inputs.filename.value == filename:
+            result.append((f'{run.label} · {date:%Y-%m-%d %H:%M} · {run.process_state.value} · {str(uuid)[:8]}',str(uuid)))
     return result
 
 
-def result(uuid):
+# Mutable user annotations, separate from the manifest's scientific attributes.
+# Each view has its own key so saving one cannot overwrite another browser's views.
+_VIEW_PREFIX = 'aiidalab_orca_cube_view_'
+
+
+def _view_key(identifier):
+    return _VIEW_PREFIX + str(UUID(identifier))
+
+
+def saved_views(property_uuid):
+    manifest = orm.load_node(property_uuid).outputs.manifest
+    records = [value for key, value in manifest.base.extras.all.items() if key.startswith(_VIEW_PREFIX)]
+    return sorted(records, key=lambda value: (value['name'].casefold(), value['id']))
+
+
+def saved_view(property_uuid, identifier):
+    manifest = orm.load_node(property_uuid).outputs.manifest
+    record = manifest.base.extras.get(_view_key(identifier), None)
+    if record is None:
+        raise ValueError('This saved visualization was removed; refresh the list')
+    return record
+
+
+def save_view(property_uuid, filename, quality, name, visualization, identifier=None):
+    node = orm.load_node(property_uuid)
+    manifest = node.outputs.manifest
+    source_cube(manifest.get_dict(), filename)
+    if not name.strip():
+        raise ValueError('Give this visualization a name')
+    if quality not in ('preview', 'full'):
+        raise ValueError('Select preview or full-resolution cubes')
+    if visualization.get('version') != 1:
+        raise ValueError('Unsupported visualization version')
+    render_settings(visualization['render'])
+    # Detach mutable UI dictionaries and reject nonfinite/nonserializable values.
+    visualization = json.loads(json.dumps(visualization, allow_nan=False))
+    if identifier is not None:
+        saved_view(property_uuid, identifier)
+    identifier = identifier or str(uuid4())
+    record = dict(id=identifier, name=name.strip(), filename=filename, quality=quality,
+                  visualization=visualization, updated_at=datetime.now(timezone.utc).isoformat())
+    record['label'] = f'{record["name"]} · {filename} · {"full resolution" if quality == "full" else "preview"}'
+    manifest.base.extras.set(_view_key(identifier), record)
+    return identifier
+
+
+def remove_view(property_uuid, identifier):
+    saved_view(property_uuid, identifier)
+    orm.load_node(property_uuid).outputs.manifest.base.extras.delete(_view_key(identifier))
+
+
+def render_saved_views(property_uuid, identifiers):
+    """Submit each saved snapshot independently; report unavailable sources per view."""
+    submitted, errors = [], []
+    for identifier in dict.fromkeys(identifiers):
+        name = identifier
+        try:
+            record = saved_view(property_uuid, identifier)
+            name = record['name']
+            uuid = submit_render(property_uuid, record['filename'], record['quality'],
+                                 record['visualization']['render'], view_name=name)
+            submitted.append({'name': name, 'uuid': uuid})
+        except Exception as exc:
+            errors.append({'name': name, 'message': str(exc)})
+    return {'submitted': submitted, 'errors': errors}
+
+
+def result(uuid, *, include_image=True):
     node=orm.load_node(uuid)
     result={'state':node.process_state.value, 'finished':node.is_terminated, 'success':node.is_finished_ok,
+            'filename':node.inputs.filename.value,
             'message':node.exit_message or ''}
     if node.is_finished_ok:
-        with node.outputs.image.open(mode='rb') as handle:
-            result['image']=handle.read()
+        if include_image:
+            with node.outputs.image.open(mode='rb') as handle:
+                result['image']=handle.read()
     elif node.is_terminated and 'retrieved' in node.outputs:
         try:
             result['message']+='\n'+node.outputs.retrieved.base.repository.get_object_content('render.log')[-4000:]

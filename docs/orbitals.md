@@ -129,6 +129,27 @@ colours, a linked arbitrary 2D plane and PNG slice export. ORCA selects isolated
 boundaries: cube origins are preserved and pixels outside the grid are empty.
 No wavefunction or full cube is read by the interactive viewer.
 
+The slicing-plane position, normal, presets and size are beside the 3D canvas,
+so the plane can be oriented while inspecting the molecule. The 2D tab contains
+the slice plot, colour controls and PNG export.
+
+Under **Saved visualizations**, name the current view and choose **Save current
+view**. This saves its cube, render source, camera, isosurfaces, colours, image
+dimensions, opacity and slice settings without submitting a job. Several views,
+including views of different cubes from the same property result, can be stored.
+Select a single entry to restore or update it; select several to render them.
+Restoring a view also selects its cube. **Render selected views** submits one
+CalcJob per saved snapshot, independently of subsequent viewer edits. The full
+cube must still exist when rendering is requested; source failures are reported
+per view without substituting reduced cubes.
+
+Saved configurations survive reopening the app. They are editable user annotations
+on the cube manifest (one UUID-keyed extra per view), separate from its immutable
+scientific attributes. Removing a saved view does not remove previous render jobs
+or images. Each submitted job captures its own immutable settings input and links
+to its source manifest. These controls reuse `SavedCubeViews` from EMPA widgets;
+the app supplies persistence and CalcJob callbacks.
+
 The Render tab submits `empa_orca.cube_render` through AiiDA. Select the retrieved
 preview or the full-resolution cube recorded in scratch/stash, then use the
 current 3D camera, isovalues, colours, image dimensions and opacity. Full cubes

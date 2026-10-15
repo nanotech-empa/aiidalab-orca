@@ -213,13 +213,16 @@ class OrbitalProperties(ipw.VBox):
         self.render_panel=RenderPanel(self.process_uuid,self.cube.value)
         self._cube_view=CubeViewer(periodic=False,on_render=self.render_panel.submit)
         self._cube_view.set_content(content)
-        self.render_panel.viewer=self._cube_view
-        pane=self._cube_view.tabs.children[2]
-        pane.children=(self.render_panel.quality,*pane.children,self.render_panel.previous,
-                       self.render_panel.status,self.render_panel.download,self.render_panel.image)
+        self.render_panel.bind_viewer(self._cube_view,self._restore_view)
         self.cube_box.children=[self._cube_view]
         encoded=base64.b64encode(content.encode()).decode()
         self.download.value=f'<a download="{html.escape(self.cube.value)}" href="data:text/plain;base64,{encoded}">Download reduced cube</a><p>Blue/gold surfaces show positive/negative values. Orbital amplitudes and spin density use their respective atomic units; previews are for visual inspection.</p>'
+
+    def _restore_view(self,record):
+        self.cube.value=record['filename']
+        self._cube_view.apply_view_settings(record['visualization'])
+        self.render_panel.quality.value=record['quality']
+        self.render_panel.saved.refresh(selected=[record['id']])
 
     def close(self):
         if self._poll_task:

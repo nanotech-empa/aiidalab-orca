@@ -58,7 +58,7 @@ class ParameterRows(ipw.VBox):
         self.body.children = [r for r, _ in self.rows]
         self._changed()
 
-    def values(self):
+    def values(self, exclude_blocks=()):
         result = {}
         for _, controls in self.rows:
             values = [c.value.strip() for c in controls]
@@ -71,6 +71,8 @@ class ParameterRows(ipw.VBox):
                 result[element] = {k: v for k, v in zip(("basis", "auxiliary_basis", "ecp"), (basis, auxiliary, ecp)) if v}
             else:
                 block, key, text = values
+                if block in exclude_blocks:
+                    continue
                 if not key and not text:
                     continue
                 if not key or not text:
@@ -104,6 +106,7 @@ class GeometrySettings(ipw.VBox):
 
     def __init__(self):
         self._loading = False
+        self._single_point = False
         style = {"description_width": "160px"}
         width = ipw.Layout(width="490px")
         def dropdown(description, options):
@@ -169,13 +172,24 @@ class GeometrySettings(ipw.VBox):
     def values(self):
         return {"schema_version": 2, "protocol": self.protocol.value,
                 **{key: widget.value for key, widget in self.fields.items()},
-                "element_settings": self.elements.values(), "block_parameters": self.parameters.values()}
+                "element_settings": self.elements.values(),
+                "block_parameters": self.parameters.values(exclude_blocks=("geom",) if self._single_point else ())}
+
+    def set_optimization_enabled(self, enabled):
+        self._single_point = not enabled
+        # The original controls share a Layout; replace it for these two only.
+        self.convergence.layout = ipw.Layout(width="490px", display="" if enabled else "none")
+        self.max_steps.layout = ipw.Layout(width="490px", display="" if enabled else "none")
+        self._changed()
 
     def _changed(self, _=None):
         if self._loading:
             return
         try:
             overrides = protocol_overrides(self.values())
+            if self._single_point:
+                for key in ("optimization", "max_geometry_steps"):
+                    overrides.pop(key, None)
             text = ", ".join(k.replace("_", " ") for k in overrides) if overrides else "none"
             self.summary.value = f"<p><b>Changes from protocol:</b> {html.escape(text)}</p>"
         except ValueError as exc:

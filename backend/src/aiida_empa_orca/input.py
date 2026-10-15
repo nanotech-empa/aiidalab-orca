@@ -18,7 +18,7 @@ def render_input(parameters, maxcore_mb, coordinate_filename):
     return text + (f"\n{after}\n" if after else "")
 
 
-def preview_input(structure, settings):
+def preview_input(structure, settings, *, single_point=False):
     from aiida.common.folders import SandboxFolder
     from aiida.orm.implementation import clean_value
     from .calculation import OptimizationCalculation
@@ -31,5 +31,10 @@ def preview_input(structure, settings):
         calc._write_structure(structure, folder, calc._INPUT_COORDS_FILE)
         with open(folder.get_abs_path(calc._INPUT_COORDS_FILE), encoding="utf8") as stream:
             xyz = stream.read()
-    return {calc._INPUT_FILE: render_input(clean_value(orca_parameters(s)), int(.75*s["memory_mb"]/s["nprocs"]),
+    if single_point:
+        from .reference import single_point_parameters
+        parameters = single_point_parameters(s)
+    else:
+        parameters = orca_parameters(s)
+    return {calc._INPUT_FILE: render_input(clean_value(parameters), int(.75*s["memory_mb"]/s["nprocs"]),
                                          calc._INPUT_COORDS_FILE), calc._INPUT_COORDS_FILE: xyz}

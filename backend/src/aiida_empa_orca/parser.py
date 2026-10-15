@@ -13,6 +13,42 @@ def optimization_converged(text):
     return "THE OPTIMIZATION HAS CONVERGED" in text and "ORCA TERMINATED NORMALLY" in text
 
 
+def reference_summary(text):
+    """Require a converged last SCF and a finite final total energy."""
+    states = re.findall(r"SCF (?:CONVERGED AFTER|NOT CONVERGED)", text)
+    if not states or states[-1] != "SCF CONVERGED AFTER" or "ORCA TERMINATED NORMALLY" not in text:
+        raise ValueError("SCF convergence was not confirmed")
+    energies = re.findall(r"FINAL SINGLE POINT ENERGY\s+([-+\d.Ee]+)", text)
+    energy = float(energies[-1]) if energies else float("nan")
+    if not np.isfinite(energy):
+        raise ValueError("No finite final single-point energy")
+    result = {"converged": True, "energy_hartree": energy,
+              "energy_ev": convertor(energy, "hartree", "eV")}
+    spins = re.findall(r"Expectation value of <S\*\*2>\s*:?\s*([\d.]+)", text)
+    if spins:
+        result["spin_squared"] = float(spins[-1])
+    version = re.search(r"Program Version\s+(\S+)", text)
+    if version:
+        result["orca_version"] = version.group(1)
+    return result
+
+
+class SinglePointParser(OrcaBaseParser):
+    def parse(self, **kwargs):
+        status = super().parse(**kwargs)
+        if status and status.status:
+            return status
+        text = self.retrieved.base.repository.get_object_content("aiida.out")
+        try:
+            summary = reference_summary(text)
+        except ValueError as exc:
+            self.logger.error("SCF data: %s", exc)
+            return (self.exit_codes.ERROR_SCF_NOT_CONVERGED if "convergence" in str(exc)
+                    else self.exit_codes.ERROR_REFERENCE_DATA)
+        self.out("reference_summary", Dict(dict=summary))
+        return status
+
+
 class OptimizationParser(OrcaBaseParser):
     def parse(self, **kwargs):
         status = super().parse(**kwargs)

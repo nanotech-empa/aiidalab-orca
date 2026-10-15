@@ -16,13 +16,17 @@ dependencies = [
 
 [project.entry-points."aiida.calculations"]
 "empa_orca.optimization" = "aiida_empa_orca.calculation:OptimizationCalculation"
+"empa_orca.single_point" = "aiida_empa_orca.calculation:SinglePointCalculation"
 
 [project.entry-points."aiida.parsers"]
 "empa_orca.optimization" = "aiida_empa_orca.parser:OptimizationParser"
+"empa_orca.single_point" = "aiida_empa_orca.parser:SinglePointParser"
 
 [project.entry-points."aiida.workflows"]
 "empa_orca.base" = "aiida_empa_orca.workchains:OptimizationBaseWorkChain"
 "empa_orca.geometry" = "aiida_empa_orca.workchains:GeometryWorkChain"
+"empa_orca.reference_base" = "aiida_empa_orca.reference:ReferenceBaseWorkChain"
+"empa_orca.reference" = "aiida_empa_orca.reference:ReferenceWorkChain"
 
 [tool.setuptools.packages.find]
 where = ["src"]

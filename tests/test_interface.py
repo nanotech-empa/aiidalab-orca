@@ -195,7 +195,7 @@ def test_step_validation_and_downstream_invalidation(source, monkeypatch):
         app.close()
 
 
-def test_keep_geometry_needs_no_code_or_inactive_resources(aiida_profile_clean, monkeypatch):
+def test_single_point_requires_code_and_resources(aiida_profile_clean, monkeypatch):
     from aiidalab_orca import services
     from aiidalab_orca.app import OrcaApp
     monkeypatch.setattr(services, "codes", lambda: [])
@@ -203,15 +203,20 @@ def test_keep_geometry_needs_no_code_or_inactive_resources(aiida_profile_clean, 
     try:
         app.structure.example.click()
         app._confirm_structure()
-        app.nprocs.value = 128  # Invalid with 2048 MB, but unused for keep-as-is.
+        app.nprocs.value = 128
         app.optimize.value = False
         app._confirm_settings()
         app._review()
-        assert app.review["plan"]["action"] == "keep"
-        assert app.review["code_uuid"] is None
-        assert not app.submit_button.disabled
-        assert app.resource_controls.layout.display == "none"
+        assert app.review is None and app.submit_button.disabled
+        assert "256 MB per process" in app.resource_message.value
+        assert app.resource_controls.layout.display != "none"
+        assert app.method.layout.display != "none" and app.science.scf_convergence.layout.display != "none"
+        assert app.convergence.layout.display == "none"
+        app.nprocs.value = 2
+        app._review()
+        assert app.review is None and "Select an ORCA code" in app.resource_message.value
         app.optimize.value = True
+        app.nprocs.value = 128
         app._confirm_settings()
         assert app._settings_confirmed  # Resource errors can be corrected in step 3.
         app._review()

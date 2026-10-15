@@ -10,7 +10,7 @@ import nglview as nv
 from ase import Atoms
 
 
-def settings_details(settings):
+def settings_details(settings, *, single_point=False):
     """Expose the full effective specification, including expert overrides."""
     from aiida_empa_orca.protocols import PROTOCOLS, editable_settings, protocol_overrides, reference, approximation
     s = editable_settings(settings)
@@ -18,10 +18,16 @@ def settings_details(settings):
     basis = s["basis"] + (" + element overrides" if s["element_settings"] else "")
     text = f"{s['method']}/{basis} · {reference(s)} · {approximation(s)}"
     changes = protocol_overrides(s)
+    if single_point:
+        for key in ("optimization", "max_geometry_steps", "constraints"):
+            changes.pop(key, None)
     from aiida_empa_orca.constraints import describe_constraints
     constraints = describe_constraints(s.get("constraints", []))
     constraint_text = ("<p><b>Geometry constraints:</b><br>" + "<br>".join(html.escape(c) for c in constraints) + "</p>"
                        if constraints else "<p>Geometry constraints: none.</p>")
+    if single_point:
+        constraint_text = "<p>Single-point SCF at fixed atomic positions.</p>"
+        s = {k: v for k, v in s.items() if k not in ("optimization", "max_geometry_steps")}
     rows = "".join(f"<tr><th style='text-align:left;padding-right:15px'>{html.escape(key.replace('_', ' ').capitalize())}</th><td>{html.escape(str(value))}</td></tr>"
                    for key, value in s.items() if key not in ("schema_version", "protocol", "constraints"))
     return (f"<p><b>{html.escape(text)}</b></p><p>Starting protocol: {html.escape(label)}. "
@@ -58,7 +64,10 @@ def molecule(symbols, frames):
 
 def show_result(data):
     s = data["settings"]
+    scf = data.get("single_point", False)
     title = "Optimized geometry" if data["optimized"] else "Supplied geometry · no optimization performed"
+    if scf:
+        title = "Single-point SCF · fixed geometry"
     if data["optimized"] and s.get("constraints"):
         title = "Geometry optimized with constraints"
     items = [ipw.HTML(f"<h3>{title}</h3>")]
@@ -66,7 +75,8 @@ def show_result(data):
     for warning in data.get("warnings", []):
         items.append(ipw.HTML(f"<p style='color:#a02020'>{html.escape(warning)}</p>"))
     if data.get("source_uuid"):
-        items.append(ipw.HTML("<p><b>Reused an available optimization.</b> No new ORCA calculation was needed.</p>"))
+        kind = "electronic state" if scf else "optimization"
+        items.append(ipw.HTML(f"<p><b>Reused an available {kind}.</b> No new ORCA calculation was needed.</p>"))
         provenance += f"<p>Source workflow: <code>{data['source_uuid']}</code></p>"
     if "summary" in data:
         summary = data["summary"]
@@ -76,8 +86,10 @@ def show_result(data):
         if "spin_squared" in summary:
             text += f" · ⟨S²⟩ = {summary['spin_squared']:.5f}"
         items.append(ipw.HTML(f"<p><b>{html.escape(text)}</b></p>"))
-    if data["optimized"]:
-        items.append(ipw.HTML(settings_details(s) + input_details(data.get("input_files", {}))))
+    if data["optimized"] or scf:
+        items.append(ipw.HTML(settings_details(s, single_point=scf) + input_details(data.get("input_files", {}))))
+    if data.get("artifact_status"):
+        items.append(ipw.HTML(f"<p><b>Electronic files:</b> {html.escape(data['artifact_status'])}</p>"))
     if "positions" in data:
         if len(data.get("frames", [])) > 1:
             items.append(ipw.HTML("<p>Showing the final geometry. Move the pointer over the molecule to play or step through the trajectory.</p>"))
@@ -85,7 +97,7 @@ def show_result(data):
         encoded = base64.b64encode(data["xyz"].encode()).decode()
         items.append(ipw.HTML(f'<a download="geometry.xyz" href="data:text/plain;base64,{encoded}"><i class="fa fa-download" aria-hidden="true"></i> Download final XYZ</a>'))
         provenance += f'<p>Structure: <code>{data["structure_uuid"]}</code></p>'
-    if "summary" in data:
+    if data["optimized"] and "summary" in data:
         energies = data["summary"]["scf_evaluation_energies_hartree"]
         fig, ax = plt.subplots(figsize=(7.4, 2.7))
         ax.plot(range(1, len(energies)+1), [(e-energies[-1])*27.211386245988 for e in energies], "o-", color="#237b98")

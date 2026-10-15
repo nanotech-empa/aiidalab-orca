@@ -173,11 +173,11 @@ def test_expert_controls_copy_reset_and_invalidate(source, monkeypatch):
         assert app.method.value == "PBE0"
         assert app.memory.value == 4096 and app.charge.value == 1 and app.multiplicity.value == 1
         assert not app.science.elements.values() and not app.science.parameters.values()
-        # Inactive malformed expert settings cannot prevent keep-as-is.
+        # SCF still validates its active scientific settings.
         app.science.parameters.append(["scf", "TolE", ""])
         app.optimize.value = False
         app._confirm_settings()
-        app._review()
-        assert app.review["plan"]["action"] == "keep" and not app.review["input_files"]
+        assert not app._settings_confirmed
+        assert "Complete both" in app.science_message.value
     finally:
         app.close()

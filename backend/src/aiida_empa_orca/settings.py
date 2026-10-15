@@ -25,6 +25,9 @@ BASES = ("def2-SVP", "def2-TZVP")
 
 def normalize_settings(values):
     """Reject unsupported options instead of silently discarding them."""
+    if values.get("schema_version") == 2:
+        from .protocols import normalize_v2
+        return normalize_v2(values)
     unknown = set(values) - set(DEFAULTS)
     if unknown:
         raise ValueError(f"Unknown settings: {sorted(unknown)}")
@@ -62,11 +65,17 @@ def validate_molecule(structure, settings):
     unpaired = settings["multiplicity"] - 1
     if electrons < 1 or unpaired > electrons or (electrons - unpaired) % 2:
         raise ValueError(f"Charge and multiplicity are incompatible with {electrons} electrons")
+    absent = set(settings.get("element_settings", {})) - set(atoms.get_chemical_symbols())
+    if absent:
+        raise ValueError(f"Basis/ECP overrides refer to elements absent from this molecule: {sorted(absent)}")
 
 
 def orca_parameters(settings):
     """Build reviewed HF/DFT input; no implicit method or spin guessing."""
     s = normalize_settings(settings)
+    if s["schema_version"] == 2:
+        from .protocols import parameters_v2
+        return parameters_v2(s)
     spin = ("U" if s["multiplicity"] > 1 else "R") + ("HF" if s["method"] == "HF" else "KS")
     keywords = [s["method"], s["basis"], spin, "Opt", s["optimization"], "TightSCF"]
     keywords += (["RI" if s["method"] == "PBE" else "RIJCOSX", "def2/J"] if s["ri"] else ["NoRI"])
@@ -82,8 +91,12 @@ def orca_parameters(settings):
 
 
 def signature(structure, settings, code_uuid):
-    """Conservative exact match including ordered coordinates and code identity."""
+    """Compare effective inputs, not the name of the originating protocol."""
+    from aiida.orm.implementation import clean_value
     atoms = structure.get_ase()
+    s = normalize_settings(settings)
     payload = {"numbers": atoms.numbers.tolist(), "positions": atoms.positions.tolist(),
-               "settings": normalize_settings(settings), "code_uuid": str(code_uuid)}
+               "parameters": clean_value(orca_parameters(s)),
+               "resources": {k: s[k] for k in ("nprocs", "memory_mb", "wallclock_seconds")},
+               "code_uuid": str(code_uuid)}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, allow_nan=False).encode()).hexdigest()

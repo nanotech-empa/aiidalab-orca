@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 start-[0-9]*.ipynb
+orca-[0-9]*.ipynb
 build/
 dist/
 test-results/

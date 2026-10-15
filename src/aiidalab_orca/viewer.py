@@ -10,6 +10,32 @@ import nglview as nv
 from ase import Atoms
 
 
+def settings_details(settings):
+    """Expose the full effective specification, including expert overrides."""
+    from aiida_empa_orca.protocols import PROTOCOLS, editable_settings, protocol_overrides, reference, approximation
+    s = editable_settings(settings)
+    label = PROTOCOLS[s["protocol"]]["label"] if settings.get("schema_version") == 2 else "Legacy geometry settings"
+    basis = s["basis"] + (" + element overrides" if s["element_settings"] else "")
+    text = f"{s['method']}/{basis} · {reference(s)} · {approximation(s)}"
+    changes = protocol_overrides(s)
+    rows = "".join(f"<tr><th style='text-align:left;padding-right:15px'>{html.escape(key.replace('_', ' ').capitalize())}</th><td>{html.escape(str(value))}</td></tr>"
+                   for key, value in s.items() if key not in ("schema_version", "protocol"))
+    return (f"<p><b>{html.escape(text)}</b></p><p>Starting protocol: {html.escape(label)}. "
+            f"Changes: {html.escape(', '.join(k.replace('_', ' ') for k in changes) or 'none')}.</p>"
+            f"<details><summary>Effective calculation settings</summary><table>{rows}</table></details>")
+
+
+def input_details(files, title="Submitted ORCA input"):
+    if not files:
+        return ""
+    entries = []
+    for name, content in files.items():
+        encoded = base64.b64encode(content.encode()).decode()
+        entries.append(f'<h4>{html.escape(name)}</h4><a download="{html.escape(name)}" href="data:text/plain;base64,{encoded}">Download {html.escape(name)}</a>'
+                       f"<pre style='max-height:300px;overflow:auto'>{html.escape(content)}</pre>")
+    return f"<details><summary>{html.escape(title)}</summary>{''.join(entries)}</details>"
+
+
 def molecule(symbols, frames):
     trajectory = [Atoms(symbols, positions=positions) for positions in frames]
     view = nv.show_asetraj(trajectory)
@@ -38,11 +64,14 @@ def show_result(data):
         provenance += f"<p>Source workflow: <code>{data['source_uuid']}</code></p>"
     if "summary" in data:
         summary = data["summary"]
-        text = (f"{s['method']}/{s['basis']} · charge {s['charge']} · multiplicity {s['multiplicity']}"
+        basis = s["basis"] + (" + element overrides" if s.get("element_settings") else "")
+        text = (f"{s['method']}/{basis} · charge {s['charge']} · multiplicity {s['multiplicity']}"
                 f" · converged · E = {summary['energy_hartree']:.9f} Hartree")
         if "spin_squared" in summary:
             text += f" · ⟨S²⟩ = {summary['spin_squared']:.5f}"
         items.append(ipw.HTML(f"<p><b>{html.escape(text)}</b></p>"))
+    if data["optimized"]:
+        items.append(ipw.HTML(settings_details(s) + input_details(data.get("input_files", {}))))
     if "positions" in data:
         if len(data.get("frames", [])) > 1:
             items.append(ipw.HTML("<p>Showing the final geometry. Move the pointer over the molecule to play or step through the trajectory.</p>"))

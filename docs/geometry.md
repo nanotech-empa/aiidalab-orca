@@ -57,8 +57,8 @@ from `%pal`. This milestone deliberately supports local execution only.
 
 After installing new entry points, refresh the AiiDA daemon at a suitable point
 after checking existing work. Deploy this checkout as `~/apps/orca` (a symlink is
-fine), then open `start.ipynb` in AiiDAlab app mode. On the development instance:
-`http://localhost:8888/apps/apps/orca/start.ipynb`.
+fine), then open `orca.ipynb` in AiiDAlab app mode. On the development instance:
+`http://localhost:8888/apps/apps/orca/orca.ipynb`.
 
 The tested ORCA 6.1.1 parser requires the unreleased
 [`aiida-orca` PR 89 revision](https://github.com/ezpzbz/aiida-orca/pull/89)
@@ -106,7 +106,7 @@ structure, configuration, and resources/submission stages. Keeping a geometry
 hides resource controls and requires no code; unused resource fields in the
 backend's settings schema receive its defaults. No spin or method is guessed.
 
-The home-page card provides icon launchers for **New calculation** (`start.ipynb`)
+The home-page card provides icon launchers for **New calculation** (`orca.ipynb`)
 and **Search calculations** (`search.ipynb`). Both load the AiiDA profile in a
 separate first cell, before building the app. Results use NGL's trajectory controls
 and keep detailed provenance and identifiers in an expandable section.
@@ -145,13 +145,57 @@ not scientific equivalence: the backend still performs its exact compatibility
 and artifact checks during review and submission. Search does not query remote
 scratch because this geometry operation needs no wavefunction.
 
-Choices are HF, PBE, PBE0, B3LYP, M06-2X; def2-SVP or def2-TZVP; NormalOpt or
-TightOpt. Charge and multiplicity are explicit and checked against the electron
-count. Multiplicity >1 uses UHF/UKS, while singlets use RHF/RKS. Broken-symmetry
-singlets are outside this first interface. RI uses def2/J with RI-J for PBE and
-RIJCOSX for HF/hybrids, following the
+## Protocols and expert settings
+
+Scientific defaults live in the packaged
+[`protocols/geometry.yaml`](../backend/src/aiida_empa_orca/protocols/geometry.yaml),
+loaded with `yaml.safe_load`, following the `aiida-nanotech-empa` approach.
+The YAML defines shared starting inputs and named, versioned protocol overrides.
+The GUI and independent Python callers use the same definitions. **Apply defaults**
+resets scientific overrides while preserving charge, multiplicity and resources.
+Edits in the GUI affect only the current draft, never the YAML or an earlier run.
+Changes to a published protocol should receive a new version identifier.
+
+PBE/def2-SVP and PBE0/def2-SVP are the initial starting protocols. Their existing
+scientific defaults are preserved: TightSCF, NormalOpt, no extra dispersion or
+grid keyword. Suggestions include HF, PBE, PBE0, B3LYP and M062X (ORCA's spelling
+of M06-2X); method and basis controls also accept typed ORCA names.
+
+Charge and multiplicity are explicit and checked against nuclear electron count.
+Automatic reference selection uses UHF/UKS for multiplicity >1 and RHF/RKS for
+singlets; experts can choose an explicit compatible reference, including UKS
+for a singlet. This choice alone does **not** construct a broken-symmetry state.
+ROHF/ROKS, QRO and imported wavefunctions require further workflow support.
+The automatic RI choice uses def2/J with RI-J for PBE and RIJCOSX for the listed
+HF/hybrids, following the
 [ORCA 6.1 RI documentation](https://www.faccts.de/docs/orca/6.1/manual/contents/essentialelements/RI.html).
-TightSCF is explicit. No dispersion correction is added implicitly.
+Custom functionals and modified functional parameters require an explicit RI
+choice; their exchange content is not guessed. Auxiliary basis, SCF/geometry
+convergence, iteration limits, numerical grid and added dispersion are editable.
+“No extra correction” does not remove dispersion intrinsic to a named functional.
+
+Element rows assign orbital/auxiliary basis sets and optionally a named ECP or
+`none` to remove one. Blank fields inherit the global choice. `NewGTO` does not
+change an inherited ECP: the expert must choose a compatible pair, as explained
+in the [ORCA basis documentation](https://www.faccts.de/docs/orca/6.1/manual/contents/essentialelements/basisset.html).
+Overrides for elements absent from the molecule are rejected. The app does not
+claim to validate ECP core sizes or basis availability; ORCA validates these.
+
+Additional scalar parameter rows support `%scf`, `%geom` and `%method`, for
+example `scf / TolE / 1e-8` or functional parameters from the
+[ORCA DFT documentation](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/DensityFunctionalTheory.html).
+Numbers, booleans and single ORCA tokens are accepted. Dedicated procedure
+controls cannot be overridden a second time in these rows. Nested blocks,
+constraints, external basis files and MORead dependencies need separate typed
+support; raw input injection is not a supported configuration path.
+
+Review shows the effective settings, changes from the starting protocol, and
+downloadable `aiida.inp`/`aiida.coords.xyz`. The preview shares the upstream ORCA
+renderer and coordinate writer with the CalcJob. Results read the **actual stored
+CalcJob input**, including the source calculation for reused results. Schema 2
+records protocol identity and every resolved setting on the workflow, with the
+effective ORCA parameters on its CalcJob. Legacy schema 1 remains readable and
+compatible with equivalent protocol inputs; existing nodes are never rewritten.
 
 Defaults: PBE/def2-SVP, neutral doublet, two processes, total memory budget 2048 MB,
 100 geometry steps, 200 SCF steps, 30 minutes. `%maxcore` receives 75% of the total
@@ -167,11 +211,12 @@ from aiida import load_profile, orm
 from aiida.engine import submit
 from ase.io import read
 from aiida_empa_orca.workchains import get_builder, plan_geometry
+from aiida_empa_orca.protocols import protocol_settings
 
 load_profile()
 structure = orm.StructureData(ase=read("examples/no/no.xyz"))
 code = orm.load_code("orca@localhost")
-settings = {"method": "PBE", "basis": "def2-SVP", "charge": 0, "multiplicity": 2}
+settings = protocol_settings("pbe-v1", {"charge": 0, "multiplicity": 2})
 plan = plan_geometry(structure, settings, code)
 print(plan)  # Plain data: action, source UUID, missing-artifact explanations.
 builder = get_builder(structure, settings, code, plan=plan)
@@ -192,8 +237,10 @@ scratch and is not required or retrieved by this geometry operation.
 
 ## Reuse and caching
 
-Reuse compares ordered atom identities and exact coordinates, all normalized
-settings, and the code UUID against successful geometry-workflow provenance.
+Reuse compares ordered atom identities and exact coordinates, the effective
+ORCA parameters, resources, and code UUID against successful geometry-workflow provenance.
+Protocol labels do not affect compatibility when their effective inputs match;
+every effective scientific override does. Values use AiiDA's storage precision.
 Matching is deliberately conservative; even resource changes currently prevent
 reuse. Code records must represent a fixed executable installation: replacing
 a binary in place without changing its Code identity is outside this contract.
@@ -274,6 +321,17 @@ Keeping that edited structure created a linked edit record and no CalcJobs.
 Both home-page icon links opened the intended app view. Automated tests also
 ensure that repeated review preserves structure identity at AiiDA's storage
 precision, while a real edit creates a new linked structure.
+
+The YAML protocol/expert controls were tested in a fresh browser session:
+the default protocol found a compatible legacy optimization, and a new neutral
+NO doublet calculation used BP86/6-31G* with UKS/RI, a def2-TZVP override on N,
+explicit `DelECP N`, and `scf.TolE = 1e-8`. It converged with a fresh uncached
+CalcJob. Both previewed files matched the actual stored input byte for byte.
+Reopening the result and copying its settings preserved the mixed basis and
+SCF override, and review found the available optimization for reuse. The suite
+contains 36 tests; the backend wheel was also checked for its packaged YAML.
+This is an input/workflow integration test, not a recommendation of that model
+or validation of heavy-element ECPs and arbitrary functionals.
 
 These checks establish local workflow/UI integration. HF, B3LYP, M06-2X,
 basis convergence, larger systems and numerical comparison to the pentacene

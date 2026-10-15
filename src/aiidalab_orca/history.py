@@ -8,26 +8,33 @@ from aiida import orm
 
 from aiida_empa_orca.reuse import PROCESS_TYPE, validate_outputs
 from aiida_empa_orca.choices import METHODS
+from aiida_empa_orca.reference import PROCESS_TYPE as REFERENCE_PROCESS, ArtifactUnavailable, validate_outputs as validate_reference
 from .structure_io import formula_from_attributes
 
 
-def search_runs(text="", state="", method="", since=None, until=None, offset=0, limit=15):
-    filters = {"process_type": PROCESS_TYPE}
+def search_runs(text="", state="", method="", since=None, until=None, offset=0, limit=15, kind=""):
+    filters = {"process_type": {"in": [PROCESS_TYPE, REFERENCE_PROCESS]}}
     query = orm.QueryBuilder().append(
         orm.WorkChainNode, filters=filters, tag="run",
-        project=["uuid", "label", "ctime", "attributes.process_state", "attributes.exit_status"],
+        project=["uuid", "label", "ctime", "attributes.process_state", "attributes.exit_status", "process_type"],
     ).append(orm.StructureData, with_outgoing="run", edge_filters={"label": "structure"},
              project=["attributes"], tag="structure").append(
         orm.Dict, with_outgoing="run", edge_filters={"label": "settings"}, project=["attributes"],
-    ).append(orm.Bool, with_outgoing="run", edge_filters={"label": "optimize"}, project=["attributes.value"])
+    )
     query.order_by({"run": {"ctime": "desc", "id": "desc"}})
     rows = []
     skipped = 0
-    for uuid, label, created, process_state, exit_status, structure, settings, optimized in query.iterall(batch_size=100):
+    for uuid, label, created, process_state, exit_status, process_type, structure, settings in query.iterall(batch_size=100):
+        scf = process_type == REFERENCE_PROCESS
+        # The reference workflow has no optimize input. An outer join filtered
+        # by that input link would still exclude it in the SQL WHERE clause.
+        optimized = False if scf else orm.load_node(uuid).inputs.optimize.value
+        operation = "scf" if scf else "optimization" if optimized else "structure"
         status = ("succeeded" if exit_status == 0 else "failed") if process_state == "finished" else process_state
         date = created.astimezone(ZoneInfo("Europe/Zurich")).date()
         formula = formula_from_attributes(structure)
-        if ((state and state != status) or (method and (not optimized or method != settings["method"]))
+        if ((state and state != status) or (kind and kind != operation)
+                or (method and ((not optimized and not scf) or method != settings["method"]))
                 or (since and date < since) or (until and date > until)
                 or text.casefold() not in f"{uuid} {label} {formula}".casefold()):
             continue
@@ -37,7 +44,8 @@ def search_runs(text="", state="", method="", since=None, until=None, offset=0, 
         rows.append({"uuid": str(uuid), "label": label, "formula": formula, "state": status,
                      "created": created.astimezone(ZoneInfo("Europe/Zurich")).strftime("%Y-%m-%d %H:%M"),
                      "method": settings["method"], "basis": settings["basis"],
-                     "charge": settings["charge"], "multiplicity": settings["multiplicity"], "optimized": optimized})
+                     "charge": settings["charge"], "multiplicity": settings["multiplicity"],
+                     "optimized": bool(optimized), "single_point": scf, "operation": operation})
         if len(rows) > limit:
             break
     return {"rows": rows[:limit], "has_more": len(rows) > limit}
@@ -45,10 +53,12 @@ def search_runs(text="", state="", method="", since=None, until=None, offset=0, 
 
 def inspect_run(uuid):
     node = orm.load_node(uuid)
-    if not isinstance(node, orm.WorkChainNode) or node.process_type != PROCESS_TYPE:
-        raise ValueError("Select an ORCA geometry workflow.")
+    if not isinstance(node, orm.WorkChainNode) or node.process_type not in (PROCESS_TYPE, REFERENCE_PROCESS):
+        raise ValueError("Select an ORCA geometry or SCF workflow.")
+    scf = node.process_type == REFERENCE_PROCESS
     data = {"uuid": str(node.uuid), "label": node.label, "settings": node.inputs.settings.get_dict(),
-            "input_uuid": str(node.inputs.structure.uuid), "optimize": node.inputs.optimize.value,
+            "input_uuid": str(node.inputs.structure.uuid), "optimize": not scf and node.inputs.optimize.value,
+            "single_point": scf,
             "code_uuid": str(node.inputs.code.uuid) if "code" in node.inputs else None,
             "structure_uuid": None, "geometry_status": "No final geometry yet.",
             "reuse_status": "This run has no completed optimization to reuse."}
@@ -59,13 +69,17 @@ def inspect_run(uuid):
             data["geometry_status"] = "Final geometry is available."
         except (KeyError, ValueError, OSError) as exc:
             data["geometry_status"] = f"Final geometry cannot be read: {exc}"
-    if node.is_finished_ok and data["optimize"]:
+    if node.is_finished_ok and (data["optimize"] or scf):
         try:
-            validate_outputs(node.outputs)
-            data["reuse_status"] = "Optimization data are available. Compatibility is checked when you review a new calculation."
+            if scf:
+                validate_reference(node.outputs)
+                data["reuse_status"] = "SCF results and remote orbital/density files are available. Compatibility is checked during review."
+            else:
+                validate_outputs(node.outputs)
+                data["reuse_status"] = "Optimization data are available. Compatibility is checked when you review a new calculation."
         except (KeyError, ValueError, FileNotFoundError) as exc:
-            data["reuse_status"] = f"Required optimization data are missing or invalid; this step needs recomputation: {exc}"
-        except OSError as exc:
+            data["reuse_status"] = f"Required {'electronic' if scf else 'optimization'} data are missing or invalid; this step needs recomputation: {exc}"
+        except (OSError, ArtifactUnavailable) as exc:
             data["reuse_status"] = f"Availability could not be checked; retry when storage is reachable: {exc}"
     return data
 
@@ -80,6 +94,8 @@ class HistoryWidget(ipw.VBox):
         self.query = ipw.Text(placeholder="Formula, label, or UUID", layout=ipw.Layout(width="340px"))
         self.state = ipw.Dropdown(options=[("All states", "")] + [(s.capitalize(), s) for s in ["succeeded", "failed", "running", "waiting", "created", "excepted", "killed"]])
         self.method = ipw.Combobox(options=METHODS, placeholder="All methods", ensure_option=False)
+        self.kind = ipw.Dropdown(options=[("All calculation types", ""), ("Geometry optimization", "optimization"),
+                                         ("Single-point SCF", "scf"), ("Structure only (legacy)", "structure")])
         self.since = ipw.DatePicker(description="From")
         self.until = ipw.DatePicker(description="To")
         self.search = ipw.Button(description="Search", icon="search", button_style="primary")
@@ -98,18 +114,18 @@ class HistoryWidget(ipw.VBox):
         self.view.on_click(lambda _: self._view_run(self.selected_uuid))
         self.geometry.on_click(lambda _: self._use_geometry(self.selected_uuid))
         self.copy.on_click(lambda _: self._copy_settings(self.selected_uuid))
-        self.lookup_uuid = ipw.Text(placeholder="Geometry workflow UUID", layout=ipw.Layout(width="100%"))
+        self.lookup_uuid = ipw.Text(placeholder="ORCA workflow UUID", layout=ipw.Layout(width="100%"))
         load = ipw.Button(description="Load run", icon="folder-open", disabled=True)
         load.on_click(lambda _: self._view_run(self.lookup_uuid.value.strip()))
         self.lookup_uuid.observe(lambda change: setattr(load, "disabled", not change["new"].strip()), names="value")
         self.advanced = ipw.Accordion(children=[ipw.VBox([
-            ipw.HTML("<p>Open a geometry workflow from this AiiDA database using its UUID.</p>"),
+            ipw.HTML("<p>Open a geometry or SCF workflow from this AiiDA database using its UUID.</p>"),
             self.lookup_uuid, load,
         ])], selected_index=None)
         self.advanced.set_title(0, "Advanced search · open by UUID")
         super().__init__([
             ipw.HTML("<h3>Search calculations</h3><p>Find a run, inspect its available data, then choose how to continue.</p>"),
-            ipw.HBox([self.query, self.state, self.method, self.search]), ipw.HBox([self.since, self.until]),
+            ipw.HBox([self.query, self.state, self.method, self.search]), ipw.HBox([self.kind, self.since, self.until]),
             self.message, self.detail, ipw.HBox([self.view, self.geometry, self.copy]),
             self.rows, ipw.HBox([self.previous, self.next]), self.advanced,
         ])
@@ -127,13 +143,15 @@ class HistoryWidget(ipw.VBox):
             if self.since.value and self.until.value and self.since.value > self.until.value:
                 raise ValueError("The start date must be before the end date.")
             page = search_runs(self.query.value.strip(), self.state.value, self.method.value,
-                               self.since.value, self.until.value, self.offset, self.page_size)
+                               self.since.value, self.until.value, self.offset, self.page_size, self.kind.value)
             widgets = []
             for row in page["rows"]:
                 button = ipw.Button(description="Select", layout=ipw.Layout(width="75px"))
                 button.on_click(lambda _, uuid=row["uuid"]: self.select(uuid))
                 title = html.escape(row["label"] or "Geometry")
                 operation = f"{row['method']}/{row['basis']} optimization" if row["optimized"] else "Kept supplied geometry"
+                if row["single_point"]:
+                    operation = f"{row['method']}/{row['basis']} single-point SCF"
                 info = (f"<b>{title}</b> · {row['formula']} · {row['state']}<br>"
                         f"{row['created']} · {operation} · "
                         f"charge {row['charge']}, multiplicity {row['multiplicity']} · {row['uuid'][:8]}")

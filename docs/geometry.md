@@ -5,6 +5,11 @@ It follows the scope agreed in [the design discussion](https://github.com/nanote
 The test molecule is neutral NO, multiplicity 2, starting at 1.30 Å.
 Pentacene remains the later spectroscopy reference target.
 
+The app is now **ORCA · Electronic structure**, with an independent
+[single-point SCF/reference workflow](reference.md). Unchecking **Optimize geometry**
+in the current app runs SCF at fixed coordinates. The geometry backend's older
+`optimize=False` API remains a structure-only operation for compatibility.
+
 ## Components and existing work
 
 ```mermaid
@@ -75,19 +80,29 @@ New sessions start without a selected molecule or prefilled coordinates. The
 NO doublet test geometry is available through **Load NO doublet example**.
 Calculation review is enabled after a structure has been selected.
 
+New calculations default to the lowest multiplicity compatible with the electron
+count (sum of atomic numbers minus charge): 1 for an even count, 2 for an odd count.
+The **Use lowest allowed multiplicity** option updates this default when the
+molecule or charge changes. Editing multiplicity or copying calculation settings
+turns the option off, preserving the chosen spin through subsequent edits. Turn it
+back on to restore the automatic default. Electron parity does not predict the
+ground-state spin; higher-spin states must be chosen explicitly. Existing charge
+and spin validation remains active for both automatic and manual values.
+
 The interface has three areas:
 
 - **New calculation**: import a geometry, edit atoms, configure the calculation,
-  and review whether it will compute, reuse a result, or keep the supplied geometry.
+  choose optimization or single-point SCF, and review whether it will compute or reuse a result.
   Confirm the structure, confirm scientific settings, then choose resources and
   review the execution plan. Advanced scientific settings are collapsed initially.
-- **Search calculations**: search all recorded ORCA geometry workflows by formula,
-  label or UUID, with state, method and date filters and paginated results.
+- **Search calculations**: search recorded ORCA geometry and SCF workflows by formula,
+  label or UUID, with calculation type, state, method and date filters and paginated results.
   Dates use Europe/Zurich. Select a run to check the stored data, view results,
   use its final geometry, or copy its settings onto the current input molecule.
   **Advanced search · open by UUID** opens a known workflow directly.
-- **Results**: trajectory, SCF evaluation energies, final coordinates, method
-  provenance and, when parsed, ⟨S²⟩; download XYZ or continue from the geometry.
+- **Results**: energy, coordinates, method provenance and, when parsed, ⟨S²⟩;
+  optimizations also show trajectory and energy history, while SCF shows electronic
+  file availability. Download XYZ or continue from the geometry.
 
 The interface uses the shared `aiidalab-widgets-base.WizardAppWidget` and its
 step states, following QE's confirmation, dependency, and back-navigation patterns.
@@ -102,9 +117,9 @@ QE's application classes include QE-specific setup and calculation dependencies;
 ORCA uses the common wizard and shared molecular widgets with a small adapter.
 Status/results and history remain separate areas so previous work can be explored
 while preparing a new calculation. The three draft steps correspond to QE's
-structure, configuration, and resources/submission stages. Keeping a geometry
-hides resource controls and requires no code; unused resource fields in the
-backend's settings schema receive its defaults. No spin or method is guessed.
+structure, configuration, and resources/submission stages. Both current calculation
+modes require an ORCA code and resources; single-point SCF hides geometry convergence
+and step limits while retaining the electronic settings. No spin or method is guessed.
 
 The home-page card provides icon launchers for **New calculation** (`orca.ipynb`)
 and **Search calculations** (`search.ipynb`). Both load the AiiDA profile in a
@@ -271,7 +286,8 @@ constraints for this geometry** after checking atom numbers and targets. Copying
 settings also requires this confirmation against the current molecule. This
 prevents a reordered or replaced structure from silently inheriting constraints
 on different atoms. **Apply defaults** changes the electronic protocol without
-removing molecular constraints. **Keep geometry as is** ignores constraints.
+removing molecular constraints. Unchecking **Optimize geometry** runs SCF at fixed
+coordinates and ignores optimization constraints without erasing the draft rows.
 
 Constraints are stored in workflow settings and the generated `%geom Constraints`
 block, shown in review and results, and included in compatibility matching.
@@ -322,8 +338,10 @@ node = submit(builder)
 print(node.uuid)
 ```
 
-Use `optimize=False` to keep the structure and record that decision without a
-calculation. Use `force_recompute=True` in both planning and building to request
+For backward compatibility, this geometry API's `optimize=False` still records
+the supplied structure without a calculation. The app now uses the separate
+[reference builder](reference.md) for SCF when the checkbox is unchecked.
+Use `force_recompute=True` in both planning and building to request
 a fresh execution. `get_builder` plans automatically when `plan` is omitted.
 The raw WorkChain accepts explicit reuse inputs; discovery belongs to this builder
 API so previous data are linked as inputs before the new process starts.

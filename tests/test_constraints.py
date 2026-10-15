@@ -148,13 +148,15 @@ def test_ui_selection_copy_geometry_changes_and_keep_mode(source, monkeypatch):
         assert app.steps.selected_index == 0 and editor._needs_confirmation
         editor.confirm.click()
         assert editor.values() == saved["constraints"]
-        # Keep-as-is ignores even incomplete constraints, without erasing them.
+        # Fixed-geometry SCF ignores incomplete constraints without erasing them.
         editor.append()
         app.optimize.value = False
         app._confirm_structure()
         app._confirm_settings()
         app._review()
-        assert app.review["plan"]["action"] == "keep"
+        assert app.review["plan"]["action"] == "compute"
+        assert "SP" in app.review["input_files"]["aiida.inp"].split()
+        assert "Constraints" not in app.review["input_files"]["aiida.inp"]
     finally:
         app.close()
 

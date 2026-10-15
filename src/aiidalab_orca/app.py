@@ -5,7 +5,6 @@ import html
 
 import ipywidgets as ipw
 
-from aiida_empa_orca.settings import DEFAULTS
 from .configuration import GeometrySettings
 from . import services, structure_io
 from .history import HistoryWidget, inspect_run
@@ -30,6 +29,7 @@ class OrcaApp(ipw.VBox):
         width = ipw.Layout(width="460px")
         self.structure = StructureWidget()
         self.optimize = ipw.Checkbox(value=True, description="Optimize geometry")
+        self.mode_hint = ipw.HTML()
         self.science = GeometrySettings()
         # Keep familiar control names for the surrounding wizard and tests.
         for key in ("method", "basis", "charge", "multiplicity", "convergence", "max_steps", "max_scf"):
@@ -39,7 +39,7 @@ class OrcaApp(ipw.VBox):
         self.wallclock = ipw.BoundedIntText(value=30, min=1, max=10080, description="Wall time (minutes)", style=style, layout=width)
         self.code = ipw.Dropdown(options=services.codes(), description="ORCA code", style=style, layout=width)
         self.force = ipw.Checkbox(value=False, description="Recompute even if a compatible result is available", layout=ipw.Layout(width="auto"))
-        self.label = ipw.Text(value="Molecular geometry", description="Run label", style=style, layout=width)
+        self.label = ipw.Text(value="Molecular calculation", description="Run label", style=style, layout=width)
         self.review_button = ipw.Button(description="Review calculation", button_style="primary", icon="list", disabled=True, layout=ipw.Layout(width="auto"))
         self.review_button.on_click(self._review)
         self.plan_html = ipw.HTML("Review the settings to see whether this step will run or reuse a result.")
@@ -69,7 +69,7 @@ class OrcaApp(ipw.VBox):
         self.resource_controls = ipw.VBox([self.code, self.nprocs, self.memory, self.wallclock, self.force])
         self.structure_step = GeometryStep([self.structure, self.next_step], "Select a molecule to begin.")
         self.settings_step = GeometryStep([
-            self.settings_summary, self.optimize, self.science, self.science_message,
+            self.settings_summary, self.optimize, self.mode_hint, self.science, self.science_message,
             ipw.HBox([back_structure, self.confirm_settings]),
         ], "Confirm the molecular structure in step 1 to configure this calculation.")
         self.resources_step = GeometryStep([
@@ -95,7 +95,7 @@ class OrcaApp(ipw.VBox):
             self.pages.set_title(i, title)
         self.pages.observe(self._page_changed, names="selected_index")
         super().__init__([
-            ipw.HTML("<div style='border-left:5px solid #237b98;padding:10px 20px;background:#f5f7fa'><h2 style='margin:0'>ORCA · Molecular geometry</h2><p>Prepare, optimize, and reuse molecular structures with AiiDA provenance.</p></div>"),
+            ipw.HTML("<div style='border-left:5px solid #237b98;padding:10px 20px;background:#f5f7fa'><h2 style='margin:0'>ORCA · Electronic structure</h2><p>Single-point SCF and geometry optimization with AiiDA provenance.</p></div>"),
             self.error, self.pages,
         ], layout=ipw.Layout(max_width="1100px"))
         self.structure.observe(self._structure_changed, names="revision")
@@ -108,17 +108,11 @@ class OrcaApp(ipw.VBox):
         self._update_steps()
 
     def _settings(self):
-        # Inactive optimization choices cannot obstruct keeping a structure.
-        values = (self.science.values() if self.optimize.value else
-                  {"charge": self.charge.value, "multiplicity": self.multiplicity.value})
+        values = self.science.values()
         if self.optimize.value:
             values["constraints"] = self.structure.constraints.values()
         values.update(nprocs=self.nprocs.value, memory_mb=self.memory.value,
                       wallclock_seconds=self.wallclock.value * 60)
-        if not self.optimize.value:
-            # The backend schema includes resources even for keep-as-is records.
-            # Inactive controls must not obstruct keeping a geometry.
-            values.update({k: DEFAULTS[k] for k in ("nprocs", "memory_mb", "wallclock_seconds")})
         return values
 
     def _show_error(self, exc):
@@ -133,6 +127,7 @@ class OrcaApp(ipw.VBox):
         self._update_steps()
 
     def _structure_changed(self, _=None):
+        self.science.set_molecule(self.structure.atoms)
         self._structure_confirmed = False
         self._settings_changed()
 
@@ -156,12 +151,11 @@ class OrcaApp(ipw.VBox):
                                    state.CONFIGURED if self.review else
                                    state.READY if self._settings_confirmed else state.INIT,
                                    self._settings_confirmed)
-        self.resource_controls.layout.display = "" if self.optimize.value else "none"
-        self.resource_hint.value = (
-            "<p>Local execution. ORCA uses 75% of the total memory budget divided by the process count. The local scheduler does not enforce a hard memory limit.</p>"
-            if self.optimize.value else
-            "<p>The coordinates will be kept exactly as supplied. No ORCA code or computing resources are needed.</p>"
-        )
+        self.resource_hint.value = "<p>Local execution. ORCA uses 75% of the total memory budget divided by the process count. The local scheduler does not enforce a hard memory limit.</p>"
+        self.mode_hint.value = ("<p>Optimize the atomic positions and compute the final electronic energy.</p>"
+                                if self.optimize.value else
+                                "<p><b>Single-point SCF:</b> compute the energy and wavefunction at the supplied coordinates. "
+                                "Atoms remain fixed; geometry convergence, constraints and geom parameters are unused.</p>")
         if ready:
             atoms = self.structure.atoms
             self.settings_summary.value = f"<p><b>{html.escape(atoms.get_chemical_formula())}</b> · {len(atoms)} atoms. Review charge and spin multiplicity for this molecule.</p>"
@@ -198,7 +192,7 @@ class OrcaApp(ipw.VBox):
         self.steps.selected_index = 0
 
     def _optimization_changed(self, change):
-        self.science.optimization_controls.layout.display = "" if change["new"] else "none"
+        self.science.set_optimization_enabled(change["new"])
 
     def _page_changed(self, change):
         if change["new"] == 1:
@@ -217,26 +211,31 @@ class OrcaApp(ipw.VBox):
                 raise ValueError("Confirm the structure and calculation settings before reviewing.")
             self.review = services.prepare(
                 self.structure.xyz_text(), self.structure.source_uuid, self._settings(),
-                self.code.value if self.optimize.value else None, self.optimize.value,
-                self.force.value if self.optimize.value else False,
+                self.code.value, self.optimize.value, self.force.value,
                 atoms=self.structure.atoms, imported=self.structure.imported,
             )
             self.structure.mark_stored(self.review["structure_uuid"])
             plan = self.review["plan"]
-            action = {"compute": "Run a new geometry optimization", "reuse": "Reuse a compatible stored optimization", "keep": "Keep the supplied geometry"}[plan["action"]]
+            actions = ({"compute": "Run a new geometry optimization", "reuse": "Reuse a compatible stored optimization"}
+                       if self.optimize.value else
+                       {"compute": "Run a single-point SCF calculation", "reuse": "Reuse a compatible electronic state"})
+            action = actions[plan["action"]]
             s = self.review["settings"]
             body = f"<h3>{action}</h3>"
             body += f"<p>{self.review['formula']} · charge {s['charge']} · multiplicity {s['multiplicity']}</p>"
-            if self.optimize.value:
-                from .viewer import settings_details, input_details
-                body += settings_details(s)
-                body += input_details(self.review["input_files"], "Review generated ORCA input")
+            from .viewer import settings_details, input_details
+            body += settings_details(s, single_point=not self.optimize.value)
+            body += input_details(self.review["input_files"], "Review generated ORCA input")
             if plan["source_uuid"]:
-                body += f"<p>Stored coordinates and history are available; no wavefunction is required for this operation.</p><details><summary>Source workflow</summary><code>{plan['source_uuid']}</code></details>"
+                available = ("Stored coordinates and history are available; no wavefunction is required for this operation."
+                             if self.optimize.value else "The electronic results and required orbital/density files are available.")
+                body += f"<p>{available}</p><details><summary>Source workflow</summary><code>{plan['source_uuid']}</code></details>"
             if plan["unavailable"]:
-                body += "<p>A matching previous result lacks required data. This step must be recomputed with calculation caching bypassed.</p>"
+                body += ("<p>A matching previous result lacks required data. This step must be recomputed with calculation caching bypassed.</p>"
+                         if plan["action"] == "compute" else
+                         "<p>Some matching results lack required data. The available source above will be reused.</p>")
                 body += "<ul>" + "".join(f"<li>{html.escape(x['uuid'])}: {html.escape(x['reason'])}</li>" for x in plan["unavailable"]) + "</ul>"
-            if self.force.value and self.optimize.value:
+            if self.force.value:
                 body += "<p>Forced recomputation: manual reuse and calculation caching will be bypassed.</p>"
             body += f"<details><summary>Geometry provenance</summary><p>{html.escape(self.review['source_description'])}</p></details>"
             self.plan_html.value = body
@@ -289,7 +288,7 @@ class OrcaApp(ipw.VBox):
         if not self.process_uuid:
             return False
         data = services.result(self.process_uuid)
-        state = ("Converged" if data["optimized"] else "Completed") if data["successful"] else data["state"].capitalize()
+        state = ("Converged" if data["optimized"] or data.get("single_point") else "Completed") if data["successful"] else data["state"].capitalize()
         self.status.value = f"<h3>{html.escape(data['label'])}</h3><p><b>{state}</b></p><details><summary>Workflow identifier</summary><code>{self.process_uuid}</code></details>"
         self.copy.disabled = False
         self.use_final.disabled = "structure_uuid" not in data
@@ -364,7 +363,7 @@ class OrcaApp(ipw.VBox):
             self.steps.selected_index = 1 if self._structure_confirmed and not s.get("constraints") else 0
             self._settings_changed()
             self.error.value = "<p>Settings copied. Review them against the molecule currently shown in Molecular structure.</p>"
-            if data["optimize"] and self.code.value is None:
+            if self.code.value is None:
                 self.error.value += "<p>The original code is unavailable. Select an ORCA code in Resources, review and submit.</p>"
         except Exception as exc:
             self._show_error(exc)

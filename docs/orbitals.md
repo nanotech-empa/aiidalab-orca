@@ -25,7 +25,7 @@ Stashing creates a separate copy. It does **not** delete the original files or
 clean the calculation directory. Choose a stash filesystem with an appropriate
 retention policy; a stash on the same disposable scratch filesystem does not
 protect against that filesystem being cleaned. This local milestone does not
-configure Daint or copy data between computers.
+configure remote execution on tigu or copy data between computers.
 
 Reuse searches provenance and checks the files, independently of AiiDA caching.
 Repository copies are checksum-verified. Stashed files are checked for presence
@@ -176,9 +176,10 @@ remote machine. WFN policies recorded with the reference are inherited; cube
 retention has its own directory and is never used to overwrite that policy.
 
 **Validation boundary:** local direct execution and browser submission have
-been exercised. The intended ORCA and HQ-rendering computer is **tigu**; remote execution there has not yet been tested. The initial SCF/GEO_OPT
+been exercised. The intended ORCA and HQ-rendering computer is **tigu**; remote
+execution there has not yet been tested. The initial SCF/GEO_OPT
 workflows still have their local-only milestone guard; lifting that guard,
 exposing the target scheduler allocation settings there, and installing/testing the matching
 ORCA/ORCA tools/render wrappers through the tigu computer/code setup
 are prerequisites for deployment on tigu. This change does not claim a
-working tigu installation or modify existing remote codes.
+verified remote app deployment or modify existing remote codes.

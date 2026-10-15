@@ -7,10 +7,10 @@ import ipywidgets as ipw
 import traitlets as tl
 
 from aiida_empa_orca.protocols import (
-    APPROXIMATIONS, DISPERSION, GRIDS, OPTIMIZATION, PROTOCOLS, REFERENCES,
+    APPROXIMATIONS, GRIDS, OPTIMIZATION, PROTOCOLS, REFERENCES,
     SCF_CONVERGENCE, editable_settings, protocol_overrides, protocol_settings,
 )
-from aiida_empa_orca.settings import BASES, METHODS
+from aiida_empa_orca.choices import AUXILIARY_BASES, BASES, ECPS, MANUAL_LINKS, METHODS
 
 
 class ParameterRows(ipw.VBox):
@@ -36,7 +36,7 @@ class ParameterRows(ipw.VBox):
             controls = [ipw.Text(placeholder="Element", layout=ipw.Layout(width="85px")),
                         ipw.Combobox(options=BASES, placeholder="Orbital basis", layout=ipw.Layout(width="190px")),
                         ipw.Text(placeholder="Auxiliary basis", layout=ipw.Layout(width="150px")),
-                        ipw.Text(placeholder="ECP", layout=ipw.Layout(width="150px"))]
+                        ipw.Combobox(options=ECPS, placeholder="ECP", ensure_option=False, layout=ipw.Layout(width="150px"))]
         else:
             controls = [ipw.Dropdown(options=["scf", "geom", "method"], layout=ipw.Layout(width="100px")),
                         ipw.Text(placeholder="Parameter, e.g. TolE", layout=ipw.Layout(width="230px")),
@@ -113,17 +113,21 @@ class GeometrySettings(ipw.VBox):
         apply = ipw.Button(description="Apply defaults", icon="undo", layout=ipw.Layout(width="auto"))
         apply.on_click(self._apply)
         self.method = ipw.Combobox(options=METHODS, value="PBE", description="Method", ensure_option=False, style=style, layout=width)
-        self.basis = ipw.Combobox(options=(*BASES, "6-31G*", "cc-pVDZ"), value="def2-SVP", description="Basis", ensure_option=False, style=style, layout=width)
+        self.basis = ipw.Combobox(options=BASES, value="def2-SVP", description="Basis", ensure_option=False, style=style, layout=width)
         self.charge = ipw.IntText(description="Charge", value=0, style=style, layout=width)
         self.multiplicity = ipw.BoundedIntText(description="Multiplicity (2S+1)", value=2, min=1, max=100, style=style, layout=width)
         self.reference = dropdown("Reference type", [("Automatic from spin", "auto"), *REFERENCES[1:]])
-        self.approximation = dropdown("RI approximation", [("Protocol choice", "auto"), *APPROXIMATIONS[1:]])
-        self.auxiliary_basis = ipw.Combobox(options=["def2/J", "AutoAux"], value="def2/J", description="Auxiliary basis", style=style, layout=width)
+        self.approximation = dropdown("RI approximation", [("Automatic from method", "auto"), *APPROXIMATIONS[1:]])
+        self.auxiliary_basis = ipw.Combobox(options=AUXILIARY_BASES, value="def2/J", description="Auxiliary basis", style=style, layout=width)
         self.convergence = dropdown("Geometry convergence", OPTIMIZATION)
         self.scf_convergence = dropdown("SCF convergence", SCF_CONVERGENCE)
         self.scf_convergence.value = "TightSCF"
+        self.convergence.tooltip = "Convergence thresholds for moving the nuclei; Opt and NormalOpt are equivalent."
+        self.scf_convergence.tooltip = "Convergence thresholds for the electronic calculation at each geometry."
         self.grid = dropdown("Integration grid", [("ORCA default", "default"), *GRIDS[1:]])
-        self.dispersion = dropdown("Dispersion", [("No extra correction", "default"), *DISPERSION[1:]])
+        self.dispersion = dropdown("Dispersion", [("No extra correction", "default"),
+                                                ("D3BJ (Becke–Johnson damping)", "D3BJ"),
+                                                ("D3ZERO (zero damping)", "D3ZERO"), ("D4", "D4")])
         self.max_steps = ipw.BoundedIntText(description="Max geometry steps", value=100, min=1, max=2000, style=style, layout=width)
         self.max_scf = ipw.BoundedIntText(description="Max SCF steps", value=200, min=1, max=2000, style=style, layout=width)
         self.elements = ParameterRows(elements=True)
@@ -136,8 +140,8 @@ class GeometrySettings(ipw.VBox):
                        "grid": self.grid, "dispersion": self.dispersion,
                        "max_geometry_steps": self.max_steps, "max_scf_steps": self.max_scf}
         advanced = ipw.Accordion(children=[ipw.VBox([
-            self.reference, self.approximation, self.auxiliary_basis, self.convergence,
-            self.scf_convergence, self.grid, self.dispersion, self.max_steps, self.max_scf,
+            self.reference, self.approximation, self.auxiliary_basis,
+            self.grid, self.dispersion, self.max_steps, self.max_scf,
             ipw.HTML("<h4>Element-specific basis and ECP</h4>"), self.elements,
             ipw.HTML("<h4>Additional scientific parameters</h4>"), self.parameters,
             ipw.HTML("<p>These are expert choices. Check functional, basis, ECP and approximation compatibility in the ORCA manual. Validation checks structure and input consistency; ORCA checks whether the requested model is available. Restricted open-shell, wavefunction import and nested parameter blocks are not part of this geometry milestone.</p>"),
@@ -146,7 +150,14 @@ class GeometrySettings(ipw.VBox):
         self.optimization_controls = ipw.VBox([
             ipw.HBox([self.protocol, apply], layout=ipw.Layout(flex_flow="row wrap")),
             ipw.HTML("<p>Starting settings for review, not a universal accuracy level. Edit any exposed setting; Apply defaults resets scientific overrides and keeps charge, spin and resources. Method and basis also accept typed ORCA names.</p>"),
-            self.method, self.basis, advanced, self.summary,
+            self.method, self.basis, self.scf_convergence, self.convergence,
+            ipw.HTML("<p>SCF convergence controls the electronic calculation at each geometry; "
+                     "geometry convergence controls when the nuclei stop moving. "
+                     "The starting protocols use TightSCF and NormalOpt.</p>"),
+            ipw.HTML("<p>ORCA 6.1 reference: " + " · ".join(
+                f'<a href="{url}" target="_blank" rel="noopener noreferrer">{label}</a>'
+                for label, url in MANUAL_LINKS.items()) + "</p>"),
+            advanced, self.summary,
         ])
         super().__init__([self.charge, self.multiplicity, self.optimization_controls])
         for widget in [self.protocol, *self.fields.values()]:

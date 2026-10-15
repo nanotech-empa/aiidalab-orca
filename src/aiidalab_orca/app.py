@@ -101,6 +101,7 @@ class OrcaApp(ipw.VBox):
         self.structure.observe(self._structure_changed, names="revision")
         self.optimize.observe(self._settings_changed, names="value")
         self.science.observe(self._settings_changed, names="revision")
+        self.structure.constraints.observe(self._settings_changed, names="revision")
         for widget in [self.nprocs, self.memory, self.wallclock, self.code, self.force, self.label]:
             widget.observe(self._invalidate, names="value")
         self.optimize.observe(self._optimization_changed, names="value")
@@ -110,6 +111,8 @@ class OrcaApp(ipw.VBox):
         # Inactive optimization choices cannot obstruct keeping a structure.
         values = (self.science.values() if self.optimize.value else
                   {"charge": self.charge.value, "multiplicity": self.multiplicity.value})
+        if self.optimize.value:
+            values["constraints"] = self.structure.constraints.values()
         values.update(nprocs=self.nprocs.value, memory_mb=self.memory.value,
                       wallclock_seconds=self.wallclock.value * 60)
         if not self.optimize.value:
@@ -162,6 +165,9 @@ class OrcaApp(ipw.VBox):
         if ready:
             atoms = self.structure.atoms
             self.settings_summary.value = f"<p><b>{html.escape(atoms.get_chemical_formula())}</b> · {len(atoms)} atoms. Review charge and spin multiplicity for this molecule.</p>"
+            if self.optimize.value and self.structure.constraints.rows:
+                self.settings_summary.value += ("<p><b>Geometry constraints (edit in Select structure):</b></p>"
+                                                + self.structure.constraints.summary.value)
 
     def _confirm_structure(self, _=None):
         if self._submitted or not self.structure.ready or self.structure.atoms is None:
@@ -344,6 +350,10 @@ class OrcaApp(ipw.VBox):
                 self._edit_copy()
             s = data["settings"]
             self.science.set_values(s)
+            self.structure.constraints.set_values(s.get("constraints", []))
+            self.structure.constraints.require_confirmation("Settings copied. Check the constraint atom numbers and targets against the current geometry.")
+            if s.get("constraints"):
+                self.structure.constraint_panel.selected_index = 0
             self.nprocs.value = s["nprocs"]
             self.memory.value = s["memory_mb"]
             self.wallclock.value = (s["wallclock_seconds"]+59)//60
@@ -351,7 +361,7 @@ class OrcaApp(ipw.VBox):
             self.force.value = False
             self.code.value = data["code_uuid"] if data["code_uuid"] in dict(self.code.options).values() else None
             self.pages.selected_index = 0
-            self.steps.selected_index = 1 if self._structure_confirmed else 0
+            self.steps.selected_index = 1 if self._structure_confirmed and not s.get("constraints") else 0
             self._settings_changed()
             self.error.value = "<p>Settings copied. Review them against the molecule currently shown in Molecular structure.</p>"
             if data["optimize"] and self.code.value is None:

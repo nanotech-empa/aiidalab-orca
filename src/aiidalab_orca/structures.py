@@ -12,6 +12,7 @@ from aiidalab_widgets_base.viewers import StructureDataViewer
 from aiidalab_widgets_empa import CdxmlUploadWidget
 
 from . import services, structure_io
+from .constraints import ConstraintEditor
 
 
 class StructureWidget(ipw.VBox):
@@ -61,6 +62,9 @@ class StructureWidget(ipw.VBox):
         for i, title in enumerate(["File / XYZ", "AiiDA structures", "CDXML", "Build from SMILES"]):
             self.importers.set_title(i, title)
         self.viewer = StructureDataViewer(configuration_tabs=["Selection", "Appearance", "Download"])
+        self.constraints = ConstraintEditor(self.viewer)
+        self.constraint_panel = ipw.Accordion(children=[self.constraints], selected_index=None)
+        self.constraint_panel.set_title(0, "Geometry optimization constraints (optional)")
         self.editor = BasicStructureEditor(title="Edit atoms")
         self.editor.observe(self._edited, names="structure")
         self._links = [tl.link((self.editor, "selection"), (self.viewer, "selection")),
@@ -99,8 +103,9 @@ class StructureWidget(ipw.VBox):
             self.editor.structure = atoms.copy()
             self.viewer.structure = atoms.copy()
             if not self.geometry_panel.children:
-                self.geometry_panel.children = [self.viewer, self.editing]
+                self.geometry_panel.children = [self.viewer, self.constraint_panel, self.editing]
             self.editor.selection = []
+            self.constraints.geometry_changed(atoms)
             text = f"{atoms.get_chemical_formula()} · {len(atoms)} atoms"
             if any(atoms.pbc):
                 text += " · Periodic input: select the desired molecular fragment and explicitly treat it as isolated before submission."
@@ -192,7 +197,7 @@ class StructureWidget(ipw.VBox):
     def close(self):
         for link in getattr(self, "_links", []):
             link.unlink()
-        for name in ("cdxml", "smiles", "editor", "viewer"):
+        for name in ("cdxml", "smiles", "editor", "viewer", "constraints"):
             widget = getattr(self, name, None)
             if widget is not None:
                 widget.close()

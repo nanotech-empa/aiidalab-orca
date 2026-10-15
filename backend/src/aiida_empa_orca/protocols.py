@@ -27,7 +27,7 @@ DISPERSION = ("default", "D3BJ", "D4")
 # introduce file dependencies. Nested/array inputs need dedicated data models.
 OWNED = {
     "scf": {"maxiter", "hftyp", "guess", "autostart", "moinp"},
-    "geom": {"maxiter"},
+    "geom": {"maxiter", "constraints", "invertconstraints"},
     "method": {"method", "functional", "runtyp"},
 }
 
@@ -53,6 +53,8 @@ def normalize_v2(values):
     name = values.get("protocol", DEFAULT_PROTOCOL)
     base = {k: v for k, v in DEFAULTS.items() if k != "ri"}
     base.update(protocol_settings(name))
+    # Constraints belong to the molecule, not to the electronic protocol.
+    base["constraints"] = []
     unknown = set(values) - set(base)
     if unknown:
         raise ValueError(f"Unknown settings: {sorted(unknown)}")
@@ -116,6 +118,11 @@ def normalize_v2(values):
         if entries:
             normalized[block] = dict(sorted(entries.items()))
     s["block_parameters"] = normalized
+    from .constraints import normalize_constraints
+    s["constraints"] = normalize_constraints(s["constraints"])
+    if (str(normalized.get("geom", {}).get("coordsys", "")).lower() == "cartesian"
+            and any(c["kind"] != "cartesian" for c in s["constraints"])):
+        raise ValueError("Cartesian optimization supports only Cartesian constraints")
     approximation(s)  # Require an explicit choice for an unclassified functional.
     return s
 
@@ -149,6 +156,9 @@ def parameters_v2(settings):
     for block, parameters in s["block_parameters"].items():
         blocks.setdefault(block, {}).update({k: str(v).lower() if isinstance(v, bool) else v
                                              for k, v in parameters.items()})
+    if s["constraints"]:
+        from .constraints import orca_constraints
+        blocks["geom"]["Constraints"] = orca_constraints(s["constraints"])
     basis = {}
     for element, choices in sorted(s["element_settings"].items()):
         for field, directive in (("basis", "NewGTO"), ("auxiliary_basis", "NewAuxJGTO"), ("ecp", "NewECP")):

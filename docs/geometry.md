@@ -185,9 +185,10 @@ Additional scalar parameter rows support `%scf`, `%geom` and `%method`, for
 example `scf / TolE / 1e-8` or functional parameters from the
 [ORCA DFT documentation](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/DensityFunctionalTheory.html).
 Numbers, booleans and single ORCA tokens are accepted. Dedicated procedure
-controls cannot be overridden a second time in these rows. Nested blocks,
-constraints, external basis files and MORead dependencies need separate typed
-support; raw input injection is not a supported configuration path.
+controls cannot be overridden a second time in these rows. Geometry constraints
+have dedicated controls described below. Other nested blocks, external basis
+files and MORead dependencies need separate typed support; raw input injection
+is not a supported configuration path.
 
 Review shows the effective settings, changes from the starting protocol, and
 downloadable `aiida.inp`/`aiida.coords.xyz`. The preview shares the upstream ORCA
@@ -196,6 +197,59 @@ CalcJob input**, including the source calculation for reused results. Schema 2
 records protocol identity and every resolved setting on the workflow, with the
 effective ORCA parameters on its CalcJob. Legacy schema 1 remains readable and
 compatible with equivalent protocol inputs; existing nodes are never rewritten.
+
+### Geometry constraints
+
+In **Select structure**, open **Geometry optimization constraints (optional)**
+below the shared molecular viewer. Select atoms in the viewer and click
+**Freeze selected atoms**, or add rows for frozen xyz/x/y/z/xy/xz/yz components,
+distances, angles and dihedrals. Atom numbers in the interface start at **1**;
+the backend stores zero-based indices and writes ORCA's zero-based numbering.
+Cartesian rows accept ranges such as `1 3..5`. Internal coordinates use ordered
+atom numbers: the middle atom is the angle vertex and the middle pair defines
+the dihedral axis. Check that order when taking atoms from the viewer selection.
+
+Frozen Cartesian components retain their initial coordinates. A blank internal
+coordinate target retains its initial value; an explicit target uses angstrom
+for distances or degrees for angles/dihedrals. Each internal-coordinate row also
+shows **Current**, measured from the displayed geometry using that row's ordered
+atom numbers. It updates when the atoms or geometry change and remains visible
+when a different target is entered. Undefined measurements are explicitly
+unavailable. Dihedrals are displayed in the same signed range as their targets.
+This first interface accepts positive distances, angles strictly between 0 and 180 degrees, and dihedrals
+between -180 and 180 degrees. Linear/undefined dihedrals, missing atoms,
+contradictory duplicate internal constraints and fully frozen Cartesian
+geometries are rejected before submission. It does not prove that every
+combination of constraints is geometrically feasible or independent.
+
+Changing/importing a geometry preserves the rows but requires **Confirm
+constraints for this geometry** after checking atom numbers and targets. Copying
+settings also requires this confirmation against the current molecule. This
+prevents a reordered or replaced structure from silently inheriting constraints
+on different atoms. **Apply defaults** changes the electronic protocol without
+removing molecular constraints. **Keep geometry as is** ignores constraints.
+
+Constraints are stored in workflow settings and the generated `%geom Constraints`
+block, shown in review and results, and included in compatibility matching.
+An unconstrained result cannot satisfy a constrained request. Empty constraints
+preserve compatibility with previous unconstrained runs. Results explicitly say
+**Geometry optimized with constraints**; convergence does not establish an
+unconstrained minimum. `geom.Constraints` and `geom.invertConstraints` cannot be
+injected through the scalar expert table. Fragment constraints, scans and
+inverted constraints are outside this first implementation.
+
+Backend example (indices are zero-based):
+
+```python
+settings = protocol_settings("pbe-v1", {
+    "constraints": [
+        {"kind": "cartesian", "atoms": [0], "components": "xyz"},
+        {"kind": "distance", "atoms": [0, 1], "value": 1.2},
+    ],
+})
+```
+
+The interface follows [ORCA's constrained-optimization syntax](https://www.faccts.de/docs/orca/6.1/manual/contents/structurereactivity/optimizations.html#constrained-optimization).
 
 Defaults: PBE/def2-SVP, neutral doublet, two processes, total memory budget 2048 MB,
 100 geometry steps, 200 SCF steps, 30 minutes. `%maxcore` receives 75% of the total
@@ -336,3 +390,19 @@ or validation of heavy-element ECPs and arbitrary functionals.
 These checks establish local workflow/UI integration. HF, B3LYP, M06-2X,
 basis convergence, larger systems and numerical comparison to the pentacene
 publication still need scientific validation. The app is a prototype for review.
+
+Constraint validation on local ORCA 6.1.1 (2026-10-14):
+
+- A neutral NO doublet was submitted through a fresh browser with nitrogen
+  frozen. It converged with zero nitrogen displacement and an N–O distance of
+  1.16029644 Å, starting from 1.30000000 Å. The actual CalcJob input matched the
+  reviewed preview.
+- A neutral methyl radical tested frozen xyz and yz components together with
+  distance, angle and signed dihedral targets. Fixed components had zero
+  displacement; measured values were 1.1000000014 Å, 115.0000030° and
+  −149.9999988° for targets 1.10 Å, 115° and −150°. These are constrained
+  optimization checks, not predictions for an unconstrained equilibrium.
+- Automated tests cover invalid inputs, one-based selection conversion,
+  range parsing, input rendering after AiiDA storage, reuse compatibility,
+  structure-edit invalidation and copied constraints. Browser checks cover
+  loading the result and confirming copied constraints before compatible reuse.

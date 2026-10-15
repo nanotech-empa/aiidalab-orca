@@ -18,11 +18,15 @@ def settings_details(settings):
     basis = s["basis"] + (" + element overrides" if s["element_settings"] else "")
     text = f"{s['method']}/{basis} · {reference(s)} · {approximation(s)}"
     changes = protocol_overrides(s)
+    from aiida_empa_orca.constraints import describe_constraints
+    constraints = describe_constraints(s.get("constraints", []))
+    constraint_text = ("<p><b>Geometry constraints:</b><br>" + "<br>".join(html.escape(c) for c in constraints) + "</p>"
+                       if constraints else "<p>Geometry constraints: none.</p>")
     rows = "".join(f"<tr><th style='text-align:left;padding-right:15px'>{html.escape(key.replace('_', ' ').capitalize())}</th><td>{html.escape(str(value))}</td></tr>"
-                   for key, value in s.items() if key not in ("schema_version", "protocol"))
+                   for key, value in s.items() if key not in ("schema_version", "protocol", "constraints"))
     return (f"<p><b>{html.escape(text)}</b></p><p>Starting protocol: {html.escape(label)}. "
             f"Changes: {html.escape(', '.join(k.replace('_', ' ') for k in changes) or 'none')}.</p>"
-            f"<details><summary>Effective calculation settings</summary><table>{rows}</table></details>")
+            f"{constraint_text}<details><summary>Effective calculation settings</summary><table>{rows}</table></details>")
 
 
 def input_details(files, title="Submitted ORCA input"):
@@ -55,6 +59,8 @@ def molecule(symbols, frames):
 def show_result(data):
     s = data["settings"]
     title = "Optimized geometry" if data["optimized"] else "Supplied geometry · no optimization performed"
+    if data["optimized"] and s.get("constraints"):
+        title = "Geometry optimized with constraints"
     items = [ipw.HTML(f"<h3>{title}</h3>")]
     provenance = f"<p>{html.escape(data['source_description'])}</p>"
     for warning in data.get("warnings", []):

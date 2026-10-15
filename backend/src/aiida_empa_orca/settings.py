@@ -65,6 +65,8 @@ def validate_molecule(structure, settings):
     unpaired = settings["multiplicity"] - 1
     if electrons < 1 or unpaired > electrons or (electrons - unpaired) % 2:
         raise ValueError(f"Charge and multiplicity are incompatible with {electrons} electrons")
+    from .constraints import validate_constraints
+    validate_constraints(atoms, settings.get("constraints", []))
     absent = set(settings.get("element_settings", {})) - set(atoms.get_chemical_symbols())
     if absent:
         raise ValueError(f"Basis/ECP overrides refer to elements absent from this molecule: {sorted(absent)}")

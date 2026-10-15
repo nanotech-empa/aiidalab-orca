@@ -349,7 +349,9 @@ API so previous data are linked as inputs before the new process starts.
 Optimized outputs are `structure`, `trajectory`, `optimization_summary`,
 `output_parameters`, and `retrieved`; a new calculation also returns its
 `remote_folder`. Kept geometries return only `structure`. The `.gbw` remains on
-scratch and is not required or retrieved by this geometry operation.
+scratch and is not required to reuse the optimized coordinates. Optional
+[preservation](orbitals.md) retrieves or stashes the complete electronic bundle
+as a separate, provenance-linked step.
 
 ## Reuse and caching
 
@@ -376,10 +378,10 @@ New calculation outputs are checked too. If a cache hit lacks required data,
 the workflow executes that already-requested step once with caching bypassed;
 a second failure stops instead of looping through cache hits.
 
-This is cache-independent geometry reuse, **not yet a general electronic-artifact
-resolver**. Remote GBW availability, restored retrieved wavefunctions, inaccessible
-hosts versus deleted scratch, and minimal electronic regeneration belong to the
-next backend components. They must follow the same operation-specific contract.
+This is cache-independent geometry reuse. The separate [electronic-artifact and
+orbital components](orbitals.md) handle wavefunction availability, restoration,
+unreachable storage and minimal SCF regeneration. Geometry reuse itself remains
+independent of wavefunction availability.
 
 ## Validation
 

@@ -11,6 +11,7 @@ from aiida.common import AttributeDict
 from aiida.engine import BaseRestartWorkChain, ToContext, WorkChain, if_
 from aiida_orca.workchains.base import OrcaBaseWorkChain
 
+from .artifacts import ElectronicStorageMixin
 from .calculation import SinglePointCalculation
 from .choices import OPTIMIZATION
 from .parser import reference_summary
@@ -19,7 +20,7 @@ from .reuse import PROCESS_TYPE as GEOMETRY_PROCESS, validate_outputs as validat
 from .settings import orca_parameters, validate_molecule
 
 PROCESS_TYPE = "aiida.workflows:empa_orca.reference"
-# ORCA 6.1 orbital and density data. None is retrieved into the AiiDA repository.
+# ORCA 6.1 orbital and density bundle; preservation is a separate provenance step.
 ELECTRONIC_FILES = ("aiida.gbw", "aiida.densities", "aiida.densitiesinfo")
 RESULT_TYPES = {"reference_summary": orm.Dict, "output_parameters": orm.Dict,
                 "retrieved": orm.FolderData, "remote_folder": orm.RemoteData}
@@ -90,7 +91,8 @@ def validate_outputs(outputs):
     parsed = reference_summary(text)
     if not np.isclose(parsed["energy_hartree"], summary["energy_hartree"], rtol=0, atol=1e-9):
         raise ValueError("Stored energy differs from the ORCA output")
-    return check_wavefunction(outputs["remote_folder"])
+    from .artifacts import resolve_electronic
+    return resolve_electronic(outputs["remote_folder"])["files"]
 
 
 def source_outputs(node):
@@ -171,7 +173,7 @@ class ReferenceBaseWorkChain(OrcaBaseWorkChain):
         self.ctx.inputs = AttributeDict(self.exposed_inputs(self._process_class, "orca"))
 
 
-class ReferenceWorkChain(WorkChain):
+class ReferenceWorkChain(ElectronicStorageMixin, WorkChain):
     """One SCF reference step, independent of geometry optimization and viewers."""
 
     @classmethod
@@ -188,9 +190,11 @@ class ReferenceWorkChain(WorkChain):
             spec.input(f"reuse.{name}", valid_type=cls_, required=False)
             spec.output(name, valid_type=cls_)
         spec.output("structure", valid_type=orm.StructureData)
+        cls.storage_spec(spec)
         spec.outline(cls.setup, if_(cls.needs_calculation)(
             cls.run_scf, cls.inspect_scf,
-            if_(cls.needs_regeneration)(cls.run_scf, cls.inspect_scf)), cls.results)
+            if_(cls.needs_regeneration)(cls.run_scf, cls.inspect_scf)), cls.results,
+                     if_(cls.should_preserve)(cls.preserve_electronic, cls.inspect_preservation))
         spec.exit_code(400, "ERROR_INVALID_INPUT", message="Invalid SCF settings; see workflow report.")
         spec.exit_code(401, "ERROR_REUSE_UNAVAILABLE", message="The reviewed electronic state is unavailable. Review a new plan.")
         spec.exit_code(402, "ERROR_SCF_FAILED", message="ORCA SCF failed; inspect the child calculation.")
@@ -202,6 +206,7 @@ class ReferenceWorkChain(WorkChain):
         self.ctx.attempt = 0
         self.ctx.regenerate = False
         try:
+            self.validate_storage_inputs()
             self.ctx.settings = reference_settings(self.inputs.settings.get_dict())
             validate_molecule(self.inputs.structure, self.ctx.settings)
             if (self.inputs.code.computer.scheduler_type != "core.direct"

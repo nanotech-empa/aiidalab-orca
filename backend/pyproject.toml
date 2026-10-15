@@ -14,15 +14,25 @@ dependencies = [
   "PyYAML",
 ]
 
+[project.scripts]
+orca-tools = "aiida_empa_orca.tools:main"
+
 [project.entry-points."aiida.calculations"]
+"empa_orca.cube_render" = "aiida_empa_orca.rendering:CubeRenderCalculation"
+"empa_orca.electronic_storage" = "aiida_empa_orca.artifacts:ElectronicStorageCalculation"
+"empa_orca.orbital_cubes" = "aiida_empa_orca.orbitals:OrbitalCubesCalculation"
 "empa_orca.optimization" = "aiida_empa_orca.calculation:OptimizationCalculation"
 "empa_orca.single_point" = "aiida_empa_orca.calculation:SinglePointCalculation"
 
 [project.entry-points."aiida.parsers"]
+"empa_orca.cube_render" = "aiida_empa_orca.rendering:CubeRenderParser"
+"empa_orca.electronic_storage" = "aiida_empa_orca.artifacts:ElectronicStorageParser"
+"empa_orca.orbital_cubes" = "aiida_empa_orca.orbitals:OrbitalCubesParser"
 "empa_orca.optimization" = "aiida_empa_orca.parser:OptimizationParser"
 "empa_orca.single_point" = "aiida_empa_orca.parser:SinglePointParser"
 
 [project.entry-points."aiida.workflows"]
+"empa_orca.orbitals" = "aiida_empa_orca.orbitals:OrbitalsWorkChain"
 "empa_orca.base" = "aiida_empa_orca.workchains:OptimizationBaseWorkChain"
 "empa_orca.geometry" = "aiida_empa_orca.workchains:GeometryWorkChain"
 "empa_orca.reference_base" = "aiida_empa_orca.reference:ReferenceBaseWorkChain"
@@ -32,4 +42,4 @@ dependencies = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-aiida_empa_orca = ["protocols/*.yaml"]
+aiida_empa_orca = ["protocols/*.yaml", "scripts/*.py"]

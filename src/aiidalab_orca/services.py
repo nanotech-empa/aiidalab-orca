@@ -45,7 +45,7 @@ def validate_configuration(atoms, settings, optimize):
     validate_molecule(orm.StructureData(ase=atoms), values)
 
 
-def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *, atoms=None, imported=None):
+def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *, atoms=None, imported=None, storage=None):
     if atoms is not None:
         structure = orm.StructureData(ase=atoms)
     elif source_uuid.strip():
@@ -57,6 +57,11 @@ def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *,
         structure.label = "ORCA app imported geometry"
     settings = normalize_settings(settings) if optimize else reference_settings(settings)
     code = orm.load_code(code_uuid) if code_uuid else None
+    if storage:
+        from aiida_empa_orca.artifacts import storage_policy
+        storage = {"policy": storage_policy(storage["policy"]), "code_uuid": storage["code_uuid"]}
+        if code and orm.load_code(storage["code_uuid"]).computer.uuid != code.computer.uuid:
+            raise ValueError("The storage code must run on the ORCA computer")
     plan = (plan_geometry(structure, settings, code, force_recompute=force_recompute) if optimize else
             plan_reference(structure, settings, code, force_recompute=force_recompute))
     if atoms is not None:
@@ -66,7 +71,7 @@ def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *,
         structure.store()
     from aiida_empa_orca.input import preview_input
     return {"structure_uuid": str(structure.uuid), "code_uuid": str(code.uuid) if code else None,
-            "settings": settings, "optimize": optimize, "force_recompute": force_recompute,
+            "settings": settings, "storage": storage, "optimize": optimize, "force_recompute": force_recompute,
             "plan": plan, "formula": structure.get_formula(),
             "source_description": structure_origin(structure),
             "input_files": preview_input(structure, settings, single_point=not optimize)}
@@ -96,6 +101,9 @@ def submit_plan(review, label):
         orm.load_code(review["code_uuid"]) if review["code_uuid"] else None,
         force_recompute=review["force_recompute"], plan=review["plan"],
     )
+    if review.get("storage"):
+        builder.storage_policy = orm.Dict(dict=review["storage"]["policy"])
+        builder.storage_code = orm.load_code(review["storage"]["code_uuid"])
     builder.metadata.label = label.strip() or f"{review['formula']} {'optimization' if review['optimize'] else 'SCF'}"
     builder.metadata.description = "Submitted from AiiDAlab ORCA electronic structure app"
     node = submit(builder)
@@ -117,6 +125,7 @@ def result(uuid):
     scf = node.process_type == REFERENCE_PROCESS
     data = {"uuid": node.uuid, "label": node.label, "state": node.process_state.value,
             "finished": node.is_terminated, "successful": node.is_finished_ok,
+            "scientific_success": node.is_finished_ok or (node.is_finished and node.exit_status == 405),
             "exit_message": node.exit_message, "settings": node.inputs.settings.get_dict(),
             "optimized": not scf and node.inputs.optimize.value, "single_point": scf,
             "source_uuid": node.inputs.reuse_source.value if "reuse_source" in node.inputs else None,
@@ -140,14 +149,19 @@ def result(uuid):
         source = orm.load_node(source.inputs.reuse_source.value)
     jobs = sorted((c for c in source.called_descendants if isinstance(c, orm.CalcJobNode)), key=lambda c: c.ctime)
     data["input_files"] = {}
-    if jobs:
+    if "retrieved" in node.outputs:
+        repository = node.outputs.retrieved.creator.base.repository
+    elif jobs:
         repository = jobs[-1].base.repository
+    else:
+        repository = None
+    if repository is not None:
         for filename in ("aiida.inp", "aiida.coords.xyz"):
             try:
                 data["input_files"][filename] = repository.get_object_content(filename)
             except (FileNotFoundError, OSError):
                 pass
-    data["warnings"] = []
+    data["warnings"] = [node.exit_message] if node.exit_status == 405 else []
     data["source_description"] = ""
     if "structure" in node.outputs:
         try:
@@ -169,7 +183,19 @@ def result(uuid):
         data["summary"] = node.outputs.optimization_summary.get_dict()
     if "reference_summary" in node.outputs:
         data["summary"] = node.outputs.reference_summary.get_dict()
-    if scf and node.is_finished_ok:
-        from .history import inspect_run
-        data["artifact_status"] = inspect_run(uuid)["reuse_status"]
+    if data["scientific_success"] and "retrieved" in node.outputs and "output_parameters" in node.outputs:
+        from aiida_empa_orca.levels import orbital_levels
+        try:
+            data["levels"] = orbital_levels(node.outputs.retrieved.base.repository.get_object_content("aiida.out"),
+                                             node.outputs.output_parameters.get_dict().get("nmo"))
+        except (ValueError, OSError, KeyError) as exc:
+            data["warnings"].append(f"Orbital levels unavailable: {exc}")
+    if data["scientific_success"] and "retrieved" in node.outputs:
+        from .property_services import source_remote
+        from aiida_empa_orca.artifacts import resolve_electronic
+        try:
+            location = resolve_electronic(source_remote(node))
+            data["artifact_status"] = {"repository": "Preserved in the AiiDA repository", "stash": "Preserved in the stash", "remote": "Available in the calculation directory; not yet preserved"}[location["kind"]]
+        except (OSError, ValueError, RuntimeError, KeyError) as exc:
+            data["artifact_status"] = f"Electronic files unavailable: {exc}"
     return data

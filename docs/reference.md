@@ -38,8 +38,9 @@ in Hartree and eV, and spin diagnostic when printed), `output_parameters` and
 `retrieved` (ORCA stdout plus scheduler output). `remote_folder` points to the
 original electronic files. For the current ORCA 6.1 contract, these are
 `aiida.gbw`, `aiida.densities` and `aiida.densitiesinfo`. They are kept on the
-calculation computer, not copied into the AiiDA repository. The energy remains
-viewable even if those remote files later disappear.
+calculation computer. Optional size-aware preservation additionally retrieves or
+stashes the complete bundle; see [the storage and orbital guide](orbitals.md). The
+energy remains viewable even if those remote files later disappear.
 
 Discovery uses provenance and compares the exact ordered atomic coordinates,
 code UUID, effective electronic inputs and resource settings. Optimization-only
@@ -51,9 +52,10 @@ links the existing summary, electronic parameters, retrieved data and remote
 folder as inputs to the new reference WorkChain; no ORCA calculation is needed.
 
 Before reuse, the stored energy is checked against the retrieved output, and
-the transport checks that each required electronic file is a nonempty regular
-file. This is an availability check, not a binary-format or checksum integrity
-validation. Scratch locations are not promised as permanent archives.
+the artifact resolver checks preserved repository/stash copies before the original
+remote files. Repository checks include SHA-256; original remote-file checks verify
+nonempty regular files. Stashed copies are size-checked and their checksums verified
+when staged for consumption. Scratch locations are not permanent archives.
 
 - Missing required files produce a reviewed recomputation plan and disable
   AiiDA caching on the producing CalcJob.
@@ -99,7 +101,8 @@ historical `get_builder(..., optimize=False)` still means structure only; use
 The isolated test suite covers SCF convergence, input-preview agreement,
 fixed coordinates, geometry-to-reference reuse, missing files, unavailable
 storage, stale cache regeneration, spin validation and search across both
-workflow types. The full suite passed with 66 tests.
+workflow types. The initial SCF milestone passed with 66 tests; subsequent
+property/storage validation is documented in [the orbital guide](orbitals.md).
 
 A fresh browser submitted NO (neutral doublet, PBE/def2-SVP, VeryTightSCF) on
 ORCA 6.1.1 ARM64: workflow `7ece169a-902b-47af-b26f-c06014ce9020` completed in
@@ -110,9 +113,9 @@ settings offered reuse, and SCF search reopened the result. A second browser
 test reused the final state of an existing CAM-B3LYP optimization: workflow
 `10590f34-0feb-4ba2-b731-83518bcd8924` completed with no child calculation.
 
-Next are orbital/density cube generation and viewing, reduced previews through
-the existing cube handler, and full-resolution cubes stashed at a user-selected
-persistent location. Wavefunction archive/import restoration is a separate
-retention feature. CASCI and Dyson analysis still require their own shared-orbital
+Orbital/spin-density cube generation, viewing, cubehandler previews, full-cube
+retention policies and restoration from preserved wavefunctions are now available
+in the [next component](orbitals.md). External wavefunction imports remain future
+work. CASCI and Dyson analysis still require their own shared-orbital
 basis and state contracts; a newly recomputed SCF is not automatically compatible
 with previously calculated CASCI states.

@@ -80,6 +80,15 @@ New sessions start without a selected molecule or prefilled coordinates. The
 NO doublet test geometry is available through **Load NO doublet example**.
 Calculation review is enabled after a structure has been selected.
 
+New calculations default to the lowest multiplicity compatible with the electron
+count (sum of atomic numbers minus charge): 1 for an even count, 2 for an odd count.
+The **Use lowest allowed multiplicity** option updates this default when the
+molecule or charge changes. Editing multiplicity or copying calculation settings
+turns the option off, preserving the chosen spin through subsequent edits. Turn it
+back on to restore the automatic default. Electron parity does not predict the
+ground-state spin; higher-spin states must be chosen explicitly. Existing charge
+and spin validation remains active for both automatic and manual values.
+
 The interface has three areas:
 
 - **New calculation**: import a geometry, edit atoms, configure the calculation,

@@ -127,6 +127,7 @@ class OrcaApp(ipw.VBox):
         self._update_steps()
 
     def _structure_changed(self, _=None):
+        self.science.set_molecule(self.structure.atoms)
         self._structure_confirmed = False
         self._settings_changed()
 

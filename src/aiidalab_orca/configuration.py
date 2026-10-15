@@ -107,6 +107,8 @@ class GeometrySettings(ipw.VBox):
     def __init__(self):
         self._loading = False
         self._single_point = False
+        self._nuclear_charge = None
+        self._updating_spin = False
         style = {"description_width": "160px"}
         width = ipw.Layout(width="490px")
         def dropdown(description, options):
@@ -118,7 +120,9 @@ class GeometrySettings(ipw.VBox):
         self.method = ipw.Combobox(options=METHODS, value="PBE", description="Method", ensure_option=False, style=style, layout=width)
         self.basis = ipw.Combobox(options=BASES, value="def2-SVP", description="Basis", ensure_option=False, style=style, layout=width)
         self.charge = ipw.IntText(description="Charge", value=0, style=style, layout=width)
-        self.multiplicity = ipw.BoundedIntText(description="Multiplicity (2S+1)", value=2, min=1, max=100, style=style, layout=width)
+        self.multiplicity = ipw.BoundedIntText(description="Multiplicity (2S+1)", value=1, min=1, max=100, style=style, layout=width)
+        self.auto_multiplicity = ipw.Checkbox(value=True, description="Use lowest allowed multiplicity", layout=ipw.Layout(width="auto"))
+        self.spin_hint = ipw.HTML()
         self.reference = dropdown("Reference type", [("Automatic from spin", "auto"), *REFERENCES[1:]])
         self.approximation = dropdown("RI approximation", [("Automatic from method", "auto"), *APPROXIMATIONS[1:]])
         self.auxiliary_basis = ipw.Combobox(options=AUXILIARY_BASES, value="def2/J", description="Auxiliary basis", style=style, layout=width)
@@ -162,12 +166,45 @@ class GeometrySettings(ipw.VBox):
                 for label, url in MANUAL_LINKS.items()) + "</p>"),
             advanced, self.summary,
         ])
-        super().__init__([self.charge, self.multiplicity, self.optimization_controls])
+        super().__init__([self.charge, self.multiplicity, self.auto_multiplicity, self.spin_hint, self.optimization_controls])
+        self.charge.observe(self._update_spin, names="value")
+        self.auto_multiplicity.observe(self._update_spin, names="value")
+        self.multiplicity.observe(self._spin_edited, names="value")
         for widget in [self.protocol, *self.fields.values()]:
             widget.observe(self._changed, names="value")
         for widget in [self.elements, self.parameters]:
             widget.observe(self._changed, names="revision")
-        self.set_values(protocol_settings())
+        self.set_values(protocol_settings(overrides={"multiplicity": 1}), keep_spin_mode=True)
+
+    def set_molecule(self, atoms):
+        """Keep only the electron-count input, not an ORM node or geometry."""
+        self._nuclear_charge = int(atoms.numbers.sum()) if atoms is not None else None
+        self._update_spin()
+
+    def _spin_edited(self, _=None):
+        if not self._loading and not self._updating_spin:
+            self.auto_multiplicity.value = False
+
+    def _update_spin(self, _=None):
+        if self._loading:
+            return
+        if self._nuclear_charge is None:
+            self.spin_hint.value = "<p>The automatic default uses the molecule and charge: 1 for even, 2 for odd electron counts.</p>"
+            return
+        electrons = self._nuclear_charge - self.charge.value
+        if electrons < 1:
+            self.spin_hint.value = "<p>The charge leaves fewer than one electron. Review the molecule and charge.</p>"
+            return
+        lowest = 1 + electrons % 2
+        if self.auto_multiplicity.value:
+            self._updating_spin = True
+            try:
+                self.multiplicity.value = lowest
+            finally:
+                self._updating_spin = False
+        mode = "Automatic default" if self.auto_multiplicity.value else "Manual or copied spin retained"
+        self.spin_hint.value = (f"<p>{mode}. {electrons} electrons; lowest allowed multiplicity: {lowest}. "
+                                "Electron count does not determine the ground-state spin; choose a higher multiplicity when appropriate.</p>")
 
     def values(self):
         return {"schema_version": 2, "protocol": self.protocol.value,
@@ -196,10 +233,12 @@ class GeometrySettings(ipw.VBox):
             self.summary.value = f"<p>{html.escape(str(exc))}</p>"
         self.revision += 1
 
-    def set_values(self, settings):
+    def set_values(self, settings, *, keep_spin_mode=False):
         s = editable_settings(settings)
         self._loading = True
         try:
+            if not keep_spin_mode:
+                self.auto_multiplicity.value = False
             self.protocol.value = s["protocol"]
             for key, widget in self.fields.items():
                 widget.value = s[key]
@@ -207,9 +246,10 @@ class GeometrySettings(ipw.VBox):
             self.parameters.set_values(s["block_parameters"])
         finally:
             self._loading = False
+        self._update_spin()
         self._changed()
 
     def _apply(self, _=None):
         self.set_values(protocol_settings(self.protocol.value, {
             "charge": self.charge.value, "multiplicity": self.multiplicity.value,
-        }))
+        }), keep_spin_mode=True)

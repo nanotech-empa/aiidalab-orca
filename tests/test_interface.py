@@ -273,3 +273,66 @@ def test_history_default_filters_display_existing_runs(source):
         assert not widget.geometry.disabled and not widget.copy.disabled
     finally:
         widget.close()
+
+
+def test_multiplicity_default_follows_molecule_and_charge(aiida_profile_clean, monkeypatch):
+    from ase.build import molecule
+    from aiidalab_orca import services
+    from aiidalab_orca.app import OrcaApp
+    monkeypatch.setattr(services, "codes", lambda: [])
+    app = OrcaApp()
+    try:
+        app.structure.set_atoms(molecule("CH4"))
+        app._confirm_structure()
+        assert app.multiplicity.value == 1
+        assert "10 electrons" in app.science.spin_hint.value
+        app._confirm_settings()
+        assert app._settings_confirmed
+        app.charge.value = 1
+        assert app.multiplicity.value == 2 and not app._settings_confirmed
+        app.charge.value = -1
+        assert app.multiplicity.value == 2
+        app.charge.value = 0
+        app.structure.example.click()
+        assert app.multiplicity.value == 2
+        app.structure.set_atoms(molecule("CH4"))
+        assert app.multiplicity.value == 1
+        app.science._apply()
+        assert app.science.auto_multiplicity.value and app.multiplicity.value == 1
+    finally:
+        app.close()
+
+
+def test_explicit_and_copied_spin_survives_geometry_and_charge(source, monkeypatch):
+    from ase.build import molecule
+    from aiidalab_orca import services
+    from aiidalab_orca.app import OrcaApp
+    monkeypatch.setattr(services, "codes", lambda: [("Test ORCA", source.inputs.code.uuid)])
+    app = OrcaApp()
+    try:
+        app.structure.set_atoms(molecule("O2"))
+        app.multiplicity.value = 3
+        assert not app.science.auto_multiplicity.value
+        edited = app.structure.atoms.copy()
+        edited.positions[1, 2] += 0.1
+        app.structure.set_atoms(edited)
+        app.science._apply()
+        assert app.multiplicity.value == 3
+        app.charge.value = 1
+        assert app.multiplicity.value == 3  # Preserve the choice; validation must reject it.
+        app._confirm_structure()
+        app._confirm_settings()
+        assert "incompatible with 15 electrons" in app.science_message.value
+        app.science.auto_multiplicity.value = True
+        assert app.multiplicity.value == 2
+        app.charge.value = 0
+        app.structure.example.click()
+        assert app.multiplicity.value == 2
+        app.copy_settings(source.uuid)  # Same numeric value is still an explicit copied choice.
+        assert not app.science.auto_multiplicity.value
+        app.structure.set_atoms(molecule("CH4"))
+        assert app.multiplicity.value == 2
+        app.science.auto_multiplicity.value = True
+        assert app.multiplicity.value == 1
+    finally:
+        app.close()

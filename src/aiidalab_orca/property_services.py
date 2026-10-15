@@ -19,14 +19,53 @@ def tool_codes(computer_uuid=None):
     result = {'python':[], 'plot':[], 'cubehandler':[]}
     for (uuid,) in orm.QueryBuilder().append(orm.InstalledCode,project=['uuid']).all():
         code=orm.load_code(uuid)
-        if (code.computer.transport_type!='core.local' or code.computer.scheduler_type!='core.direct' or
-                (computer_uuid and code.computer.uuid!=computer_uuid)):
+        if computer_uuid and code.computer.uuid!=computer_uuid:
             continue
         name=Path(code.filepath_executable).name
-        kind=('plot' if name=='orca_plot' else 'cubehandler' if name=='cubehandler' else
-              'python' if name in ('python','python3','python3.12') else None)
+        role=code.base.extras.get('aiidalab_orca_role', None)
+        kind=(role if role in ('plot','cubehandler','python') else
+              'python' if code.default_calc_job_plugin=='empa_orca.electronic_storage' or name=='orca-tools' else
+              'cubehandler' if code.default_calc_job_plugin=='nanotech_empa.cubehandler' or name=='cubehandler' else
+              'plot' if name=='orca_plot' else None)
         if kind:
             result[kind].append((f'{code.label}@{code.computer.label}',str(uuid)))
+    return result
+
+
+def helper_code(computer_uuid):
+    """Resolve the configured application runtime, never a generic Python code."""
+    choices = tool_codes(computer_uuid)['python']
+    if len(choices) != 1:
+        raise ValueError('Configure exactly one ORCA tools code on this computer in Code setup.')
+    return choices[0][1]
+
+
+def wavefunction_status(source_uuid):
+    from aiida_empa_orca.reference import ArtifactUnavailable
+    node = source_node(source_uuid)
+    remote = source_remote(node)
+    policy = None
+    seen = set()
+    while str(node.uuid) not in seen:
+        seen.add(str(node.uuid))
+        if 'storage_policy' in node.inputs:
+            policy = node.inputs.storage_policy.get_dict()
+            break
+        if 'reuse_source' not in node.inputs:
+            break
+        node = source_node(node.inputs.reuse_source.value)
+    result = {'policy': policy or {'threshold_mb':100, 'stash_directory':default_stash_directory()},
+              'inherited': policy is not None}
+    try:
+        location = resolve_electronic(remote)
+        result.update(state=location['kind'], path=location.get('path', ''),
+                      size_bytes=sum(f['size_bytes'] for f in location['files']))
+        if not policy and location.get('storage_uuid'):
+            result.update(policy=orm.load_node(location['storage_uuid']).inputs.policy.get_dict(), inherited=True)
+    except ArtifactUnavailable as exc:
+        result.update(state='unavailable', message=str(exc))
+    except (ValueError, FileNotFoundError) as exc:
+        result.update(state='missing', message=str(exc))
     return result
 
 
@@ -64,6 +103,9 @@ def prepare_property(source_uuid, parameters, policy, codes):
     p=cube_parameters(parameters)
     policy=storage_policy(policy)
     remote=source_remote(node)
+    codes = dict(codes)
+    if not codes.get('python'):
+        codes['python'] = helper_code(remote.computer.uuid)
     for key in ('python','plot','cubehandler'):
         if not codes.get(key):
             raise ValueError(f'Select the {key} code')

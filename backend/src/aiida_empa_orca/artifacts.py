@@ -163,8 +163,8 @@ def storage_builder(remote, code, policy):
     policy = storage_policy(policy)
     builder = ElectronicStorageCalculation.get_builder()
     builder.source_folder, builder.code, builder.policy = remote, code, orm.Dict(dict=policy)
-    builder.metadata.options = {'resources': {'num_machines': 1, 'num_mpiprocs_per_machine': 1},
-                                'max_wallclock_seconds': 1800}
+    from .rendering import calcjob_options
+    builder.metadata.options = calcjob_options(remote)
     sizes = remote_files(remote.computer, remote.get_remote_path())
     if sum(item['size_bytes'] for item in sizes) > policy['threshold_mb']*1024**2:
         builder.metadata.options.stash = stash_options(policy['stash_directory'], 'electronic')

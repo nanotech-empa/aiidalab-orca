@@ -65,7 +65,7 @@ class OrbitalCubesCalculation(engine.CalcJob):
         p = cube_parameters(self.inputs.parameters.get_dict())
         computer = self.inputs.code.computer
         if any(self.inputs[k].computer.uuid != computer.uuid for k in ('plot_code','cubehandler_code')):
-            raise ValueError('Python, ORCA plot and cubehandler codes must use the same computer')
+            raise ValueError('ORCA tools, ORCA plot and cubehandler codes must use the same computer')
         keys = [k for k in ('source_repository','source_stash','source_folder') if k in self.inputs]
         if len(keys)!=1:
             raise ValueError('Exactly one verified electronic source is required')
@@ -168,8 +168,6 @@ class OrbitalsWorkChain(engine.WorkChain):
             self.ctx.parameters = cube_parameters(self.inputs.parameters.get_dict())
             storage_policy(self.inputs.storage_policy.get_dict())
             computer=self.inputs.python_code.computer
-            if computer.transport_type!='core.local' or computer.scheduler_type!='core.direct':
-                raise ValueError('This milestone supports local direct execution')
             if any(self.inputs[k].computer.uuid!=computer.uuid for k in ('plot_code','cubehandler_code','orca_code')):
                 raise ValueError('Select all codes on the same computer')
             if self.inputs.source_remote.computer.uuid!=computer.uuid:
@@ -264,7 +262,8 @@ class OrbitalsWorkChain(engine.WorkChain):
         builder.cubehandler_code=self.inputs.cubehandler_code
         builder.parameters=orm.Dict(dict=self.ctx.parameters)
         attach_source(builder,self.ctx.location)
-        builder.metadata.options={'resources':{'num_machines':1,'num_mpiprocs_per_machine':1},'max_wallclock_seconds':3600}
+        from .rendering import calcjob_options
+        builder.metadata.options=calcjob_options(self.inputs.source_remote,seconds=3600)
         if self.ctx.parameters['retention']=='stash':
             builder.metadata.options.stash=stash_options(self.ctx.parameters['stash_directory'], 'full_cubes')
         builder.metadata.disable_cache=True  # Explicit reuse checks files, including retained/stashed full cubes.

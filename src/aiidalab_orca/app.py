@@ -68,7 +68,7 @@ class OrcaApp(ipw.VBox):
         back_settings.on_click(lambda _: setattr(self.steps, "selected_index", 1))
         from .storage import WavefunctionStorage
         self.wavefunction_storage = WavefunctionStorage()
-        storage_panel = ipw.Accordion(children=[self.wavefunction_storage], selected_index=None)
+        storage_panel = ipw.Accordion(children=[self.wavefunction_storage], selected_index=0)
         storage_panel.set_title(0, "Wavefunction storage")
         self.resource_controls = ipw.VBox([self.code, self.nprocs, self.memory, self.wallclock, self.force, storage_panel])
         self.structure_step = GeometryStep([self.structure, self.next_step], "Select a molecule to begin.")
@@ -217,7 +217,7 @@ class OrcaApp(ipw.VBox):
             self.review = services.prepare(
                 self.structure.xyz_text(), self.structure.source_uuid, self._settings(),
                 self.code.value, self.optimize.value, self.force.value,
-                atoms=self.structure.atoms, imported=self.structure.imported, storage=self.wavefunction_storage.values(),
+                atoms=self.structure.atoms, imported=self.structure.imported, storage=self.wavefunction_storage.values(self.code.value),
             )
             self.structure.mark_stored(self.review["structure_uuid"])
             plan = self.review["plan"]

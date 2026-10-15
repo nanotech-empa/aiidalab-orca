@@ -120,3 +120,65 @@ bypass for missing references, and energy-range/grouping behavior.
 Official input and plotting references:
 [ORCA output control](https://orca-manual.mpi-muelheim.mpg.de/contents/essentialelements/output.html)
 and [ORCA 6.1 plotting](https://www.faccts.de/docs/orca/6.1/manual/contents/utilitiesvisualization/plots.html).
+
+## Shared viewer and render jobs
+
+The result panel uses `aiidalab_widgets_empa.cube.CubeViewer`, extracted from
+Surfaces' Handle cube files viewer. It provides editable signed isosurfaces,
+colours, a linked arbitrary 2D plane and PNG slice export. ORCA selects isolated
+boundaries: cube origins are preserved and pixels outside the grid are empty.
+No wavefunction or full cube is read by the interactive viewer.
+
+The Render tab submits `empa_orca.cube_render` through AiiDA. Select the retrieved
+preview or the full-resolution cube recorded in scratch/stash, then use the
+current 3D camera, isovalues, colours, image dimensions and opacity. Full cubes
+are checked and staged on their storage computer; only the PNG and log are
+retrieved. Deleted or missing full cubes produce an actionable error instead of
+silently substituting a preview. Previously rendered images can be reopened.
+The linked slicing plane is exported separately; it is not part of the 3D render.
+
+Rendering uses the existing cubehandler rendering PR:
+<https://github.com/nanotech-empa/cubehandler/pull/14>. This draft adds its image
+size/background/opacity CLI options. The Python package pin selects an unreleased
+API needed by this feature; released cubehandler 0.2.1 has no `render` command.
+
+## Application codes and remote execution
+
+Users do not choose a generic Python interpreter. Setup must register one ORCA
+helper application code per computer, pointing at the installed `orca-tools`
+console command (or an environment-loading wrapper), with default plugin
+`empa_orca.electronic_storage`. The historical WorkChain input name `python_code`
+is retained for compatibility with saved processes; the application now supplies
+the configured ORCA tools code. It executes the input script captured in each
+CalcJob repository. There is no PythonJob dependency and no notebook-side
+subprocess for storage, cube generation/reduction, or rendering.
+
+Register a separate cubehandler render code with default plugin
+`empa_orca.cube_render`. It must provide the rendering-enabled cubehandler CLI,
+PyVista/VTK, and headless EGL or OSMesa on the **execution nodes**. The localhost
+test uses OSMesa and `VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow` in its
+wrapper. A wrapper that works only on the login node is insufficient.
+
+ORCA plot and cubehandler reduction codes remain explicit scientific tool
+choices. Wrapper names can be arbitrary when the code extra
+`aiidalab_orca_role` is `plot`, `cubehandler`, or `python` (the compatibility role
+for ORCA tools). All codes must belong to the source calculation computer.
+The configured wrapper must establish its own runtime when called by the
+ORCA tools process; do not rely on another Code's prepend text being applied
+to subprocesses. The helper requires NumPy and ASE; ORCA plot requires the
+matching ORCA libraries.
+
+Storage, cube and render CalcJobs use serial resources and inherit account,
+queue, QoS and custom scheduler commands from the producing calculation.
+They use normal AiiDA transports/staging/stashing, with no localhost restriction
+on these property jobs. Configure an absolute persistent stash path on the
+remote machine. WFN policies recorded with the reference are inherited; cube
+retention has its own directory and is never used to overwrite that policy.
+
+**Validation boundary:** local direct execution and browser submission have
+been exercised. Daint execution has not yet been tested. The initial SCF/GEO_OPT
+workflows still have their local-only milestone guard; lifting that guard,
+exposing Slurm allocation settings there, and installing/testing the matching
+ORCA/ORCA tools/render wrappers through `aiidalab-alps-files` and the setup app
+are prerequisites for a full Daint deployment. This change does not claim a
+working Daint installation or modify existing remote codes.

@@ -2,11 +2,9 @@
 import asyncio
 import base64
 import html
-import tempfile
 
 import ipywidgets as ipw
-import nglview as nv
-from ase import Atoms
+from aiidalab_widgets_empa.cube import CubeViewer
 
 from . import property_services as service
 
@@ -21,7 +19,6 @@ class OrbitalProperties(ipw.VBox):
         self.process_uuid=None
         self._poll_task=None
         self._cube_view=None
-        self._volume=None
         self._displayed_uuid=None
         choices=service.source_tools(self.source_uuid)
         options=[]
@@ -37,11 +34,19 @@ class OrbitalProperties(ipw.VBox):
         self.spin=ipw.Checkbox(value=self.levels['spin_polarized'],disabled=not self.levels['spin_polarized'],description='Spin density (α − β)',layout=ipw.Layout(width='auto'))
         self.grid=ipw.BoundedIntText(value=80,min=40,max=256,description='Full grid points/axis',style={'description_width':'160px'},layout=ipw.Layout(width='300px'))
         self.retention=ipw.Dropdown(options=[('Stash full-resolution cubes','stash'),('Leave full cubes in calculation directory','leave'),('Delete full cubes after preview validation','delete')],value='stash',description='Full cubes',style=style,layout=ipw.Layout(width='95%'))
-        self.stash=ipw.Text(value=service.default_stash_directory(),description='Stash directory',style=style,layout=ipw.Layout(width='95%'))
+        self.stash=ipw.Text(value=service.default_stash_directory(),description='Cube stash directory',style=style,layout=ipw.Layout(width='95%'))
         self.threshold=ipw.BoundedFloatText(value=100,min=0,max=10000,description='WFN retrieval (MiB)',style={'description_width':'160px'},layout=ipw.Layout(width='300px'))
-        self.codes={key:ipw.Dropdown(options=value,description=label,layout=ipw.Layout(width='95%')) for (key,value),label in zip(choices.items(),('Python','ORCA plot','Cubehandler'))}
-        advanced=ipw.Accordion(children=[ipw.VBox([self.grid,self.threshold,*self.codes.values()])],selected_index=None)
-        advanced.set_title(0,'Grid, wavefunction storage and codes')
+        self.wfn_stash=ipw.Text(description='WFN stash directory',style=style,layout=ipw.Layout(width='95%'))
+        self.wfn_info=ipw.HTML()
+        self.wfn_policy=ipw.Accordion(children=[ipw.VBox([self.threshold,self.wfn_stash])],selected_index=None)
+        self.wfn_policy.set_title(0,'Preservation policy for unarchived or regenerated wavefunctions')
+        self.check_wfn=ipw.Button(description='Check wavefunction',icon='refresh',layout=ipw.Layout(width='auto'))
+        self.check_wfn.on_click(self._check_wavefunction)
+        self.codes={key:ipw.Dropdown(options=choices[key],description=label,layout=ipw.Layout(width='95%'))
+                    for key,label in (('plot','ORCA plot'),('cubehandler','Cubehandler'))}
+
+        advanced=ipw.Accordion(children=[ipw.VBox([self.grid,*self.codes.values()])],selected_index=None)
+        advanced.set_title(0,'Cube grid and codes')
         self.review_button=ipw.Button(description='Review orbital calculation',icon='list',button_style='primary',layout=ipw.Layout(width='auto'))
         self.review_button.on_click(self._review)
         self.submit_button=ipw.Button(description='Compute cubes',icon='play',button_style='success',disabled=True)
@@ -53,20 +58,43 @@ class OrbitalProperties(ipw.VBox):
         refresh.on_click(self._refresh_runs)
         self.previous.observe(self._open_previous,names='value')
         self.cube=ipw.Dropdown(description='Preview cube',style=style,layout=ipw.Layout(width='95%'))
-        self.iso=ipw.BoundedFloatText(value=.03,min=.000001,max=100,step=.005,description='Isovalue (a.u.)',style=style,layout=ipw.Layout(width='360px'))
         self.cube.observe(self._show_cube,names='value')
-        self.iso.observe(self._surface,names='value')
         self.download=ipw.HTML()
         self.cube_box=ipw.VBox()
         self.result_info=ipw.HTML()
         super().__init__([ipw.HTML('<p>Compute orbital amplitudes and, for an unrestricted reference, spin density. Select multiple orbitals with Ctrl/Cmd. Only cubehandler-reduced previews are retrieved.</p>'),
-                          select_visible,self.orbitals,self.spin,self.retention,self.stash,advanced,
+                          select_visible,self.orbitals,self.spin,self.wfn_info,self.check_wfn,self.wfn_policy,self.retention,self.stash,advanced,
                           self.review_button,self.message,self.submit_button,self.progress,
-                          ipw.HBox([self.previous,refresh]),self.result_info,self.cube,self.iso,self.download,self.cube_box])
-        for w in (self.orbitals,self.spin,self.grid,self.retention,self.stash,self.threshold,*self.codes.values()):
+                          ipw.HBox([self.previous,refresh]),self.result_info,self.cube,self.download,self.cube_box])
+        for w in (self.orbitals,self.spin,self.grid,self.retention,self.stash,self.threshold,self.wfn_stash,*self.codes.values()):
             w.observe(self._invalidate,names='value')
+        self.retention.observe(self._retention_changed,names='value')
+        self._retention_changed()
+        self._check_wavefunction(inherit=True)
         self._select_visible()
         self._refresh_runs()
+
+    def _retention_changed(self,_=None):
+        self.stash.layout.display='' if self.retention.value=='stash' else 'none'
+
+    def _check_wavefunction(self,_=None,*,inherit=False):
+        status=service.wavefunction_status(self.source_uuid)
+        if inherit:
+            self.threshold.value=status['policy']['threshold_mb']
+            self.wfn_stash.value=status['policy']['stash_directory']
+        state=status['state']
+        label={'repository':'Preserved in the AiiDA repository','stash':'Preserved in the stash',
+               'remote':'Available in the calculation directory; not yet archived',
+               'missing':'Missing: a new SCF will be required before computing new cubes',
+               'unavailable':'Storage could not be checked; retry when accessible'}[state]
+        self.wfn_info.value='<p><b>Wavefunction:</b> '+label+'.</p>'
+        if status.get('path'):
+            self.wfn_info.value+='<p><code>'+html.escape(status['path'])+'</code></p>'
+        self.wfn_policy.layout.display='' if state in ('remote','missing') else 'none'
+        if state in ('remote','missing'):
+            self.wfn_info.value+='<p>'+('Uses the preservation policy recorded with the reference.' if status['inherited'] else 'This older reference has no preservation policy; review the defaults below.')+'</p>'
+        if status.get('message'):
+            self.wfn_info.value+='<p>'+html.escape(status['message'])+'</p>'
 
     def _invalidate(self,_=None):
         self.plan=None
@@ -80,10 +108,11 @@ class OrbitalProperties(ipw.VBox):
     def _review(self,_=None):
         self._invalidate()
         try:
+            self._check_wavefunction()
             self.plan=service.prepare_property(self.source_uuid,
                 {'orbitals':[list(pair) for pair in self.orbitals.value],'spin_density':self.spin.value,
                  'grid_points':self.grid.value,'retention':self.retention.value,'stash_directory':self.stash.value.strip()},
-                {'threshold_mb':self.threshold.value,'stash_directory':self.stash.value.strip()},
+                {'threshold_mb':self.threshold.value,'stash_directory':self.wfn_stash.value.strip()},
                 {key:w.value for key,w in self.codes.items()})
             action='Reuse available cube results' if self.plan['action']=='reuse' else 'Generate cubes and reduce them with cubehandler'
             text=f'<p><b>{action}</b></p>'
@@ -153,6 +182,7 @@ class OrbitalProperties(ipw.VBox):
         if data['finished'] and not data['successful']:
             self.progress.value+=f"<p style='color:#a02020'>{html.escape(data['message'])}</p><pre>{html.escape(chr(10).join(data['reports']))}</pre>"
         if data['successful'] and self._displayed_uuid != self.process_uuid:
+            self._check_wavefunction()
             manifest=data['manifest']
             text='<p>Cubehandler previews are stored in AiiDA. '
             if manifest['retention']=='delete':
@@ -175,32 +205,27 @@ class OrbitalProperties(ipw.VBox):
         if not self.process_uuid or not self.cube.value:
             return
         content=service.preview_content(self.process_uuid,self.cube.value)
+        if getattr(self,'render_panel',None):
+            self.render_panel.close()
         if self._cube_view:
             self._cube_view.close()
-        self._cube_view=nv.show_ase(Atoms(self.symbols,positions=self.positions))
-        self._cube_view.clear_representations()
-        self._cube_view.add_ball_and_stick()
-        with tempfile.NamedTemporaryFile(mode='w',suffix='.cube') as handle:
-            handle.write(content);handle.flush()
-            self._volume=self._cube_view.add_component(handle.name,ext='cube')
-        self._cube_view.layout=ipw.Layout(width='100%',height='420px')
-        self._cube_view.background='#f5f7fa'
+        from .rendering import RenderPanel
+        self.render_panel=RenderPanel(self.process_uuid,self.cube.value)
+        self._cube_view=CubeViewer(periodic=False,on_render=self.render_panel.submit)
+        self._cube_view.set_content(content)
+        self.render_panel.viewer=self._cube_view
+        pane=self._cube_view.tabs.children[2]
+        pane.children=(self.render_panel.quality,*pane.children,self.render_panel.previous,
+                       self.render_panel.status,self.render_panel.download,self.render_panel.image)
         self.cube_box.children=[self._cube_view]
-        self._surface()
-        self._cube_view.center()
-        self._cube_view.control.rotate([0, .3826834324, 0, .9238795325])
         encoded=base64.b64encode(content.encode()).decode()
         self.download.value=f'<a download="{html.escape(self.cube.value)}" href="data:text/plain;base64,{encoded}">Download reduced cube</a><p>Blue/gold surfaces show positive/negative values. Orbital amplitudes and spin density use their respective atomic units; previews are for visual inspection.</p>'
-
-    def _surface(self,_=None):
-        if self._volume:
-            self._volume.clear_representations()
-            self._volume.add_surface(color='#2563b7',isolevelType='value',isolevel=self.iso.value,opacity=.8)
-            self._volume.add_surface(color='#e3ae3b',isolevelType='value',isolevel=-self.iso.value,opacity=.8)
 
     def close(self):
         if self._poll_task:
             self._poll_task.cancel()
+        if getattr(self,'render_panel',None):
+            self.render_panel.close()
         if self._cube_view:
             self._cube_view.close()
         super().close()

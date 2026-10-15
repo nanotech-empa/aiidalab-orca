@@ -13,9 +13,11 @@ dependencies = [
   "ipywidgets>=8,<9",
   "nglview>=3",
   "matplotlib",
+  # Rendering CLI and image options, absent from cubehandler 0.2.1 (PR #14).
+  "cubehandler @ git+https://github.com/nanotech-empa/cubehandler.git@117736a5d61a3571d9f7d06054a6238d48c5a516",
   "aiidalab-widgets-base",
-  # Unreleased CDXML graph validation and provenance API: EMPA widgets PR #12.
-  "aiidalab-widgets-empa @ git+https://github.com/nanotech-empa/aiidalab-widgets-empa.git@8a85258bbb449ff99c1d0ee302fd4b6ae887c254",
+  # Shared cube viewer (PR #14), retaining the CDXML series (PR #12).
+  "aiidalab-widgets-empa[cube] @ git+https://github.com/nanotech-empa/aiidalab-widgets-empa.git@b12bbba835a6319d18445377d35a01d700f8e76f",
 ]
 
 [project.urls]

@@ -44,8 +44,8 @@ class DysonMaps(ipw.VBox):
         self.previous.observe(self._open, names='value')
         self.load_settings = ipw.Button(description='Load selected map settings into viewer', icon='upload', layout=ipw.Layout(width='auto'))
         self.load_settings.on_click(self._load_settings)
-        self.vmin = ipw.FloatText(value=0., description='Shared minimum', style=style)
-        self.vmax = ipw.FloatText(value=1., description='Shared maximum', style=style)
+        self.vmin = ipw.FloatText(value=0., description='Shared minimum', style=style, layout=ipw.Layout(width='400px'))
+        self.vmax = ipw.FloatText(value=1., description='Shared maximum', style=style, layout=ipw.Layout(width='400px'))
         self.cmap = ipw.Dropdown(options=['bone', 'gray', 'viridis', 'magma'], description='Colour map', style=style)
         self.dpi = ipw.BoundedIntText(value=300, min=72, max=600, description='Figure DPI', style=style)
         self.bar = ipw.FloatText(value=5., description='Scale bar (Å)', style=style)
@@ -57,6 +57,7 @@ class DysonMaps(ipw.VBox):
         self.figures = ipw.Dropdown(description='Stored figures', style=style, layout=ipw.Layout(width='95%'))
         self.figures.observe(self._open_figure, names='value')
         self.image, self.download, self.details = ipw.Image(format='png'), ipw.HTML(), ipw.HTML()
+        self.image.layout.display = 'none'
         self.figure_box = ipw.VBox([ipw.HTML('<p><b>Shared intensity scale</b> · every panel uses the same explicit limits. '
             'Numerical intensities are preserved without normalization. Change the limits to reveal faint features; '
             'all panels change together.</p>'), ipw.HBox([self.vmin, self.vmax], layout=ipw.Layout(flex_flow='row wrap')),
@@ -155,6 +156,7 @@ class DysonMaps(ipw.VBox):
         self.compute.disabled = self.render.disabled = self.review.disabled = True
         if kind == 'figure':
             self.image.value, self.download.value = b'', ''
+            self.image.layout.display = 'none'
         self.message.value = '<p>Submitted '+kind+' · <code>'+str(uuid)+'</code></p>'
         self._task = asyncio.get_running_loop().create_task(self._poll(str(uuid), kind))
 
@@ -244,10 +246,16 @@ class DysonMaps(ipw.VBox):
 
     def _refresh_figures(self, selected=None):
         result = service.map_result(self.map_uuid)
-        self.figures.options = [('Select a stored figure', None)]+result['figures']
+        self.figures.unobserve(self._open_figure, names='value')
+        try:
+            self.figures.options = [('Select a stored figure', None)]+result['figures']
+            self.figures.value = selected or (result['figures'][0][1] if result['figures'] else None)
+        finally:
+            self.figures.observe(self._open_figure, names='value')
         self.image.value, self.download.value = b'', ''
-        if selected or result['figures']:
-            self.figures.value = selected or result['figures'][0][1]
+        self.image.layout.display = 'none'
+        if self.figures.value:
+            self._open_figure({'new': self.figures.value})
 
     def _open_figure(self, change):
         if not change['new']:
@@ -260,6 +268,7 @@ class DysonMaps(ipw.VBox):
                 return
             result = service.figure_result(change['new'])
             self.image.value = result['images']['png']
+            self.image.layout.display = ''
             links = []
             for key, mime in (('png', 'image/png'), ('pdf', 'application/pdf')):
                 encoded = base64.b64encode(result['images'][key]).decode()

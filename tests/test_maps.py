@@ -219,3 +219,26 @@ def test_render_progress_clears_old_download_and_restores_controls(monkeypatch):
     finally:
         for name in ('compute', 'render', 'review', 'image', 'download', 'message'):
             getattr(holder, name).close()
+
+
+def test_reopening_same_figure_refreshes_image_even_when_selection_does_not_change(monkeypatch):
+    from types import SimpleNamespace
+    import ipywidgets as ipw
+    from aiidalab_orca.maps import DysonMaps
+    monkeypatch.setattr(map_services, 'map_result', lambda uuid: dict(figures=[('Existing figure', 'figure')]))
+    holder = SimpleNamespace(map_uuid='map', figures=ipw.Dropdown(options=[('Existing figure', 'figure')]),
+                             image=ipw.Image(value=b'old'), download=ipw.HTML('old download'))
+    def opened(change):
+        holder.image.value = b'reopened'
+        holder.image.layout.display = ''
+        holder.download.value = 'reopened download'
+    holder._open_figure = opened
+    holder.figures.observe(opened, names='value')
+    try:
+        for _ in range(2):
+            DysonMaps._refresh_figures(holder, 'figure')
+            assert holder.image.value == b'reopened'
+            assert holder.image.layout.display == '' and holder.download.value == 'reopened download'
+    finally:
+        for name in ('figures', 'image', 'download'):
+            getattr(holder, name).close()

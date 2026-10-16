@@ -136,6 +136,11 @@ atomic-unit conventions; reduced previews are for inspection, not integration.
 
 ## Deployment and boundaries
 
+The [linked transition explorer](transition-explorer.md) connects selectable
+spectral regions to exact many-electron state endpoints, existing orbital
+previews and CG multiplet-weight readouts. It also supports drag-selected
+energy windows for the map/blend controls, without submitting calculations.
+
 Install the backend with its `dyson` extra on the execution computer:
 
 ```bash

@@ -102,6 +102,18 @@ def result(uuid):
     return {'uuid':str(uuid),'data':node.outputs.transitions.get_dict(),'transitions_uuid':str(node.outputs.transitions.uuid)}
 
 
+def diagram_states(table,context):
+    """Display the original source sectors, even after a newer CASCI rerun."""
+    uuids = {table['initial_state_uuid']} | {r['final_state_uuid'] for r in table['transitions']}
+    source_rows,sectors = [],set()
+    for uuid in sorted(uuids):
+        data = orm.load_node(uuid).get_dict()
+        for row in data['states']:
+            sectors.add((row['charge'],row['multiplicity']))
+            source_rows.append(dict(row,state_uuid=str(uuid)))
+    return [r for r in context if (r['charge'],r['multiplicity']) not in sectors]+source_rows
+
+
 def submit_cubes(transitions_uuid,parameters,code_uuid,cubehandler_uuid,blend=None):
     if not code_uuid or not cubehandler_uuid:
         raise ValueError('Configure Dyson and cubehandler codes on the calculation computer')

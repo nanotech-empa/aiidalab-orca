@@ -16,13 +16,15 @@ dependencies = [
 
 [project.optional-dependencies]
 # Reviewed upstream API used by the remote Dyson executable.
-dyson = ["dyson-orca-tools[cube] @ git+https://github.com/AndresOrtegaGuerrero/dyson-orca-tools.git@96658a681815faf1cf260bcb26fe712ca7715103"]
+dyson = ["dyson-orca-tools[cube] @ git+https://github.com/AndresOrtegaGuerrero/dyson-orca-tools.git@96658a681815faf1cf260bcb26fe712ca7715103", "scipy", "matplotlib"]
 
 [project.scripts]
 orca-dyson = "aiida_empa_orca.dyson_tools:main"
 orca-tools = "aiida_empa_orca.tools:main"
 
 [project.entry-points."aiida.calculations"]
+"empa_orca.dyson_maps" = "aiida_empa_orca.maps:DysonMapsCalculation"
+"empa_orca.map_figure" = "aiida_empa_orca.maps:MapFigureCalculation"
 "empa_orca.dyson_export" = "aiida_empa_orca.dyson:StateExportCalculation"
 "empa_orca.dyson" = "aiida_empa_orca.dyson:DysonCalculation"
 "empa_orca.dyson_cubes" = "aiida_empa_orca.dyson:DysonCubesCalculation"
@@ -36,6 +38,8 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.calculation:SinglePointCalculation"
 
 [project.entry-points."aiida.parsers"]
+"empa_orca.dyson_maps" = "aiida_empa_orca.maps:DysonMapsParser"
+"empa_orca.map_figure" = "aiida_empa_orca.maps:MapFigureParser"
 "empa_orca.dyson_cubes" = "aiida_empa_orca.dyson:DysonCubesParser"
 "empa_orca.dyson_export" = "aiida_empa_orca.dyson:StateExportParser"
 "empa_orca.dyson" = "aiida_empa_orca.dyson:DysonParser"
@@ -66,4 +70,4 @@ orca-tools = "aiida_empa_orca.tools:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-aiida_empa_orca = ["protocols/*.yaml", "scripts/*.py"]
+aiida_empa_orca = ["protocols/*.yaml", "scripts/*.py", "MAPS_LICENSE.txt"]

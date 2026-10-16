@@ -43,6 +43,9 @@ def main():
     full.mkdir()
     manifest = {'retention': p['retention'], 'grid_points': p['grid_points'], 'cubes': [],
                 'reduction': {'program': 'cubehandler', 'method': 'slicing', 'low_precision': False}}
+    identity = request.get('orbital_identity')
+    if identity:
+        manifest['orbital_source'] = {key:value for key,value in identity.items() if key != 'levels'}
     with Path('plot.log').open('w') as log:
         def plot(commands, produced, target, metadata):
             subprocess.run([request['plot_executable'], 'aiida.gbw', '-i'], input='\n'.join(commands+['11','12'])+'\n',
@@ -54,8 +57,13 @@ def main():
             manifest['cubes'].append({**metadata, 'filename': target, 'full': inspect_cube(full/target)})
         grid = ['4', str(p['grid_points'])]
         for spin, index in p['orbitals']:
+            filename = (f'{identity["kind"].lower()}_{index:04d}.cube' if identity else
+                        f'orbital_{"ab"[spin]}_{index:04d}.cube')
+            metadata = {'kind':'orbital','spin':spin,'index':index}
+            if identity:
+                metadata.update(identity['levels'][index],orbital_type=identity['kind'])
             plot(grid+['2',str(index),'3',str(spin)], f'aiida.mo{index}{"ab"[spin]}.cube',
-                 f'orbital_{"ab"[spin]}_{index:04d}.cube', {'kind': 'orbital', 'spin': spin, 'index': index})
+                 filename, metadata)
         if p['spin_density']:
             plot(grid+['1','3','y'], 'aiida.spindens.cube', 'spin_density.cube', {'kind': 'spin_density'})
         subprocess.run([request['cubehandler_executable'], 'shrink',

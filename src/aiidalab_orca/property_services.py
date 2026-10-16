@@ -168,7 +168,8 @@ def submit_property(plan):
 
 def property_result(uuid):
     node=orm.load_node(uuid)
-    if node.process_type!=PROCESS_TYPE:
+    from aiida_empa_orca.orbital_inspection import CUBES_PROCESS
+    if node.process_type not in (PROCESS_TYPE,CUBES_PROCESS):
         raise ValueError('Select an orbital property workflow')
     data={'uuid':str(uuid),'state':node.process_state.value,'finished':node.is_terminated,
           'successful':node.is_finished_ok,'message':node.exit_message or '',

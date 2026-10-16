@@ -16,6 +16,8 @@ geometry (draft)** in Results:
 2. Select the active electron count **in the reference charge state** and the
    number of spatial orbitals. Review the displayed zero-based ORCA indices.
    The initial small values are illustrative and must be chosen for the molecule.
+   [Inspect QRO/UNO orbitals](orbital-inspection.md) to examine their shapes and
+   occupations; selected contiguous QRO windows can be transferred to the CASCI controls.
 3. Select charge, multiplicity and number of roots, review the generated input,
    and submit. Repeat for additional charge/spin sectors. Each is a separate
    WorkChain. A change of charge adjusts active electrons while preserving the
@@ -40,7 +42,7 @@ same final fixed geometry and common orbitals.
   requires these settings to be confirmed in ORCA output.
 - `empa_orca.electronic_storage`: supports explicit file bundles. Existing
   SCF/geometry callers retain their original GBW/density bundle. Common orbitals
-  preserve the QRO or restricted GBW; CASCI preserves its output GBW. The
+  preserve QRO and UNO files together, or the restricted GBW; CASCI preserves its output GBW. The
   threshold and stash directory are inherited from the SCF preservation policy.
 
 CASCI uses the electronic Hamiltonian in the prepared orbital basis; the DFT
@@ -103,8 +105,8 @@ from an isolated molecule.
 ## Current boundaries and next steps
 
 - One contiguous active-orbital window in the common reference ordering.
-  Arbitrary orbital selection/reordering and orbital inspection need the next
-  preparation component. Do not infer a physically appropriate active space
+  QRO/UNO inspection is available; arbitrary orbital selection/reordering needs
+  a further preparation component. Do not infer a physically appropriate active space
   from CAS(n,m) alone.
 - All-electron molecules through Kr; explicit or detected ECP electron-count
   changes are rejected pending core-electron accounting.

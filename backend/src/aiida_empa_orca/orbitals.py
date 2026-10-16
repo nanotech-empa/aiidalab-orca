@@ -56,6 +56,8 @@ class OrbitalCubesCalculation(engine.CalcJob):
         spec.input('source_folder', valid_type=orm.RemoteData, required=False)
         spec.input('electronic_manifest', valid_type=orm.Dict)
         spec.input('parameters', valid_type=orm.Dict)
+        spec.input('orbital_filename', valid_type=orm.Str, required=False)
+        spec.input('orbital_identity', valid_type=orm.Dict, required=False)
         spec.input('metadata.options.parser_name', default='empa_orca.orbital_cubes')
         spec.input('metadata.options.withmpi', default=False)
         spec.output('manifest', valid_type=orm.Dict)
@@ -71,19 +73,28 @@ class OrbitalCubesCalculation(engine.CalcJob):
             raise ValueError('Exactly one verified electronic source is required')
         info = common.CalcInfo()
         info.local_copy_list, info.remote_copy_list = [], []
+        name = self.inputs.orbital_filename.value if 'orbital_filename' in self.inputs else None
+        if name is not None and name not in ('aiida.qro','aiida.uno','aiida.gbw'):
+            raise ValueError('Select a recorded spatial-orbital filename')
+        names = [name] if name is not None else ELECTRONIC_FILES
+        target = lambda filename: 'aiida.gbw' if name is not None else filename
         if keys[0]=='source_repository':
             source = self.inputs.source_repository
-            info.local_copy_list = [(source.uuid,'electronic/'+name,name) for name in ELECTRONIC_FILES]
+            info.local_copy_list = [(source.uuid,'electronic/'+filename,target(filename)) for filename in names]
         else:
             source = self.inputs[keys[0]]
             if source.computer.uuid != computer.uuid:
                 raise ValueError('Remote electronic files must be on the computation computer')
             base = (PurePosixPath(source.target_basepath)/'electronic' if keys[0]=='source_stash'
                     else PurePosixPath(source.get_remote_path()))
-            info.remote_copy_list = [(computer.uuid,str(base/name),name) for name in ELECTRONIC_FILES]
+            info.remote_copy_list = [(computer.uuid,str(base/filename),target(filename)) for filename in names]
         request = {'parameters':p, 'files':self.inputs.electronic_manifest.get_dict()['files'],
                    'plot_executable':str(self.inputs.plot_code.filepath_executable),
                    'cubehandler_executable':str(self.inputs.cubehandler_code.filepath_executable)}
+        if name is not None:
+            selected = next(row for row in request['files'] if row['name'] == name)
+            request['files'] = [dict(selected,name='aiida.gbw',source_name=name)]
+            request['orbital_identity'] = self.inputs.orbital_identity.get_dict()
         with folder.open('request.json','w') as handle:
             json.dump(request, handle)
         with folder.open('plot_cubes.py','w') as handle:

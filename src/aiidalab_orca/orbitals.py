@@ -9,7 +9,35 @@ from aiidalab_widgets_empa.cube import CubeViewer
 from . import property_services as service
 
 
-class OrbitalProperties(ipw.VBox):
+class CubeDisplayMixin:
+    """Shared reduced-cube viewer, saved views and CalcJob rendering."""
+
+    def _show_cube(self,_=None):
+        if not self.process_uuid or not self.cube.value:
+            return
+        content=service.preview_content(self.process_uuid,self.cube.value)
+        if getattr(self,'render_panel',None):
+            self.render_panel.close()
+        if self._cube_view:
+            self._cube_view.close()
+        from .rendering import RenderPanel
+        self.render_panel=RenderPanel(self.process_uuid,self.cube.value)
+        self._cube_view=CubeViewer(periodic=False,on_render=self.render_panel.submit)
+        self._cube_view.set_content(content)
+        self.render_panel.bind_viewer(self._cube_view,self._restore_view)
+        self.cube_box.children=[self._cube_view]
+        encoded=base64.b64encode(content.encode()).decode()
+        self.download.value=f'<a download="{html.escape(self.cube.value)}" href="data:text/plain;base64,{encoded}">Download reduced cube</a><p>Blue/gold surfaces show positive/negative values. Orbital amplitudes and spin density use their respective atomic units; previews are for visual inspection.</p>'
+
+    def _restore_view(self,record):
+        self.cube.value=record['filename']
+        self._cube_view.apply_view_settings(record['visualization'])
+        self.render_panel.quality.value=record['quality']
+        self.render_panel.saved.refresh(selected=[record['id']])
+
+
+
+class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
     def __init__(self, data, energy_view):
         self.source_uuid=str(data['uuid'])
         self.symbols, self.positions=data['symbols'],data['positions']
@@ -200,29 +228,6 @@ class OrbitalProperties(ipw.VBox):
             self._show_cube()
             self._displayed_uuid=self.process_uuid
         return data['finished']
-
-    def _show_cube(self,_=None):
-        if not self.process_uuid or not self.cube.value:
-            return
-        content=service.preview_content(self.process_uuid,self.cube.value)
-        if getattr(self,'render_panel',None):
-            self.render_panel.close()
-        if self._cube_view:
-            self._cube_view.close()
-        from .rendering import RenderPanel
-        self.render_panel=RenderPanel(self.process_uuid,self.cube.value)
-        self._cube_view=CubeViewer(periodic=False,on_render=self.render_panel.submit)
-        self._cube_view.set_content(content)
-        self.render_panel.bind_viewer(self._cube_view,self._restore_view)
-        self.cube_box.children=[self._cube_view]
-        encoded=base64.b64encode(content.encode()).decode()
-        self.download.value=f'<a download="{html.escape(self.cube.value)}" href="data:text/plain;base64,{encoded}">Download reduced cube</a><p>Blue/gold surfaces show positive/negative values. Orbital amplitudes and spin density use their respective atomic units; previews are for visual inspection.</p>'
-
-    def _restore_view(self,record):
-        self.cube.value=record['filename']
-        self._cube_view.apply_view_settings(record['visualization'])
-        self.render_panel.quality.value=record['quality']
-        self.render_panel.saved.refresh(selected=[record['id']])
 
     def close(self):
         if self._poll_task:

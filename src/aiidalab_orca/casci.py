@@ -16,6 +16,7 @@ class CasciStates(ipw.VBox):
         self.plan = None
         self._poll_task = None
         self._diagram = None
+        self._inspection = None
         self._running = False
         self._runs = {}
         s = data['settings']
@@ -26,6 +27,10 @@ class CasciStates(ipw.VBox):
         self.common_submit = ipw.Button(description='Prepare common orbitals', icon='play', button_style='success', disabled=True,
                                         layout=ipw.Layout(width='auto'))
         self.common_submit.on_click(self._submit_common)
+        self.common_force = ipw.Checkbox(value=False,description='Prepare a new common-orbital reference',layout=ipw.Layout(width='auto'))
+        common_options = ipw.Accordion(children=[ipw.VBox([self.common_force,ipw.HTML(
+            '<p>Regenerate from the saved SCF wavefunction without SCF iterations. Existing CASCI states remain linked to their original reference.</p>')])],selected_index=None)
+        common_options.set_title(0,'Common-orbital regeneration')
         self.reference = ipw.Dropdown(description='Common orbitals',style=style,layout=wide)
         self.reference.observe(self._reference_changed,names='value')
         self.refresh = ipw.Button(description='Refresh states',icon='refresh',layout=ipw.Layout(width='auto'))
@@ -60,15 +65,18 @@ class CasciStates(ipw.VBox):
         self.previous = ipw.Dropdown(description='CASCI calculations',style=style,layout=wide)
         self.previous.observe(self._open_previous,names='value')
         self.diagram_box = ipw.VBox()
+        self.inspection_box = ipw.Accordion(children=[ipw.HTML("Select common orbitals to inspect.")],selected_index=None)
+        self.inspection_box.set_title(0,"Inspect QRO / UNO orbitals")
+        self.inspection_box.observe(self._open_inspection,names="selected_index")
         super().__init__([ipw.HTML('<p>Compute many-electron states at this fixed geometry. Prepare one shared spatial-orbital reference, '
             'then add charge/spin sectors independently. Existing compatible results are reused.</p>'),
-            self.prepare,self.common_submit,ipw.HBox([self.reference,self.refresh],layout=ipw.Layout(flex_flow='row wrap')),
+            self.prepare,self.common_submit,common_options,ipw.HBox([self.reference,self.refresh],layout=ipw.Layout(flex_flow='row wrap')),
             ipw.HTML('<p><b>Choose the active space explicitly.</b> The small initial values are a starting example, not a validated '
             'choice for your molecule. The same spatial orbitals are used for N and N±1; their active electron counts adjust with charge.</p>'),
             ipw.HBox([self.electrons,self.norb],layout=ipw.Layout(flex_flow='row wrap')),self.space_info,
-            self.charge,self.mult,self.roots,advanced,self.review,self.message,self.submit,self.previous,self.status,self.diagram_box])
+            self.inspection_box,self.charge,self.mult,self.roots,advanced,self.review,self.message,self.submit,self.previous,self.status,self.diagram_box])
         for control in (self.electrons,self.norb,self.charge,self.mult,self.roots,self.aux,self.threshold,
-                        self.nprocs,self.memory,self.walltime,self.force):
+                        self.nprocs,self.memory,self.walltime,self.force,self.common_force):
             control.observe(self._invalidate,names='value')
         self.electrons.observe(self._refresh_diagram,names='value')
         self.norb.observe(self._refresh_diagram,names='value')
@@ -93,6 +101,8 @@ class CasciStates(ipw.VBox):
             count = self.electrons.value-self.charge.value+ref['charge']
             self.space_info.value = (f'<p>ORCA orbital indices <b>{start}–{start+self.norb.value-1}</b> (start at 0). '
                 f'This charge sector: <b>CAS({count},{self.norb.value})</b>. Orbitals are held fixed; orbital reordering is not yet available.</p>')
+            if self._inspection:
+                self._inspection.set_active_indices(list(range(start,start+self.norb.value)))
         except Exception as exc:
             self.space_info.value = '<p>'+html.escape(str(exc))+'</p>'
 
@@ -103,9 +113,34 @@ class CasciStates(ipw.VBox):
             self.mult.value = 1 if count%2==0 else 2
 
     def _reference_changed(self, _=None):
+        if self._inspection:
+            self._inspection.close()
+            self._inspection = None
+            self.inspection_box.children = (ipw.HTML("Open orbital inspection to read this reference."),)
         self._invalidate()
         self._refresh_runs()
         self._refresh_diagram()
+        if self.inspection_box.selected_index == 0:
+            self._open_inspection()
+
+    def _open_inspection(self, _=None):
+        if self.inspection_box.selected_index == 0 and self.reference.value and not self._inspection:
+            from .inspection import OrbitalInspection
+            ref = service.reference_data(self.reference.value)
+            start = (ref["n_electrons"]-self.electrons.value)//2
+            self._inspection = OrbitalInspection(self.reference.value,active_indices=range(start,start+self.norb.value),
+                                                apply_window=self._apply_orbital_window)
+            self.inspection_box.children = (self._inspection,)
+
+    def _apply_orbital_window(self, indices):
+        from aiida_empa_orca.casci import active_space
+        ref = service.reference_data(self.reference.value)
+        nel = ref["n_electrons"]-2*indices[0]
+        if not self.electrons.min <= nel <= self.electrons.max or len(indices) > self.norb.max:
+            raise ValueError("The selected window exceeds the active-space controls; choose a smaller window")
+        space = active_space({"electrons":nel,"orbitals":indices},ref)
+        self.electrons.value = space["electrons"]
+        self.norb.value = len(indices)
 
     def _refresh(self, _=None):
         previous = self.reference.value
@@ -161,7 +196,7 @@ class CasciStates(ipw.VBox):
     def _review_common(self, _=None):
         self._invalidate()
         try:
-            self.plan = service.prepare_common(self.source_uuid)
+            self.plan = service.prepare_common(self.source_uuid,self.common_force.value)
             text = ('Reuse preserved common orbitals.' if self.plan['action']=='reuse' else
                     'Read the saved SCF orbitals without SCF iterations; prepare '+self.plan['kind']+' spatial orbitals and preserve them using the SCF wavefunction storage policy.')
             if self.plan['unavailable']:
@@ -217,6 +252,9 @@ class CasciStates(ipw.VBox):
                 if data['finished']:
                     self._running = False
                     self._refresh()
+                    if data['success'] and data.get('process_type') == 'aiida.workflows:empa_orca.common_orbitals':
+                        self.reference.value = self.process_uuid
+                        self.common_force.value = False
                     if not data['success']:
                         self._error(data['message']+' '+ '; '.join(data['reports']))
                     return

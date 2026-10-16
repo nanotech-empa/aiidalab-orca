@@ -128,9 +128,10 @@ and appear in the cube manifest.
 
 The shared EMPA viewer supports 3D isosurfaces, isolated-boundary 2D slices,
 saved visualizations and submitted preview/full-resolution rendering jobs.
-These are **spectral intensity cubes**, not yet quantitative STM maps: vacuum
-decay, tip orbitals, height origin and the agreed tunnelling model remain a
-subsequent component. Spatial coordinates and cube amplitudes retain their
+These are **spectral intensity cubes**, not quantitative STM currents. The
+separate [constant-height map component](maps.md) now adds explicit planes,
+meqpy-style vacuum propagation, numerical-map storage and shared-scale figures.
+Spatial coordinates and cube amplitudes retain their
 atomic-unit conventions; reduced previews are for inspection, not integration.
 
 ## Deployment and boundaries

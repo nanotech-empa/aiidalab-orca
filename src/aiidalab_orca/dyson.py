@@ -19,6 +19,8 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.process_uuid,self._cube_view,self.render_panel = None,None,None
         self._job_uuid,self._job_kind,self._poll_task = None,None,None
         self.spectrum = None
+        self.map_panel = None
+        self.map_box = ipw.Accordion(children=[],selected_index=None)
         choices = service.codes(self.common_uuid)
         style,wide = {'description_width':'155px'},ipw.Layout(width='95%')
         self.initial = ipw.Dropdown(description='Initial CASCI state',style=style,layout=wide,
@@ -65,7 +67,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.download,self.cube_box = ipw.HTML(),ipw.VBox()
         self.cube_controls = ipw.Accordion(children=[ipw.VBox([ipw.HTML('<p>Generate only the requested Dyson amplitudes and optional incoherent intensity blend. Full cubes pass through cubehandler before previews are retrieved. Blends are spectral intensities, without an STM tip or vacuum-decay model.</p>'),
             self.cube_states,self.blend,self.grid,self.retention,self.stash,self.cube_review,self.cube_message,self.cube_submit,
-            self.cube_previous,self.cube,self.download,self.cube_box])],selected_index=None)
+            self.cube_previous,self.cube,self.download,self.cube_box,self.map_box])],selected_index=None)
         self.cube_controls.set_title(0,'Dyson orbitals and spectral intensity blends')
         self.cube_controls.layout.display = 'none'
         super().__init__([ipw.HTML('<p>Select an initial many-electron state and compatible N±1 final states at this fixed geometry. '
@@ -92,6 +94,10 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             close_widget_tree(self.spectrum)
             self.spectrum = None
         self.record = None
+        if self.map_panel:
+            self.map_panel.close()
+            self.map_panel = None
+        self.map_box.children = ()
         self.spectrum_box.children = ()
         self.cube_controls.layout.display = 'none'
         initial = next(r for r in self.state_rows if (r['state_uuid'],r['root']) == self.initial.value)
@@ -112,6 +118,9 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
     def _invalidate_cubes(self,_=None):
         self.cube_plan,self.cube_submit.disabled = None,True
         self.cube_message.value = ''
+        if self.map_panel:
+            self.map_panel.code_uuid = self.dyson_code.value
+            self.map_panel.invalidate()
 
     def _error(self,exc,cubes=False):
         (self.cube_message if cubes else self.message).value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
@@ -194,6 +203,10 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             self._error(data['message'])
             return
         self.record = service.result(uuid)
+        if self.map_panel:
+            self.map_panel.close()
+            self.map_panel = None
+        self.map_box.children = ()
         if self.spectrum:
             from .app import close_widget_tree
             close_widget_tree(self.spectrum)
@@ -260,6 +273,20 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             self._start(change['new'],'cubes')
         else:
             self._error(data['message'],True)
+
+    def _show_cube(self,_=None):
+        super()._show_cube()
+        if not self.process_uuid or not self._cube_view or not self.spectrum:
+            return
+        from .maps import DysonMaps
+        if self.map_panel and self.map_panel.cube_uuid == self.process_uuid:
+            self.map_panel.bind_viewer(self._cube_view)
+        else:
+            if self.map_panel:
+                self.map_panel.close()
+            self.map_panel = DysonMaps(self.process_uuid,self._cube_view,self.spectrum,self.dyson_code.value)
+            self.map_box.children = (self.map_panel,)
+            self.map_box.set_title(0,'STM-like constant-height maps (draft)')
 
     def close(self):
         if getattr(self,'_disposed',False):

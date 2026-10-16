@@ -174,3 +174,18 @@ def test_historical_dyson_uses_original_state_sectors_after_a_casci_rerun(aiida_
     assert not any(r['state_uuid']=='new-casci' for r in rows)
     assert any(r['state_uuid']=='quartet' for r in rows)
     assert state_endpoints(rows,table)[1]['rem'] == str(original.uuid)+':0'
+
+
+def test_branch_filter_keeps_a_visible_selection_and_connection():
+    states, table = example()
+    widget = SpectralViewer(table, states=states)
+    try:
+        widget._action(dict(action='select',ids=['rem1']))
+        widget.side.value = 'addition'
+        assert widget.selected.value == ('add0',)
+        assert 'data-transition-id="add0"' in widget.diagram.plot.value
+        widget.side.value = 'removal'
+        assert widget.selected.value == ('rem1',)
+        assert 'data-transition-id="rem1"' in widget.diagram.plot.value
+    finally:
+        widget.close()

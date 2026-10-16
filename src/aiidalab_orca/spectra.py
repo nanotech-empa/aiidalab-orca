@@ -158,6 +158,14 @@ class SpectralViewer(ipw.VBox):
     def _update(self,_=None):
         if not self._ready:
             return
+        if isinstance(_,dict) and _.get('owner') is self.side and self.side.value != 'both':
+            rows = [r for r in weighted_table(self.table,self.spin.value)['transitions'] if r['side'] == self.side.value]
+            if rows:
+                selected = tuple(r['id'] for r in rows if r['id'] in self.selected.value)
+                selected = selected or (max(rows,key=lambda r:r['strength'])['id'],)
+                if selected != self.selected.value:
+                    self.selected.value = selected
+                    return
         for control in (self.lower,self.upper,self.shift,self.energy,self.window_lower,self.window_upper):
             if np.isfinite(control.value) and control.value != round(control.value,2):
                 control.value = round(control.value,2)

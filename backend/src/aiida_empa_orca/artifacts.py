@@ -66,10 +66,14 @@ def repository_files(folder, manifest):
             raise ValueError('Stored wavefunction integrity check failed: '+item['name'])
 
 
-def stored_location(node):
+def stored_location(node, names=None):
     if not node.is_finished_ok or 'manifest' not in node.outputs:
         raise ValueError('Electronic storage did not complete')
     manifest = node.outputs.manifest.get_dict()
+    if names is not None:
+        if not set(names).issubset({item['name'] for item in manifest['files']}):
+            raise ValueError('This preservation record does not contain the requested files')
+        manifest['files'] = [item for item in manifest['files'] if item['name'] in names]
     if manifest['storage'] == 'repository':
         repository_files(node.outputs.retrieved, manifest)
         return {'kind': 'repository', 'uuid': str(node.outputs.retrieved.uuid), 'files': manifest['files'],
@@ -97,7 +101,7 @@ def resolve_electronic(remote, names=ELECTRONIC_FILES):
     unavailable = None
     for uuid in storage_nodes(remote):
         try:
-            location = stored_location(orm.load_node(uuid))
+            location = stored_location(orm.load_node(uuid),names=names)
             if set(names).issubset({item['name'] for item in location['files']}):
                 return location
         except ArtifactUnavailable as exc:

@@ -24,10 +24,10 @@ def reference_runs(source_uuid):
     return choices
 
 
-def prepare_common(source_uuid):
+def prepare_common(source_uuid, force=False):
     source = source_node(source_uuid)
     unavailable = []
-    for row in reference_runs(source_uuid):
+    for row in ([] if force else reference_runs(source_uuid)):
         try:
             common_orbitals.reference_location(orm.load_node(row['uuid']))
             return {'source_uuid':source_uuid, 'action':'reuse', 'reference_uuid':row['uuid'], 'unavailable':unavailable}
@@ -37,16 +37,17 @@ def prepare_common(source_uuid):
     s = reference_settings(source.inputs.settings.get_dict())
     return {'source_uuid':source_uuid, 'action':'prepare', 'reference_uuid':None,
             'kind':'QRO' if common_orbitals.orbital_filename(s).endswith('qro') else 'restricted',
-            'unavailable':unavailable}
+            'force_recompute':bool(force), 'unavailable':unavailable}
 
 
-def common_builder(source_uuid):
+def common_builder(source_uuid, force=False):
     source = source_node(source_uuid)
     b = common_orbitals.CommonOrbitalsWorkChain.get_builder()
     b.structure, b.settings, b.code = source.outputs.structure, source.inputs.settings, source.inputs.code
     b.source_retrieved, b.source_remote = source.outputs.retrieved, source_remote(source)
     b.storage_code = orm.load_code(helper_code(source.inputs.code.computer.uuid))
     b.storage_policy = orm.Dict(dict=wavefunction_status(source_uuid)['policy'])
+    b.force_recompute = orm.Bool(force)
     b.metadata.label = source.outputs.structure.get_formula()+' common spatial orbitals'
     return b
 
@@ -55,7 +56,7 @@ def submit_common(plan):
     if plan['action'] == 'reuse':
         common_orbitals.reference_location(orm.load_node(plan['reference_uuid']))
         return plan['reference_uuid']
-    return str(submit(common_builder(plan['source_uuid'])).uuid)
+    return str(submit(common_builder(plan['source_uuid'],plan.get('force_recompute',False))).uuid)
 
 
 def reference_data(uuid):
@@ -114,7 +115,7 @@ def submit_casci(plan):
 def progress(uuid):
     node = orm.load_node(uuid)
     return {'uuid':str(uuid), 'finished':node.is_terminated, 'success':node.is_finished_ok,
-            'state':node.process_state.value, 'message':node.exit_message or '',
+            'state':node.process_state.value, 'process_type':node.process_type, 'message':node.exit_message or '',
             'reports':[entry.message for entry in orm.Log.collection.get_logs_for(node)]}
 
 

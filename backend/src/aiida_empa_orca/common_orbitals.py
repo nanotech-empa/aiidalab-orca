@@ -244,7 +244,8 @@ class CommonOrbitalsWorkChain(engine.WorkChain):
         node = self.ctx.preparation
         filename = node.outputs.orbital_reference.get_dict()['filename']
         b = storage_builder(node.outputs.remote_folder, self.inputs.storage_code,
-                            self.inputs.storage_policy.get_dict(), names=[filename])
+                            self.inputs.storage_policy.get_dict(),
+                            names=[filename,'aiida.uno'] if filename.endswith('qro') else [filename])
         return engine.ToContext(storage=self.submit(b))
 
     def inspect_storage(self):

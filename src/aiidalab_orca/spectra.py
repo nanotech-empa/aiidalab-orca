@@ -89,11 +89,12 @@ class SpectralViewer(ipw.VBox):
         self.plot.value = ''.join(parts)
         self.info.value = ('<p><span style="color:#2c7be5">● Removal</span> · <span style="color:#f06431">● Addition</span>. '
             'η is half-width at half-maximum; FWHM = 2η. Curves use Andrés’s convention: integrated peak area = π × weight. '
+            'Unpolarized weights include the Clebsch–Gordan spin-multiplet factors relative to the stored highest-M_S component. '
             'Only the computed final states contribute.</p>')
         rows = []
         for raw,row in zip(self.table['transitions'],table['transitions']):
-            rows.append(f'<tr><td>{html.escape(row["id"])}</td><td>{row["side"]}</td><td>{row["final_charge"]:+d}</td><td>{row["final_multiplicity"]}</td><td>{row["final_root"]}</td><td>{row["energy_ev"]+self.shift.value:.3f}</td><td>{raw["strength"]:.5f}</td><td>{row["strength"]:.5f}</td><td>{row["final_ci_norm"]:.8f}</td></tr>')
-        self.transition_table.value = '<details><summary>Transition energies, strengths and CI norms</summary><table><tr><th>ID</th><th>Branch</th><th>Charge</th><th>Mult.</th><th>Root</th><th>Energy (eV)</th><th>Component strength</th><th>Selected weight</th><th>Retained CI norm</th></tr>'+''.join(rows)+'</table></details>'
+            rows.append(f'<tr><td>{html.escape(row["id"])}</td><td>{row["side"]}</td><td>{row["final_charge"]:+d}</td><td>{row["final_multiplicity"]}</td><td>{row["final_root"]}</td><td>{row["energy_ev"]+self.shift.value:.3f}</td><td>{raw["strength"]:.5f}</td><td>{row["spin_factor"]:.5g}</td><td>{row["strength"]:.5f}</td><td>{row["final_ci_norm"]:.8f}</td></tr>')
+        self.transition_table.value = '<details><summary>Transition energies, strengths and CI norms</summary><table><tr><th>ID</th><th>Branch</th><th>Charge</th><th>Mult.</th><th>Root</th><th>Energy (eV)</th><th>Component strength</th><th>Spin factor</th><th>Selected weight</th><th>Retained CI norm</th></tr>'+''.join(rows)+'</table></details>'
         buffer = io.StringIO()
         writer = csv.writer(buffer)
         writer.writerow(['energy_ev','removal','addition','total'])

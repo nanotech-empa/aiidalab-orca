@@ -38,7 +38,7 @@ The spectrum offers two conventions without repeating any electronic calculation
 - **Unpolarized, spin summed**: average over equally populated initial spin
   projections and sum over final projections and tunnelling-electron spin.
 
-For spin-pure states without SOC, the Wigner–Eckart spin-1/2 relation gives the
+For spin-pure states without SOC, the Wigner–Eckart/Clebsch–Gordan spin-1/2 relation gives the
 factor below relative to the stored highest-projection component. It applies to
 addition and removal. The automated tests independently sum explicit Fock-space
 matrix elements over spin-lowered multiplets, including singlet/doublet and
@@ -51,6 +51,12 @@ doublet/singlet/triplet cases.
 | 2 | 3 | 3/2 |
 | m | m−1 | 1 |
 | m | m+1 | (m+1)/m |
+
+The raw amplitudes already contain the Clebsch–Gordan coefficient of the chosen
+component. The conversion accounts for the other projections; it must not
+apply that coefficient twice or simply multiply by the final multiplicity.
+The transition table and JSON export show the component strength, conversion
+factor and selected weight separately, with explicit normalization conventions.
 
 This is not a model of spin-polarized tunnelling, non-equilibrium spin
 populations, spin–orbit mixing, or higher-order/inelastic tunnelling processes.
@@ -161,7 +167,7 @@ reference data remains the scientific benchmark.
 
 The test environment is Python 3.12.11, AiiDA 2.9.2, AiiDAlab 26.9.0,
 ORCA 6.1.1 ARM64, PySCF 2.14.0 and the upstream commit above. The combined
-suite has 147 passing tests. These include independent spin-multiplet sums,
+suite has 149 passing tests. These include independent spin-multiplet sums,
 the fully occupied active-orbital case, rejection of duplicate final sectors,
 energy signs, HWHM/area and energy-window integrals, CI diagnostics,
 provenance-based reuse with caching enabled/disabled, and missing-source

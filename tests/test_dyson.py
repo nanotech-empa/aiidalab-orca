@@ -77,6 +77,12 @@ def test_intensity_blend_uses_amplitudes_without_an_extra_strength():
     raw = deepcopy(table())
     weighted = weighted_table(raw)
     assert weighted['transitions'][1]['strength'] == pytest.approx(.6)
+    assert weighted['transitions'][1]['component_strength'] == .4
+    assert weighted['transitions'][1]['spin_factor'] == 1.5
+    assert weighted['strength_convention'] == 'unpolarized'
+    assert weighted['source_strength_convention'] == 'highest_ms_component'
+    assert weighted_table(weighted)['transitions'][1]['strength'] == pytest.approx(.6)
+    assert weighted_table(weighted,'highest_ms_component')['transitions'][1]['strength'] == .4
     assert raw['transitions'][1]['strength'] == .4
 
 
@@ -117,6 +123,8 @@ def vector(text):
     ({'2u':1.},2,{'uu':1.},3,False),
     ({'2u':1.},2,{'ud':2**-.5,'du':-2**-.5},1,False),
     ({'uu':1.},3,{'u0':1.},2,False),
+    ({'uu0':1.},3,{'uuu':1.},4,True),
+    ({'2uu':1.},3,{'uuu':1.},4,False),
 ])
 def test_spin_factor_matches_explicit_sum_over_all_spin_projections(initial,mi,final,mf,create):
     iv,fv = ({vector(k):v for k,v in values.items()} for values in (initial,final))

@@ -90,9 +90,15 @@ def spin_factor(initial_mult,final_mult,convention='unpolarized'):
 
 
 def weighted_table(table,convention='unpolarized'):
-    return dict(table,display_spin_convention=convention,transitions=[dict(row,
-        strength=row['strength']*spin_factor(table['initial_state']['multiplicity'],row['final_multiplicity'],convention))
-        for row in table['transitions']])
+    transitions = []
+    for row in table['transitions']:
+        factor = spin_factor(table['initial_state']['multiplicity'],row['final_multiplicity'],convention)
+        component = row.get('component_strength',row['strength'])
+        transitions.append(dict(row,component_strength=component,spin_factor=factor,
+                                strength=component*factor))
+    return dict(table,display_spin_convention=convention,strength_convention=convention,
+                source_strength_convention=table.get('source_strength_convention',table.get('strength_convention','highest_ms_component')),
+                transitions=transitions)
 
 
 def blend_options(values):

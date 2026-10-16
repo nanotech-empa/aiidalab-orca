@@ -14,10 +14,18 @@ dependencies = [
   "PyYAML",
 ]
 
+[project.optional-dependencies]
+# Reviewed upstream API used by the remote Dyson executable.
+dyson = ["dyson-orca-tools[cube] @ git+https://github.com/AndresOrtegaGuerrero/dyson-orca-tools.git@96658a681815faf1cf260bcb26fe712ca7715103"]
+
 [project.scripts]
+orca-dyson = "aiida_empa_orca.dyson_tools:main"
 orca-tools = "aiida_empa_orca.tools:main"
 
 [project.entry-points."aiida.calculations"]
+"empa_orca.dyson_export" = "aiida_empa_orca.dyson:StateExportCalculation"
+"empa_orca.dyson" = "aiida_empa_orca.dyson:DysonCalculation"
+"empa_orca.dyson_cubes" = "aiida_empa_orca.dyson:DysonCubesCalculation"
 "empa_orca.orbital_catalog" = "aiida_empa_orca.orbital_inspection:OrbitalCatalogCalculation"
 "empa_orca.casci" = "aiida_empa_orca.casci:CasciCalculation"
 "empa_orca.common_orbitals" = "aiida_empa_orca.common_orbitals:CommonOrbitalsCalculation"
@@ -28,6 +36,9 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.calculation:SinglePointCalculation"
 
 [project.entry-points."aiida.parsers"]
+"empa_orca.dyson_cubes" = "aiida_empa_orca.dyson:DysonCubesParser"
+"empa_orca.dyson_export" = "aiida_empa_orca.dyson:StateExportParser"
+"empa_orca.dyson" = "aiida_empa_orca.dyson:DysonParser"
 "empa_orca.orbital_catalog" = "aiida_empa_orca.orbital_inspection:OrbitalCatalogParser"
 "empa_orca.casci" = "aiida_empa_orca.casci:CasciParser"
 "empa_orca.common_orbitals" = "aiida_empa_orca.common_orbitals:CommonOrbitalsParser"
@@ -38,6 +49,9 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.parser:SinglePointParser"
 
 [project.entry-points."aiida.workflows"]
+"empa_orca.dyson_export" = "aiida_empa_orca.dyson:StateExportWorkChain"
+"empa_orca.dyson" = "aiida_empa_orca.dyson:DysonWorkChain"
+"empa_orca.dyson_cubes" = "aiida_empa_orca.dyson:DysonCubesWorkChain"
 "empa_orca.orbital_catalog" = "aiida_empa_orca.orbital_inspection:OrbitalCatalogWorkChain"
 "empa_orca.common_orbital_cubes" = "aiida_empa_orca.orbital_inspection:CommonOrbitalCubesWorkChain"
 "empa_orca.casci" = "aiida_empa_orca.casci:CasciWorkChain"

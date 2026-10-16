@@ -17,6 +17,9 @@ class CasciStates(ipw.VBox):
         self._poll_task = None
         self._diagram = None
         self._inspection = None
+        self._dyson = None
+        self._dyson_key = None
+        self._datasets = []
         self._running = False
         self._runs = {}
         s = data['settings']
@@ -68,13 +71,16 @@ class CasciStates(ipw.VBox):
         self.inspection_box = ipw.Accordion(children=[ipw.HTML("Select common orbitals to inspect.")],selected_index=None)
         self.inspection_box.set_title(0,"Inspect QRO / UNO orbitals")
         self.inspection_box.observe(self._open_inspection,names="selected_index")
+        self.dyson_box = ipw.Accordion(children=[ipw.HTML('Compute compatible CASCI states to prepare Dyson transitions.')],selected_index=None)
+        self.dyson_box.set_title(0,'Dyson orbitals and spectral functions')
+        self.dyson_box.observe(self._open_dyson,names='selected_index')
         super().__init__([ipw.HTML('<p>Compute many-electron states at this fixed geometry. Prepare one shared spatial-orbital reference, '
             'then add charge/spin sectors independently. Existing compatible results are reused.</p>'),
             self.prepare,self.common_submit,common_options,ipw.HBox([self.reference,self.refresh],layout=ipw.Layout(flex_flow='row wrap')),
             ipw.HTML('<p><b>Choose the active space explicitly.</b> The small initial values are a starting example, not a validated '
             'choice for your molecule. The same spatial orbitals are used for N and N±1; their active electron counts adjust with charge.</p>'),
             ipw.HBox([self.electrons,self.norb],layout=ipw.Layout(flex_flow='row wrap')),self.space_info,
-            self.inspection_box,self.charge,self.mult,self.roots,advanced,self.review,self.message,self.submit,self.previous,self.status,self.diagram_box])
+            self.inspection_box,self.charge,self.mult,self.roots,advanced,self.review,self.message,self.submit,self.previous,self.status,self.diagram_box,self.dyson_box])
         for control in (self.electrons,self.norb,self.charge,self.mult,self.roots,self.aux,self.threshold,
                         self.nprocs,self.memory,self.walltime,self.force,self.common_force):
             control.observe(self._invalidate,names='value')
@@ -131,6 +137,18 @@ class CasciStates(ipw.VBox):
             self._inspection = OrbitalInspection(self.reference.value,active_indices=range(start,start+self.norb.value),
                                                 apply_window=self._apply_orbital_window)
             self.inspection_box.children = (self._inspection,)
+
+    def _open_dyson(self,_=None):
+        key = (self.reference.value,tuple(sorted(data['workflow_uuid'] for data in self._datasets)))
+        if self._dyson_key != key:
+            if self._dyson:
+                self._dyson.close()
+            self._dyson,self._dyson_key = None,key
+            self.dyson_box.children = (ipw.HTML('Compute compatible CASCI states to prepare Dyson transitions.'),)
+        if self.dyson_box.selected_index == 0 and self._datasets and not self._dyson:
+            from .dyson import DysonStates
+            self._dyson = DysonStates(self.reference.value,self._datasets)
+            self.dyson_box.children = (self._dyson,)
 
     def _apply_orbital_window(self, indices):
         from aiida_empa_orca.casci import active_space
@@ -271,9 +289,13 @@ class CasciStates(ipw.VBox):
             self._diagram = None
         self.diagram_box.children = ()
         if not self.reference.value:
+            self._datasets = []
+            self._open_dyson()
             return
         try:
             datasets = service.results(self.reference.value,self.electrons.value,self.norb.value,self.aux.value.strip())
+            self._datasets = datasets
+            self._open_dyson()
             if datasets:
                 self._diagram = StateEnergyLevels(datasets)
                 self.diagram_box.children = (self._diagram,)

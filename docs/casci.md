@@ -116,9 +116,9 @@ from an isolated molecule.
 - Exact request reuse; extending the root count runs a new calculation for
   that sector. There is no monolithic all-charge workflow.
 - Local ORCA 6.1.1 integration is tested; tigu deployment remains separate.
-- No CASSCF orbital optimization, Dyson overlap evaluation, `orca_2json`
-  export, natural-orbital analysis, spectral broadening, or map blending yet.
-  Existing orbitals/cube/rendering features remain separate.
+- [Dyson transitions, wavefunction export, spectra and intensity blends](dyson.md)
+  are now separate components. CASSCF orbital optimization, correlated-state
+  natural-orbital analysis and the quantitative STM map model remain future work.
 
 The input follows the fixed-orbital CASCI strategy in Andrés's supplied
 `setup_dyson.sh`, with explicit provenance and storage. See the

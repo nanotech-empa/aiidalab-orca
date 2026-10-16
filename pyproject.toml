@@ -11,6 +11,7 @@ dependencies = [
   "aiida-empa-orca==0.1.0",
   "aiidalab>=26.9.0",
   "ipywidgets>=8,<9",
+  "anywidget",
   "nglview>=3",
   "matplotlib",
   # Rendering CLI and image options, absent from cubehandler 0.2.1 (PR #14).
@@ -25,6 +26,9 @@ Home = "https://github.com/nanotech-empa/aiidalab-orca"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+aiidalab_orca = ["static/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

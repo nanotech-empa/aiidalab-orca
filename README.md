@@ -32,6 +32,9 @@ Constant-height Dyson maps now have a separate draft component: full-resolution
 amplitude sampling, explicit source/observation planes, meqpy-style vacuum
 propagation, stored numerical maps and submitted PNG/PDF rendering. Combined
 panels share an explicit intensity scale. See [the map guide](docs/maps.md).
+The [linked transition explorer](docs/transition-explorer.md) connects clickable
+spectral regions to exact state endpoints, Dyson weights, CG multiplet factors
+and available orbital previews.
 
 ## 1. Starting requirements
 

@@ -4,4 +4,4 @@ Compute a single-point SCF energy at fixed coordinates, optimize a molecular geo
 
 **[Search calculations](./search.ipynb)**
 
-Local HF/DFT prototype. Orbital and density cubes, spectroscopy and Dyson maps are planned next.
+Local prototype with HF/DFT, orbital and spin-density cubes, QRO/UNO inspection and fixed-geometry CASCI states. Dyson spectra and maps are the next scientific milestone.

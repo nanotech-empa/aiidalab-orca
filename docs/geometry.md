@@ -60,6 +60,12 @@ plugin, and the required ORCA/Open MPI environment. Use `core.local` transport,
 `core.direct` scheduling, and `with_mpi=False`: ORCA launches its own MPI workers
 from `%pal`. This milestone deliberately supports local execution only.
 
+For a source-built Open MPI, enable Fortran support even though ORCA is
+distributed as an executable. ORCA uses MPI numeric-type lookups that can fail
+when MPI was built with `--disable-mpi-fortran`. A small HF calculation alone
+does not exercise every startup path. Follow the
+[local MPI installation checks](local-orca-mpi.md) before reusing the runtime.
+
 After installing new entry points, refresh the AiiDA daemon at a suitable point
 after checking existing work. Deploy this checkout as `~/apps/orca` (a symlink is
 fine), then open `orca.ipynb` in AiiDAlab app mode. On the development instance:

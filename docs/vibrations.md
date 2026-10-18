@@ -57,10 +57,10 @@ The spectra, mode controls, atom-participation display and WEAS animation reuse
 including [PR 189](https://github.com/aiidalab/aiidalab-qe-vibroscopy/pull/189).
 The dependency is pinned to the tested PR head because these internal widget
 interfaces and atom-participation controls are not yet a released shared API.
-This draft also declares the QE app dependency that provides their MVC model;
-it does not submit any QE calculations.
-No changes to the QE repository are required by this adapter. Extracting a
-backend-independent shared widget remains a useful later cleanup.
+The companion update in PR 189 makes the optical model independent of the QE
+host and loads the QE property entry point lazily. ORCA therefore reuses the
+actual widget without requiring the QE app or its calculation plugins. A
+backend-independent shared API remains a useful later cleanup.
 
 The molecular adapter uses ORCA's arrays directly. It creates no phonopy cell,
 Born-charge model or periodic nonanalytical correction. Controls provide IR and

@@ -18,6 +18,8 @@ dependencies = [
 orca-tools = "aiida_empa_orca.tools:main"
 
 [project.entry-points."aiida.calculations"]
+"empa_orca.casci" = "aiida_empa_orca.casci:CasciCalculation"
+"empa_orca.common_orbitals" = "aiida_empa_orca.common_orbitals:CommonOrbitalsCalculation"
 "empa_orca.cube_render" = "aiida_empa_orca.rendering:CubeRenderCalculation"
 "empa_orca.electronic_storage" = "aiida_empa_orca.artifacts:ElectronicStorageCalculation"
 "empa_orca.orbital_cubes" = "aiida_empa_orca.orbitals:OrbitalCubesCalculation"
@@ -25,6 +27,8 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.calculation:SinglePointCalculation"
 
 [project.entry-points."aiida.parsers"]
+"empa_orca.casci" = "aiida_empa_orca.casci:CasciParser"
+"empa_orca.common_orbitals" = "aiida_empa_orca.common_orbitals:CommonOrbitalsParser"
 "empa_orca.cube_render" = "aiida_empa_orca.rendering:CubeRenderParser"
 "empa_orca.electronic_storage" = "aiida_empa_orca.artifacts:ElectronicStorageParser"
 "empa_orca.orbital_cubes" = "aiida_empa_orca.orbitals:OrbitalCubesParser"
@@ -32,6 +36,8 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.parser:SinglePointParser"
 
 [project.entry-points."aiida.workflows"]
+"empa_orca.casci" = "aiida_empa_orca.casci:CasciWorkChain"
+"empa_orca.common_orbitals" = "aiida_empa_orca.common_orbitals:CommonOrbitalsWorkChain"
 "empa_orca.orbitals" = "aiida_empa_orca.orbitals:OrbitalsWorkChain"
 "empa_orca.base" = "aiida_empa_orca.workchains:OptimizationBaseWorkChain"
 "empa_orca.geometry" = "aiida_empa_orca.workchains:GeometryWorkChain"

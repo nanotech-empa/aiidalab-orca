@@ -5,12 +5,22 @@ import json
 from importlib.resources import files
 from pathlib import PurePosixPath
 import stat
+import re
 
 from aiida import common, engine, orm
 from aiida.parsers import Parser
 
 ELECTRONIC_FILES = ('aiida.gbw', 'aiida.densities', 'aiida.densitiesinfo')
 STORAGE_PROCESS = 'aiida.calculations:empa_orca.electronic_storage'
+
+
+def electronic_names(names):
+    """Explicit flat file bundles, also supporting common orbitals and CASCI."""
+    if not names or len(set(names)) != len(names) or any(
+            not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_-]+\.[A-Za-z0-9_.-]+', name)
+            for name in names):
+        raise ValueError('Electronic files must be distinct, plain filenames')
+    return tuple(names)
 
 
 def storage_policy(values):
@@ -68,7 +78,8 @@ def stored_location(node):
         raise ValueError('The electronic stash is missing')
     stash = node.outputs.remote_stash
     path = str(PurePosixPath(stash.target_basepath)/'electronic')
-    remote_files(stash.computer, path, expected={f['name']: f['size_bytes'] for f in manifest['files']})
+    remote_files(stash.computer, path, names=[f['name'] for f in manifest['files']],
+                 expected={f['name']: f['size_bytes'] for f in manifest['files']})
     return {'kind': 'stash', 'uuid': str(stash.uuid), 'path': path, 'files': manifest['files'],
             'storage_uuid': str(node.uuid)}
 
@@ -80,19 +91,22 @@ def storage_nodes(remote):
         project=['uuid']).order_by({'store': {'ctime': 'desc'}}).all(flat=True)
 
 
-def resolve_electronic(remote):
+def resolve_electronic(remote, names=ELECTRONIC_FILES):
     """Prefer validated durable copies; retain only plain identifiers in callers."""
     from .reference import check_wavefunction, ArtifactUnavailable
     unavailable = None
     for uuid in storage_nodes(remote):
         try:
-            return stored_location(orm.load_node(uuid))
+            location = stored_location(orm.load_node(uuid))
+            if set(names).issubset({item['name'] for item in location['files']}):
+                return location
         except ArtifactUnavailable as exc:
             unavailable = exc
         except (KeyError, ValueError, FileNotFoundError):
             continue
     try:
-        manifest = check_wavefunction(remote)
+        manifest = (check_wavefunction(remote) if tuple(names) == ELECTRONIC_FILES else
+                    remote_files(remote.computer, remote.get_remote_path(), names=names))
     except (FileNotFoundError, ValueError):
         if unavailable:
             raise unavailable
@@ -106,6 +120,7 @@ class ElectronicStorageCalculation(engine.CalcJob):
         super().define(spec)
         spec.input('source_folder', valid_type=orm.RemoteData)
         spec.input('policy', valid_type=orm.Dict)
+        spec.input('filenames', valid_type=orm.List, required=False)
         spec.input('metadata.options.parser_name', default='empa_orca.electronic_storage')
         spec.input('metadata.options.withmpi', default=False)
         spec.output('manifest', valid_type=orm.Dict)
@@ -116,9 +131,10 @@ class ElectronicStorageCalculation(engine.CalcJob):
         if source.computer.uuid != self.inputs.code.computer.uuid:
             raise ValueError('Electronic preservation must run on the source computer')
         policy = storage_policy(self.inputs.policy.get_dict())
-        sizes = remote_files(source.computer, source.get_remote_path())
+        names = electronic_names(self.inputs.filenames.get_list()) if 'filenames' in self.inputs else ELECTRONIC_FILES
+        sizes = remote_files(source.computer, source.get_remote_path(), names=names)
         storage = 'repository' if sum(x['size_bytes'] for x in sizes) <= policy['threshold_mb']*1024**2 else 'stash'
-        request = {'files': list(ELECTRONIC_FILES), 'threshold_bytes': policy['threshold_mb']*1024**2, 'storage': storage}
+        request = {'files': list(names), 'threshold_bytes': policy['threshold_mb']*1024**2, 'storage': storage}
         with folder.open('request.json', 'w') as handle:
             json.dump(request, handle)
         with folder.open('store_electronic.py', 'w') as handle:
@@ -142,7 +158,9 @@ class ElectronicStorageParser(Parser):
     def parse(self, **kwargs):
         try:
             manifest = json.loads(self.retrieved.base.repository.get_object_content('manifest.json'))
-            if {f['name'] for f in manifest['files']} != set(ELECTRONIC_FILES):
+            names = (electronic_names(self.node.inputs.filenames.get_list()) if 'filenames' in self.node.inputs
+                     else ELECTRONIC_FILES)
+            if {f['name'] for f in manifest['files']} != set(names):
                 raise ValueError('Incomplete electronic bundle')
             if manifest['storage'] == 'repository':
                 repository_files(self.retrieved, manifest)
@@ -159,13 +177,16 @@ def stash_options(directory, source):
             'source_list': [source], 'fail_on_missing': True}
 
 
-def storage_builder(remote, code, policy):
+def storage_builder(remote, code, policy, names=ELECTRONIC_FILES):
     policy = storage_policy(policy)
     builder = ElectronicStorageCalculation.get_builder()
     builder.source_folder, builder.code, builder.policy = remote, code, orm.Dict(dict=policy)
+    names = electronic_names(names)
+    if names != ELECTRONIC_FILES:
+        builder.filenames = orm.List(list=list(names))
     from .rendering import calcjob_options
     builder.metadata.options = calcjob_options(remote)
-    sizes = remote_files(remote.computer, remote.get_remote_path())
+    sizes = remote_files(remote.computer, remote.get_remote_path(), names=names)
     if sum(item['size_bytes'] for item in sizes) > policy['threshold_mb']*1024**2:
         builder.metadata.options.stash = stash_options(policy['stash_directory'], 'electronic')
     # Reuse is explicit and availability-checked; a cached missing stash must not win.

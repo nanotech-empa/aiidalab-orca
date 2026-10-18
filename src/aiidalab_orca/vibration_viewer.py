@@ -143,6 +143,18 @@ class MolecularRamanModel(RamanModel):
         plot.layout.title.text = ('Orientation averaged' if self.plot_type == 'powder' else 'Fixed orientation') + f' {self.spectrum_type} spectrum'
         plot.layout.yaxis.title.text = ('Raman activity' if self.activity and self.spectrum_type == 'Raman' else 'Intensity') + ' (relative scale)'
 
+    def mode_animation_state(self, playing=True):
+        from weas_widget.phonon import generate_phonon_trajectory
+        from weas_widget.utils import ASEAdapter
+        eigenvector = self.eigenvectors[self.active_mode]
+        trajectory = generate_phonon_trajectory(self.input_structure,
+            np.stack((eigenvector, np.zeros_like(eigenvector)), axis=-1),
+            kpoint=[0, 0, 0], amplitude=self.amplitude, nframes=20)
+        return {'version': 'weas_state_v1', 'atoms': ASEAdapter.to_weas(trajectory),
+            'state': {'animation': {'isPlaying': playing, 'frameDuration': 100, 'currentFrame': 0},
+                'plugins': {'vectorField': {'settings': {'mode': {'origins': 'positions', 'vectors': 'movement',
+                    'factor': self.amplitude * .6, 'color': 'black', 'radius': .1}}}}}}
+
 
 class MolecularSpectrum(RamanWidget):
     def __init__(self, record, spectrum_type):
@@ -161,15 +173,27 @@ class MolecularSpectrum(RamanWidget):
             for widget in (self.temperature, self.frequency_laser, self.pol_outgoing, self.separate_polarizations):
                 widget.layout.display = 'none'
         self._model.update_plot(self.spectrum)
-        self.weas = self._model.set_vibrational_mode_animation(self.weas)
+        from weas_widget import WeasWidget
+        state = self._model.mode_animation_state()
+        old_weas = self.weas
+        # Supply all frames at creation: WEAS reads phonon/viewerStyle only on
+        # mount, and a delayed static-atoms update can replace a new trajectory.
+        self.weas = WeasWidget(atoms=state['atoms'], animationState=state['state']['animation'],
+            vectorField=state['state']['plugins']['vectorField']['settings'],
+            viewerStyle={'width': '100%', 'height': '420px'}, guiConfig=self.guiConfig,
+            modelStyle=1, colorType='JMOL', cameraSetting={'direction': [1, 1, 1]})
+        self.weas.layout = ipw.Layout(width='100%', min_width='0')
+        self.weas._widget.layout = ipw.Layout(width='100%', min_width='0', flex='1 1 auto')
         old_table, old_animation = self.modes_table, self.animation
         self.modes_table = ipw.HTML(self._model.modes_table(), layout=ipw.Layout(max_height='250px', overflow='auto', min_width='240px'))
         modes_box = self.children[-2].children[0]
         modes_box.children = (ipw.HTML('<b>Normal modes</b>'), self.modes_table)
-        self.animation = ipw.VBox([self.weas])
+        self.animation = ipw.VBox([self.weas], layout=ipw.Layout(width='100%', min_width='0'))
         self.children = self.children[:-1] + (self.animation,)
         old_table.close()
         old_animation.close()
+        old_weas._widget.close()
+        old_weas.close()
 
     def render(self):
         if self.rendered:
@@ -181,7 +205,12 @@ class MolecularSpectrum(RamanWidget):
         self._model.update_plot(self.spectrum)
         self.spectrum.layout.width = None
         self.spectrum.layout.autosize = True
-        self.weas._widget.viewerStyle = {'width': '100%', 'height': '420px'}
+        self.play_animation = ipw.ToggleButton(value=True, description='Pause animation', icon='pause',
+            layout=ipw.Layout(width='auto'))
+        self.play_animation.observe(self._playback_changed, names='value')
+        self.weas._widget.observe(self._playback_state_changed, names='animationState')
+        mode_controls = self.children[-2].children[1]
+        mode_controls.children = (*mode_controls.children, self.play_animation)
         self.measure = ipw.ToggleButtons(options=[('Intensity', False), ('Activity', True)],
             description='Show', layout=ipw.Layout(display='' if self._model.spectrum_type == 'Raman' else 'none'))
         ipw.link((self.measure, 'value'), (self._model, 'activity'))
@@ -240,8 +269,20 @@ class MolecularSpectrum(RamanWidget):
             self.atom_controls.message.value = '<div class="alert alert-danger">Choose a finite range with maximum greater than minimum.</div>'
 
     def _select_active_mode(self, event):
-        self.weas = self._model.set_vibrational_mode_animation(self.weas)
-        self.weas._widget.viewerStyle = {'width': '100%', 'height': '420px'}
+        if hasattr(self, 'play_animation'):
+            # Unlike the initial-only phonon trait, the supported state importer
+            # replaces an attached trajectory when mode or amplitude changes.
+            self.weas.import_state(self._model.mode_animation_state(self.play_animation.value))
+
+    def _playback_changed(self, change):
+        self.play_animation.description = 'Pause animation' if change['new'] else 'Play animation'
+        self.play_animation.icon = 'pause' if change['new'] else 'play'
+        self.weas._widget.animationState = {'isPlaying': change['new'], 'frameDuration': 100}
+
+    def _playback_state_changed(self, change):
+        playing = change['new'].get('isPlaying')
+        if playing is not None and playing != self.play_animation.value:
+            self.play_animation.value = playing
 
 
 def spectra_view(record):

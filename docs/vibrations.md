@@ -67,6 +67,9 @@ Born-charge model or periodic nonanalytical correction. Controls provide IR and
 Raman tabs, orientation averages or fixed polarizations, Raman activity versus
 Stokes intensity, temperature, laser wavelength, broadening, display range and
 clickable mode markers. The animation uses the original Cartesian mode vectors.
+It starts automatically; use **Pause animation / Play animation** beside the
+mode selector. Changing mode or amplitude updates the molecule and preserves
+the paused/playing choice. Amplitude controls only the illustrated motion.
 Activity is distinct from intensity; displayed intensities use a relative
 scale. Polarized/depolarized channels and selected-atom participation share
 their total spectrum's normalization. Atom participation is a mechanical mode

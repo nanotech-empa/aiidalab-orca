@@ -110,6 +110,16 @@ def show_result(data):
         states.observe(open_states, names="selected_index")
         states.set_title(0, "CASCI states · fixed geometry (draft)")
         items.append(states)
+    if data['optimized']:
+        from .vibrations import VibrationalSpectroscopy
+        vibrations = ipw.Accordion(children=[ipw.VBox()], selected_index=None)
+        def open_vibrations(change):
+            if change['new'] == 0 and not isinstance(vibrations.children[0], VibrationalSpectroscopy):
+                vibrations.children[0].close()
+                vibrations.children = [VibrationalSpectroscopy(data['uuid'])]
+        vibrations.observe(open_vibrations, names='selected_index')
+        vibrations.set_title(0, 'Vibrational spectroscopy · IR and Raman')
+        items.append(vibrations)
     if data.get("artifact_status"):
         items.append(ipw.HTML(f"<p><b>Electronic files:</b> {html.escape(data['artifact_status'])}</p>"))
     if "positions" in data:

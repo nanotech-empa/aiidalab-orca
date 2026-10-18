@@ -53,10 +53,13 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self.cube = ipw.Dropdown(description='Preview cube',style=style,layout=wide)
         self.cube.observe(self._show_cube,names='value')
         self.download, self.cube_box = ipw.HTML(),ipw.VBox()
+        from .presentation import ComputePanel
+        self.calculation = ComputePanel('Read orbital information / compute previews…', [self.read,
+            self.retention,self.stash,advanced,self.review,self.message,self.submit,self.status])
         super().__init__([ipw.HTML('<p>Inspect the preserved orbital files, then select orbitals to visualize. '
-            'The source SCF and CASCI results are linked through their common-orbital reference.</p>'),self.read,
+            'The source SCF and CASCI results are linked through their common-orbital reference.</p>'),
             self.kind,self.info,self.occupations,self.metadata_download,self.table,self.orbitals,self.use_window,self.window_message,
-            self.retention,self.stash,advanced,self.review,self.message,self.submit,self.status,self.previous,self.result_info,
+            self.previous,self.result_info,self.calculation,
             self.cube,self.download,self.cube_box])
         for widget in (self.orbitals,self.grid,self.retention,self.stash,self.plot_code,self.cubehandler_code):
             widget.observe(self._invalidate,names='value')

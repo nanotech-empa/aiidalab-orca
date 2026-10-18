@@ -30,11 +30,19 @@ class VibrationalSpectroscopy(ipw.VBox):
         self.previous.observe(self._open, names='value')
         for control in (self.raman, self.force):
             control.observe(self._invalidate, names='value')
-        super().__init__([ipw.HTML('<p>Compute harmonic normal modes and IR intensities at this optimized geometry, '
+        from .presentation import ComputePanel
+        self.calculation = ComputePanel('Compute / extend vibrational spectroscopy…', [
+            ipw.HTML('<p>Compute harmonic normal modes and IR intensities at this optimized geometry, '
             'optionally with Raman activities. Method, basis, charge, multiplicity and resources are inherited from the reference. '
-            'The Hessian and derivatives are retained in AiiDA. Resonance Raman is a separate next step.</p>'),
-            self.raman, self.force, self.review, self.message, self.submit, self.status,
-            self.refresh, self.previous, self.details, self.download, self.viewer])
+            'The Hessian and derivatives are retained in AiiDA.</p>'),
+            self.raman, self.force, self.review, self.submit])
+        self.empty = ipw.HTML()
+        self._active = True
+        super().__init__([ipw.HTML('<h3>Vibrational spectroscopy</h3><p>Normal modes, IR and Raman. '
+            'This analysis is independent of orbital cubes, CASCI and Dyson calculations.</p>'),
+            self.previous, self.refresh, self.empty, self.status, self.calculation, self.message,
+            self.details, self.download, self.viewer,
+            ipw.HTML('<p>Resonance Raman will use a separate workflow in this section; it is not implemented in this draft.</p>')])
         self._refresh()
 
     def _invalidate(self, event=None):
@@ -100,6 +108,7 @@ class VibrationalSpectroscopy(ipw.VBox):
     def _refresh(self, event=None, *, preferred=None):
         try:
             rows = service.runs(self.source_uuid)
+            self.empty.value = '' if rows else '<p class="orca-notice">No vibrational calculation has been computed for this reference. Compute IR and optionally Raman when you need them.</p>'
             previous = preferred or self.previous.value
             self.previous.options = [('Select a vibrational calculation', None)] + [
                 (f"{row['date'][:16]} · {row['state']} · {row['label']}", row['uuid']) for row in rows]
@@ -127,6 +136,7 @@ class VibrationalSpectroscopy(ipw.VBox):
             for child in self.viewer.children:
                 close_widget_tree(child)
             self.viewer.children = (view,)
+            view.set_active(self._active)
             self._shown_uuid = uuid
             summary = record['summary']
             warning = ''.join('<p style="color:#a02020">'+html.escape(w)+'</p>' for w in summary['warnings'])
@@ -135,6 +145,12 @@ class VibrationalSpectroscopy(ipw.VBox):
             self.download.value = f'<a download="aiida.hess" href="data:text/plain;base64,{encoded}"><i class="fa fa-download"></i> Download Hessian and derivatives</a>'
         except Exception as exc:
             self._error(exc)
+
+    def set_active(self, active):
+        self._active = active
+        for view in self.viewer.children:
+            if hasattr(view, 'set_active'):
+                view.set_active(active)
 
     def close(self):
         if getattr(self, '_disposed', False):

@@ -11,7 +11,8 @@ from .spectra import SpectralViewer
 
 
 class DysonStates(CubeDisplayMixin,ipw.VBox):
-    def __init__(self,common_uuid,datasets):
+    def __init__(self,common_uuid,datasets,on_show_maps=None):
+        self.on_show_maps = on_show_maps
         self.common_uuid = str(common_uuid)
         self.state_rows = service.states(datasets)
         self.reference_charge = datasets[0]['reference_charge']
@@ -65,15 +66,24 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.cube = ipw.Dropdown(description='Preview cube',style=style,layout=wide)
         self.cube.observe(self._show_cube,names='value')
         self.download,self.cube_box = ipw.HTML(),ipw.VBox()
-        self.cube_controls = ipw.Accordion(children=[ipw.VBox([ipw.HTML('<p>Generate only the requested Dyson amplitudes and optional incoherent intensity blend. Full cubes pass through cubehandler before previews are retrieved. Blends are spectral intensities, without an STM tip or vacuum-decay model.</p>'),
+        from .presentation import ComputePanel
+        self.cube_calculation = ComputePanel('Generate Dyson cubes / intensity blends…', [ipw.HTML('<p>Generate only the requested Dyson amplitudes and optional incoherent intensity blend. Full cubes pass through cubehandler before previews are retrieved. Blends are spectral intensities, without an STM tip or vacuum-decay model.</p>'),
             self.cube_states,self.blend,self.grid,self.retention,self.stash,self.cube_review,self.cube_message,self.cube_submit,
-            self.cube_previous,self.cube,self.download,self.cube_box,self.map_box])],selected_index=None)
-        self.cube_controls.set_title(0,'Dyson orbitals and spectral intensity blends')
+            ])
+        self.orbital_view = ipw.Accordion(children=[ipw.VBox([self.cube,self.download,self.cube_box])], selected_index=None)
+        self.orbital_view.set_title(0, '3D orbitals and slicing plane')
+        self.orbital_view.observe(self._resize_cube, names='selected_index')
+        self.cube_empty = ipw.HTML()
+        self.cube_controls = ipw.VBox([self.cube_previous,self.cube_empty,self.cube_calculation,self.map_box,self.orbital_view])
         self.cube_controls.layout.display = 'none'
-        super().__init__([ipw.HTML('<p>Select an initial many-electron state and compatible N±1 final states at this fixed geometry. '
-            'Missing sectors can be computed in the CASCI controls above. No SCF or CASCI is silently repeated.</p>'),
-            self.initial,self.side,self.finals,self.refresh,advanced,self.review,self.message,self.submit,self.status,
-            self.previous,self.spectrum_box,self.cube_controls])
+        self.calculation = ComputePanel('Compute / extend Dyson transitions…', [
+            ipw.HTML('<p>Select an initial many-electron state and compatible N±1 final states at this fixed geometry. '
+            'Missing sectors can be added in the Many-electron states view. No SCF or CASCI is silently repeated.</p>'),
+            self.side,self.finals,self.refresh,advanced,self.review,self.submit])
+        self.empty = ipw.HTML()
+        self._view = 'spectrum'
+        super().__init__([self.initial,self.previous,self.status,self.empty,self.calculation,self.message,
+                          self.spectrum_box,self.cube_controls])
         self.initial.observe(self._initial_changed,names='value')
         self.side.observe(self._initial_changed,names='value')
         for w in (self.finals,self.loss,self.force,self.export_code,self.dyson_code):
@@ -81,6 +91,20 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         for w in (self.cube_states,self.blend,self.grid,self.retention,self.stash,self.cubehandler_code,self.dyson_code):
             w.observe(self._invalidate_cubes,names='value')
         self._initial_changed()
+        self.set_view(self._view)
+
+    def set_view(self, view):
+        self._view = view
+        self.spectrum_box.layout.display = '' if view == 'spectrum' else 'none'
+        self.cube_controls.layout.display = '' if view == 'maps' and self.record else 'none'
+        self.empty.value = ('' if self.record else '<p class="orca-notice">No Dyson result is available for this initial state. '
+            'CASCI results remain usable on their own. Compute transitions here only if you need spectra or tunnelling maps.</p>')
+        if view == 'maps':
+            self._resize_cube()
+
+    def _resize_cube(self, event=None):
+        if self._cube_view and self.orbital_view.selected_index == 0:
+            self._cube_view.viewer3d.viewer._remote_call('handleResize', target='Widget')
 
     @staticmethod
     def _label(row):
@@ -190,6 +214,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             self.record = None
             self.spectrum_box.children = ()
             self.cube_controls.layout.display = 'none'
+        self.set_view(self._view)
 
     def _open_previous(self,change):
         uuid = change['new']
@@ -221,6 +246,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.cube_states.value = tuple(i for i,r in enumerate(self.record['data']['transitions']) if r['strength'] > 1e-8)
         self.cube_controls.layout.display = ''
         self._refresh_cubes()
+        self.set_view(self._view)
 
     def _preview_selection(self,identifiers):
         """Show an already retrieved amplitude, without requesting new cubes."""
@@ -229,7 +255,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             if filename in [value for _,value in self.cube.options]:
                 if self.cube.value != filename:
                     self.cube.value = filename
-                self.spectrum.preview_info.value = '<p>Stored orbital preview selected: <b>'+html.escape(filename)+'</b>. Open the cube viewer below to inspect it.</p>'
+                self.spectrum.preview_info.value = '<p>Stored orbital preview selected: <b>'+html.escape(filename)+'</b>. Use the selection to open Dyson orbitals &amp; maps.</p>'
             else:
                 self.spectrum.preview_info.value = '<p>No stored amplitude cube for this transition. Use the cube controls to generate it; selecting a transition does not submit a calculation.</p>'
         else:
@@ -245,6 +271,8 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             if not set(identifiers) <= available:
                 self.cube_message.value = '<p>Some selected amplitude cubes have not been generated. Use the cube controls to generate them before computing their maps.</p>'
         self._preview_selection(identifiers)
+        if self.on_show_maps:
+            self.on_show_maps()
 
     def _review_cubes(self,_=None):
         self._invalidate_cubes()
@@ -276,6 +304,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
 
     def _refresh_cubes(self,selected=None):
         rows = service.cube_runs(self.record['transitions_uuid']) if self.record else []
+        self.cube_empty.value = '' if rows else '<p class="orca-notice">No Dyson cube results are available. Generate the selected amplitudes if you want orbital previews or constant-height maps.</p>'
         self.cube_previous.options = [('Select Dyson cube results',None)]+rows
         if selected in [value for _,value in rows]:
             self.cube_previous.value = selected
@@ -313,6 +342,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             self.map_panel = DysonMaps(self.process_uuid,self._cube_view,self.spectrum,self.dyson_code.value)
             self.map_box.children = (self.map_panel,)
             self.map_box.set_title(0,'STM-like constant-height maps (draft)')
+            self.map_box.selected_index = 0
 
     def close(self):
         if getattr(self,'_disposed',False):

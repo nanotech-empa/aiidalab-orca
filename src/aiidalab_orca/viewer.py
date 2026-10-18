@@ -62,83 +62,149 @@ def molecule(symbols, frames):
     return view
 
 
-def show_result(data):
-    s = data["settings"]
-    scf = data.get("single_point", False)
-    title = "Optimized geometry" if data["optimized"] else "Supplied geometry · no optimization performed"
-    if scf:
-        title = "Single-point SCF · fixed geometry"
-    if data["optimized"] and s.get("constraints"):
-        title = "Geometry optimized with constraints"
-    items = [ipw.HTML(f"<h3>{title}</h3>")]
-    provenance = f"<p>{html.escape(data['source_description'])}</p>"
-    for warning in data.get("warnings", []):
-        items.append(ipw.HTML(f"<p style='color:#a02020'>{html.escape(warning)}</p>"))
-    if data.get("source_uuid"):
-        kind = "electronic state" if scf else "optimization"
-        items.append(ipw.HTML(f"<p><b>Reused an available {kind}.</b> No new ORCA calculation was needed.</p>"))
-        provenance += f"<p>Source workflow: <code>{data['source_uuid']}</code></p>"
-    if "summary" in data:
-        summary = data["summary"]
-        basis = s["basis"] + (" + element overrides" if s.get("element_settings") else "")
-        text = (f"{s['method']}/{basis} · charge {s['charge']} · multiplicity {s['multiplicity']}"
-                f" · converged · E = {summary['energy_hartree']:.9f} Hartree")
-        if "spin_squared" in summary:
-            text += f" · ⟨S²⟩ = {summary['spin_squared']:.5f}"
-        items.append(ipw.HTML(f"<p><b>{html.escape(text)}</b></p>"))
-    if data["optimized"] or scf:
-        items.append(ipw.HTML(settings_details(s, single_point=scf) + input_details(data.get("input_files", {}))))
-    if data.get("levels"):
-        from .levels import EnergyLevels
-        energy_view = EnergyLevels(data["levels"])
-        items.append(energy_view)
-        from .orbitals import OrbitalProperties
-        properties = ipw.Accordion(children=[ipw.VBox()], selected_index=None)
-        def open_properties(change):
-            if change["new"] == 0 and not isinstance(properties.children[0], OrbitalProperties):
-                properties.children[0].close()
-                properties.children = [OrbitalProperties(data, energy_view)]
-        properties.observe(open_properties, names="selected_index")
-        properties.set_title(0, "Orbitals and spin density")
-        items.append(properties)
+_RESULT_STYLE = """<style>
+.orca-results { width: 100%; min-width: 0; }
+.orca-result-context { padding: 12px 16px; background: #f4f8fa; border-left: 4px solid #237b98; margin-bottom: 12px; }
+.orca-result-context h3 { margin: 0 0 6px; }
+.orca-result-context p { margin: 4px 0; }
+.orca-compute-panel { margin: 10px 0; }
+.orca-compute-panel > .widget-vbox { padding: 12px; border: 1px solid #dce4e9; background: #fafcfd; }
+.orca-notice { padding: 12px 16px; background: #f4f8fa; border-left: 3px solid #9bbcc8; }
+.orca-analysis-card { padding: 12px; border: 1px solid #dce4e9; border-radius: 5px; flex: 1 1 240px; min-width: 0; }
+.orca-property-tabs > .lm-TabBar .lm-TabBar-tab { min-width: 0; flex: 0 1 auto; }
+</style>"""
+
+
+class ResultsView(ipw.VBox):
+    """Independent analysis workspaces sharing one serialized reference."""
+
+    def __init__(self, data):
+        from .presentation import LazyTabs
+        self.data = data
+        s = data['settings']
+        self.scf = data.get('single_point', False)
+        geometry = ('Geometry optimized with constraints' if data['optimized'] and s.get('constraints') else
+                    'Optimized geometry' if data['optimized'] else
+                    'Single-point SCF · fixed geometry' if self.scf else 'Supplied geometry')
+        formula = Atoms(data.get('symbols', [])).get_chemical_formula()
+        basis = s['basis'] + (' + element overrides' if s.get('element_settings') else '')
+        summary = data.get('summary', {})
+        energy = f" · E = {summary['energy_hartree']:.9f} Hartree" if 'energy_hartree' in summary else ''
+        context = (f"<div class='orca-result-context'><h3>{html.escape(formula)} · {geometry}</h3>"
+                   f"<p><b>Reference:</b> {html.escape(s['method'])}/{html.escape(basis)} · "
+                   f"charge {s['charge']:+d} · multiplicity {s['multiplicity']}{energy}</p></div>")
+        warnings = ''.join('<p class="orca-notice">'+html.escape(w)+'</p>' for w in data.get('warnings', []))
+        self.tabs = LazyTabs([
+            ('overview', 'Overview', self._overview),
+            ('orbitals', 'Orbitals & density', self._orbitals),
+            ('states', 'States & Dyson', self._states),
+            ('vibrations', 'Vibrations', self._vibrations),
+            ('details', 'Calculation details', self._details),
+        ])
+        self.tabs.add_class('orca-property-tabs')
+        super().__init__([ipw.HTML(_RESULT_STYLE+context+warnings), self.tabs], layout=ipw.Layout(width='100%', min_width='0'))
+        self.add_class('orca-results')
+
+    def _overview(self):
+        data = self.data
+        items = []
+        if 'positions' in data:
+            items.append(molecule(data['symbols'], data.get('frames', [data['positions']])))
+            encoded = base64.b64encode(data['xyz'].encode()).decode()
+            items.append(ipw.HTML(f'<a download="geometry.xyz" href="data:text/plain;base64,{encoded}">'
+                                  '<i class="fa fa-download"></i> Download final XYZ</a>'))
+        if data.get('source_uuid'):
+            items.append(ipw.HTML('<p>Reused an available reference. No new ORCA calculation was needed.</p>'))
+        if 'spin_squared' in data.get('summary', {}):
+            items.append(ipw.HTML(f"<p>Reference ⟨S²⟩ = {data['summary']['spin_squared']:.5f}</p>"))
+        cards = []
+        for key, title, description, icon in [
+            ('orbitals', 'Orbitals & density', 'SCF levels, orbital cubes, spin density and QRO/UNO inspection.', 'cubes'),
+            ('states', 'States & Dyson', 'CASCI states on their own, or optional Dyson transitions, spectra and maps.', 'exchange'),
+            ('vibrations', 'Vibrations', 'Normal modes, IR and Raman at an optimized geometry.', 'music'),
+        ]:
+            button = ipw.Button(description=title, icon=icon, layout=ipw.Layout(width='auto'))
+            button.on_click(lambda _, section=key: self.tabs.show_section(section))
+            card = ipw.VBox([button, ipw.HTML('<p>'+description+'</p>')])
+            card.add_class('orca-analysis-card')
+            cards.append(card)
+        items += [ipw.HTML('<h4>Optional analyses</h4>'),
+                  ipw.HBox(cards, layout=ipw.Layout(flex_flow='row wrap', gap='10px'))]
+        energies = data.get('summary', {}).get('scf_evaluation_energies_hartree', [])
+        if data['optimized'] and energies:
+            fig, ax = plt.subplots(figsize=(7.4, 2.7))
+            ax.plot(range(1, len(energies)+1), [(e-energies[-1])*27.211386245988 for e in energies], 'o-', color='#237b98')
+            ax.set(xlabel='SCF evaluation (including final evaluation)', ylabel='E − final E (eV)')
+            ax.grid(alpha=.2)
+            fig.tight_layout()
+            stream = io.BytesIO()
+            fig.savefig(stream, format='png', dpi=140)
+            plt.close(fig)
+            convergence = ipw.Accordion(children=[ipw.Image(value=stream.getvalue(), format='png')], selected_index=None)
+            convergence.set_title(0, 'Geometry optimization · energy convergence')
+            items.append(convergence)
+        return ipw.VBox(items)
+
+    def _orbitals(self):
+        if not self.data.get('levels'):
+            return ipw.HTML('<p class="orca-notice">Orbital analysis requires a completed SCF reference.</p>')
+        from .orbital_workspace import OrbitalWorkspace
+        return OrbitalWorkspace(self.data, self._prepare_common, self._use_window)
+
+    def _states(self):
+        if not self.data.get('levels'):
+            return ipw.HTML('<p class="orca-notice">CASCI requires a completed SCF reference. '
+                           'It is optional and is independent of vibrational spectroscopy.</p>')
         from .casci import CasciStates
-        states = ipw.Accordion(children=[ipw.VBox()], selected_index=None)
-        def open_states(change):
-            if change["new"] == 0 and not isinstance(states.children[0], CasciStates):
-                states.children[0].close()
-                states.children = [CasciStates(data)]
-        states.observe(open_states, names="selected_index")
-        states.set_title(0, "CASCI states · fixed geometry (draft)")
-        items.append(states)
-    if data['optimized']:
+        return CasciStates(self.data, on_inspect=self._inspect_window)
+
+    def _vibrations(self):
+        if not self.data['optimized']:
+            return ipw.HTML('<h3>Vibrational spectroscopy</h3><p class="orca-notice">'
+                'This draft requires a completed geometry optimization before computing vibrations. '
+                'Use the final geometry to prepare an optimization. Orbital analysis and CASCI remain independent.</p>')
         from .vibrations import VibrationalSpectroscopy
-        vibrations = ipw.Accordion(children=[ipw.VBox()], selected_index=None)
-        def open_vibrations(change):
-            if change['new'] == 0 and not isinstance(vibrations.children[0], VibrationalSpectroscopy):
-                vibrations.children[0].close()
-                vibrations.children = [VibrationalSpectroscopy(data['uuid'])]
-        vibrations.observe(open_vibrations, names='selected_index')
-        vibrations.set_title(0, 'Vibrational spectroscopy · IR and Raman')
-        items.append(vibrations)
-    if data.get("artifact_status"):
-        items.append(ipw.HTML(f"<p><b>Electronic files:</b> {html.escape(data['artifact_status'])}</p>"))
-    if "positions" in data:
-        if len(data.get("frames", [])) > 1:
-            items.append(ipw.HTML("<p>Showing the final geometry. Move the pointer over the molecule to play or step through the trajectory.</p>"))
-        items.append(molecule(data["symbols"], data.get("frames", [data["positions"]])))
-        encoded = base64.b64encode(data["xyz"].encode()).decode()
-        items.append(ipw.HTML(f'<a download="geometry.xyz" href="data:text/plain;base64,{encoded}"><i class="fa fa-download" aria-hidden="true"></i> Download final XYZ</a>'))
-        provenance += f'<p>Structure: <code>{data["structure_uuid"]}</code></p>'
-    if data["optimized"] and "summary" in data:
-        energies = data["summary"]["scf_evaluation_energies_hartree"]
-        fig, ax = plt.subplots(figsize=(7.4, 2.7))
-        ax.plot(range(1, len(energies)+1), [(e-energies[-1])*27.211386245988 for e in energies], "o-", color="#237b98")
-        ax.set(xlabel="SCF evaluation (including final evaluation)", ylabel="E − final E (eV)")
-        ax.grid(alpha=0.2)
-        fig.tight_layout()
-        stream = io.BytesIO()
-        fig.savefig(stream, format="png", dpi=140)
-        plt.close(fig)
-        items.append(ipw.Image(value=stream.getvalue(), format="png"))
-    items.append(ipw.HTML(f"<details><summary>Provenance and identifiers</summary>{provenance}</details>"))
-    return ipw.VBox(items)
+        return VibrationalSpectroscopy(self.data['uuid'])
+
+    def _details(self):
+        data = self.data
+        provenance = '<p>'+html.escape(data['source_description'])+'</p>'
+        for label, key in [('Workflow', 'uuid'), ('Source workflow', 'source_uuid'), ('Structure', 'structure_uuid')]:
+            if data.get(key):
+                provenance += f'<p>{label}: <code>{html.escape(str(data[key]))}</code></p>'
+        items = [ipw.HTML('<h3>Calculation details</h3>')]
+        if data.get('artifact_status'):
+            items.append(ipw.HTML('<p><b>Electronic files:</b> '+html.escape(data['artifact_status'])+'</p>'))
+        if data['optimized'] or self.scf:
+            items.append(ipw.HTML(settings_details(data['settings'], single_point=self.scf)
+                                  + input_details(data.get('input_files', {}))))
+        items.append(ipw.HTML('<h4>Provenance and identifiers</h4>'+provenance))
+        return ipw.VBox(items)
+
+    def _prepare_common(self):
+        panel = self.tabs.show_section('states')
+        if hasattr(panel, 'calculation'):
+            panel.analysis.value = 'states'
+            panel.calculation.show()
+
+    def set_active(self, active):
+        self.tabs.set_active(active)
+
+    def _inspect_window(self, common_uuid, indices):
+        panel = self.tabs.show_section('orbitals')
+        if hasattr(panel, 'inspect_reference'):
+            panel.inspect_reference(common_uuid, indices)
+
+    def _use_window(self, common_uuid, indices):
+        panel = self.tabs.show_section('states')
+        if hasattr(panel, '_apply_orbital_window'):
+            if common_uuid not in [value for _, value in panel.reference.options]:
+                panel._refresh()
+            panel.reference.value = common_uuid
+            panel._apply_orbital_window(indices)
+            panel.analysis.value = 'states'
+            panel.calculation.show()
+
+
+def show_result(data):
+    return ResultsView(data)

@@ -12,6 +12,10 @@ from . import property_services as service
 class CubeDisplayMixin:
     """Shared reduced-cube viewer, saved views and CalcJob rendering."""
 
+    def set_active(self, active):
+        if active and self._cube_view and self._cube_view.tabs.selected_index == 0:
+            self._cube_view.viewer3d.viewer._remote_call('handleResize', target='Widget')
+
     def _show_cube(self,_=None):
         if not self.process_uuid or not self.cube.value:
             return
@@ -90,10 +94,14 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
         self.download=ipw.HTML()
         self.cube_box=ipw.VBox()
         self.result_info=ipw.HTML()
-        super().__init__([ipw.HTML('<p>Compute orbital amplitudes and, for an unrestricted reference, spin density. Select multiple orbitals with Ctrl/Cmd. Only cubehandler-reduced previews are retrieved.</p>'),
+        from .presentation import ComputePanel
+        self.calculation = ComputePanel('Compute orbital cubes / spin density…', [
+                          ipw.HTML('<p>Compute orbital amplitudes and, for an unrestricted reference, spin density. Select multiple orbitals with Ctrl/Cmd. Only cubehandler-reduced previews are retrieved.</p>'),
                           select_visible,self.orbitals,self.spin,self.wfn_info,self.check_wfn,self.wfn_policy,self.retention,self.stash,advanced,
-                          self.review_button,self.message,self.submit_button,self.progress,
-                          ipw.HBox([self.previous,refresh]),self.result_info,self.cube,self.download,self.cube_box])
+                          self.review_button,self.message,self.submit_button])
+        self.empty = ipw.HTML()
+        super().__init__([ipw.HBox([self.previous,refresh]),self.progress,self.result_info,self.empty,
+                          self.calculation,self.cube,self.download,self.cube_box])
         for w in (self.orbitals,self.spin,self.grid,self.retention,self.stash,self.threshold,self.wfn_stash,*self.codes.values()):
             w.observe(self._invalidate,names='value')
         self.retention.observe(self._retention_changed,names='value')
@@ -183,6 +191,7 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
 
     def _refresh_runs(self,_=None):
         rows=service.property_runs(self.source_uuid)
+        self.empty.value = '' if rows else '<p class="orca-notice">No orbital cubes have been computed. The SCF energy levels above are already available; cubes and spin density are optional.</p>'
         keep=self.process_uuid
         self.previous.options=[('Select a property calculation',None)]+[(f"{r['date'][:16]} · {r['state']} · {r['uuid'][:8]}",r['uuid']) for r in rows]
         if keep and keep in [r['uuid'] for r in rows]:

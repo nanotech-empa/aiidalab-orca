@@ -28,6 +28,11 @@ The intended application would let a researcher start from a molecular geometry,
 
 The scientific plan and implementation should continue to be reviewed with [Andrés Ortega-Guerrero](https://github.com/AndresOrtegaGuerrero). Please keep initial feedback in the design-review issue under [Issues](https://github.com/nanotech-empa/aiidalab-orca/issues), referring to the relevant README section. This is a request for design and scientific review; it is not an assignment to implement the proposal.
 
+Constant-height Dyson maps now have a separate draft component: full-resolution
+amplitude sampling, explicit source/observation planes, meqpy-style vacuum
+propagation, stored numerical maps and submitted PNG/PDF rendering. Combined
+panels share an explicit intensity scale. See [the map guide](docs/maps.md).
+
 ## 1. Starting requirements
 
 These requirements capture the initial discussion and are open to refinement with Andrés:

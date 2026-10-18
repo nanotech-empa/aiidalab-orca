@@ -210,7 +210,9 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         if self.spectrum:
             from .app import close_widget_tree
             close_widget_tree(self.spectrum)
-        self.spectrum = SpectralViewer(self.record['data'],self._invalidate_cubes)
+        diagram_states = service.diagram_states(self.record['data'],self.state_rows)
+        self.spectrum = SpectralViewer(self.record['data'],self._invalidate_cubes,states=diagram_states,
+                                      on_selection=self._preview_selection,on_use=self._use_transition_selection)
         self.spectrum_box.children = (self.spectrum,)
         options = []
         for i,r in enumerate(self.record['data']['transitions']):
@@ -219,6 +221,30 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.cube_states.value = tuple(i for i,r in enumerate(self.record['data']['transitions']) if r['strength'] > 1e-8)
         self.cube_controls.layout.display = ''
         self._refresh_cubes()
+
+    def _preview_selection(self,identifiers):
+        """Show an already retrieved amplitude, without requesting new cubes."""
+        if len(identifiers) == 1:
+            filename = 'dyson_'+identifiers[0]+'.cube'
+            if filename in [value for _,value in self.cube.options]:
+                if self.cube.value != filename:
+                    self.cube.value = filename
+                self.spectrum.preview_info.value = '<p>Stored orbital preview selected: <b>'+html.escape(filename)+'</b>. Open the cube viewer below to inspect it.</p>'
+            else:
+                self.spectrum.preview_info.value = '<p>No stored amplitude cube for this transition. Use the cube controls to generate it; selecting a transition does not submit a calculation.</p>'
+        else:
+            self.spectrum.preview_info.value = '<p>Select one transition to inspect its stored orbital, or use this selection for an intensity blend.</p>'
+
+    def _use_transition_selection(self,identifiers):
+        if not self.record:
+            return
+        self.cube_states.value = tuple(i for i,row in enumerate(self.record['data']['transitions']) if row['id'] in identifiers)
+        if self.map_panel:
+            available = {value for _,value in self.map_panel.selection.options}
+            self.map_panel.selection.value = tuple(i for i in identifiers if i in available)
+            if not set(identifiers) <= available:
+                self.cube_message.value = '<p>Some selected amplitude cubes have not been generated. Use the cube controls to generate them before computing their maps.</p>'
+        self._preview_selection(identifiers)
 
     def _review_cubes(self,_=None):
         self._invalidate_cubes()

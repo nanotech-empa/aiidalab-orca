@@ -99,6 +99,46 @@ For future installations, retain the configure command, compiler and MPI
 versions, probe results, AiiDA UUIDs and energy comparison. Include the RI-J
 startup path in installation checks rather than relying solely on an HF run.
 
+## Container shared-memory capacity for CASCI
+
+Passing SCF validation does not exercise all MPI paths. The first local
+8-process pentacene CASCI(12,12) job stopped while creating shared CI data.
+The container had about 53 GiB free on its main filesystem and ample RAM,
+but `/dev/shm` was limited to [Docker's 64 MiB default](https://docs.docker.com/engine/containers/run/).
+The MPI launcher
+reported an unhelpful `show_help.c` unpacking error. Disabling help-message
+aggregation did not reveal the underlying message.
+
+Changing only `OMPI_MCA_osc_sm_backing_directory` to a directory on the larger
+local filesystem let the identical CASCI input finish normally in 25.728
+seconds. This isolates the shared-memory-window backing location as the
+runtime issue; it does not indicate insufficient capacity on the main disk.
+The diagnostic CalcJob UUID is `1bbe2506-fa9b-492e-b5f7-1aebaaa5c5da`.
+
+For a new local container, configure a sufficiently large `/dev/shm` at
+container creation, or use Open MPI 4.1's documented `osc_sm_backing_directory`
+parameter with a writable **local** filesystem that has enough free space.
+The parameter and local-filesystem requirement are defined in the
+[Open MPI 4.1.8 shared-window component](https://github.com/open-mpi/ompi/blob/v4.1.8/ompi/mca/osc/sm/osc_sm_component.c).
+Inspect it with `ompi_info --all`; do not apply a local-filesystem workaround
+blindly to a shared or network-mounted HPC work directory. For this localhost
+AiiDA computer, whose CalcJob work directories are on the local disk, the
+code's command-scoped environment uses:
+
+```bash
+export OMPI_MCA_osc_sm_backing_directory="$PWD"
+```
+
+Keep this as a new code/runtime identity and preserve the earlier failed runs.
+The benchmark also checks a 15 GiB free-disk reserve before each heavy stage
+and runs charge sectors sequentially. Full orbital cubes are stashed; only
+cubehandler-reduced previews are retrieved. Stashing on the same filesystem
+still consumes its space and is included in disk monitoring.
+
+Include a representative CASCI calculation in multireference installation
+validation. SCF agreement and numeric-type probes remain necessary, but do
+not by themselves validate shared CI data or the Dyson export path.
+
 ## Verified local repair, 2026-10-18
 
 On Linux ARM64 with ORCA 6.1.1, Open MPI 4.1.8, native GCC/GFortran 13.3.0,
@@ -120,6 +160,16 @@ Python 3.12.11 and AiiDA 2.9.2:
   search and Results, including the orbital energy-level viewer, were checked
   in the browser. This validates the repaired startup, not CASCI/Dyson spectra
   or reproduction of the reference publication.
+- After moving shared MPI windows off the 64 MiB `/dev/shm`, app reference
+  `78d4556d-9c83-4615-9f5d-297b29c3ae4d` reproduced the same SCF energy.
+  Common-orbital preparation `f1f66d58-baf3-4895-821a-119dfe578b90` then fed
+  successful neutral singlet CASCI(12,12)
+  `c1883aa3-2525-4642-bbd2-2f5b4d3615da`, four-root cation doublet CASCI(11,12)
+  `22f59ecb-9871-468a-b7bd-1bc4ca902bbd`, and four-root anion doublet CASCI(13,12)
+  `e4aec9f7-229d-4541-b40e-54dad2193368`. All used 8 processes and the same
+  fixed spatial orbitals. With `TPrintWF=1e-10`, every printed CI norm exceeded
+  0.99999990; the neutral state's default `1e-6` cutoff retained only about
+  0.999083 and was insufficient for the app's default Dyson norm gate.
 
 The live instance currently reports AiiDAlab 26.6.0, below the app's declared
 26.9.0 floor; `pip check` reports that mismatch. The MPI repair did not change

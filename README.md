@@ -1,5 +1,12 @@
 # AiiDAlab ORCA: molecular spectroscopy
 
+**Harmonic IR and Raman draft:** a separate section on optimized-geometry results
+now submits an independent frequency workflow, retains the Hessian and
+derivatives in AiiDA, and reuses the QE vibroscopy spectra/mode-animation viewer
+through a molecular adapter. Formaldehyde is the small development example;
+CO checks linear-molecule handling. Resonance Raman is the next separate
+component. See [the vibrational spectroscopy guide](docs/vibrations.md).
+
 **Status: local geometry, SCF, orbital-property, CASCI and Dyson prototype.** Following the [design discussion](https://github.com/nanotech-empa/aiidalab-orca/issues/1), the app now combines small, independent geometry and electronic-reference WorkChains. The broader spectroscopy design below remains under review. Orbital and spin-density cubes, reduced previews, wavefunction preservation, and energy-level viewing are implemented. Common spatial-orbital preparation, independent CASCI charge/spin sectors, and a shared many-electron energy diagram are now available as a draft. QRO/UNO inspection now exposes occupation tables and reduced-cube visualization with full-cube stashing. Fixed-orbital CASCI Dyson transitions, both spin conventions, interactive spectra and optional intensity-blend cubes are now available as a draft.
 
 **ORCA · Electronic structure** supports structure import/editing (including the shared CDXML importer), searchable calculation history, explicit charge/multiplicity, HF/DFT optimization with optional Cartesian/distance/angle/dihedral constraints, and single-point SCF calculations at fixed geometry. Unchecking **Optimize geometry** now runs SCF and returns its energy and remote orbital/density files. See [the geometry and local setup guide](docs/geometry.md), [the SCF/reference workflow](docs/reference.md), [wavefunction storage, orbital levels and cubes](docs/orbitals.md), [fixed-geometry CASCI states](docs/casci.md), [QRO/UNO inspection](docs/orbital-inspection.md), and [Dyson transitions, spectra and blends](docs/dyson.md). The backend is separately installable from `backend/` and usable without the app. The local starting test is **NO, neutral doublet, PBE/def2-SVP**; pentacene remains the spectroscopy reference target.

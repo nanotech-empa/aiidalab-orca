@@ -57,10 +57,13 @@ class SpectralViewer(ipw.VBox):
         self._chart_columns = [self.diagram_box,spectrum_box]
         self.chart_layout.observe(self._chart_layout_changed,names='value')
         linked = ipw.HBox(self._chart_columns,layout=ipw.Layout(flex_flow='row wrap',align_items='flex-start'))
-        super().__init__([ipw.HBox([self.spin,self.side],layout=ipw.Layout(flex_flow='row wrap')),
+        from .presentation import ComputePanel
+        self.display_settings = ComputePanel('Spectrum display settings…', [
             ipw.HBox([self.eta,self.shift],layout=ipw.Layout(flex_flow='row wrap')),
             ipw.HBox([self.lower,self.upper,reset],layout=ipw.Layout(flex_flow='row wrap')),
-            self.info,ipw.HBox([self.show_states,self.chart_layout],layout=ipw.Layout(flex_flow='row wrap')),linked,self.selected,self.selection_info,self.preview_info,self.use_selection,self.download,self.transition_table,
+            ipw.HBox([self.show_states,self.chart_layout],layout=ipw.Layout(flex_flow='row wrap'))])
+        super().__init__([ipw.HBox([self.spin,self.side],layout=ipw.Layout(flex_flow='row wrap')),
+            self.display_settings,linked,self.info,self.selected,self.selection_info,self.preview_info,self.use_selection,self.download,self.transition_table,
             ipw.HTML('<p><b>Spectral intensity blend</b> · select an energy or integrate over a window. Uses the selected transitions below.</p>'),
             self.mode,self.energy,ipw.HBox([self.window_lower,self.window_upper],layout=ipw.Layout(flex_flow='row wrap'))])
         for w in (self.spin,self.side,self.eta,self.shift,self.lower,self.upper,self.mode,self.energy,self.window_lower,self.window_upper):

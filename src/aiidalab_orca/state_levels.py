@@ -30,7 +30,7 @@ class StateEnergyLevels(ipw.VBox):
         super().__init__([ipw.HTML('<h4>Many-electron state energies</h4><p>Fixed geometry · shared spatial orbitals. '
             'All charge and spin sectors use the selected common energy zero. These are total state energies, '
             'not orbital energies or signed addition/removal spectral peaks. Nearby states may share an averaged overview bar; '
-            'hover or open the table for exact values. After computing Dyson transitions, use the linked diagram and clickable spectrum in the Dyson section below.</p>'), self.zero,
+            'hover or open the table for exact values. After computing Dyson transitions, switch to Dyson spectrum for the linked diagram and clickable spectrum.</p>'), self.zero,
             ipw.HBox([self.lower,self.upper,self.reset],layout=ipw.Layout(flex_flow='row wrap')),
             self.message,self.plot,self.table,self.download])
         self.zero.observe(self._reset,names='value')

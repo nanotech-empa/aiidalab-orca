@@ -112,7 +112,7 @@ class OrcaApp(ipw.VBox):
             self.pages.set_title(i, title)
         self.pages.observe(self._page_changed, names="selected_index")
         super().__init__([
-            ipw.HTML(_APP_STYLE + "<div style='border-left:5px solid #237b98;padding:10px 20px;background:#f5f7fa'><h2 style='margin:0'>ORCA · Electronic structure</h2><p>Single-point SCF and geometry optimization with AiiDA provenance.</p></div>"),
+            ipw.HTML(_APP_STYLE + "<div style='border-left:5px solid #237b98;padding:10px 20px;background:#f5f7fa'><h2 style='margin:0'>ORCA · Molecular analysis</h2><p>Geometry, orbitals, electronic states and vibrational spectroscopy with AiiDA provenance.</p></div>"),
             self.error, self.pages,
         ], layout=ipw.Layout(max_width="1100px"))
         self.add_class("aiidalab-orca-app")
@@ -216,6 +216,9 @@ class OrcaApp(ipw.VBox):
     def _page_changed(self, change):
         if change["new"] == 1:
             self.history.refresh()
+        for view in self.result_box.children:
+            if hasattr(view, 'set_active'):
+                view.set_active(change['new'] == 2)
 
     def _review(self, _=None):
         if self._submitted:
@@ -312,13 +315,19 @@ class OrcaApp(ipw.VBox):
             return False
         data = services.result(self.process_uuid)
         state = ("Converged" if data["optimized"] or data.get("single_point") else "Completed") if data["successful"] else data["state"].capitalize()
-        self.status.value = f"<h3>{html.escape(data['label'])}</h3><p><b>{state}</b></p><details><summary>Workflow identifier</summary><code>{self.process_uuid}</code></details>"
+        identifier = (f"<details><summary>Workflow identifier</summary><code>{self.process_uuid}</code></details>"
+                      if not data.get('scientific_success', data['successful']) else '')
+        self.status.value = f"<h3>{html.escape(data['label'])}</h3><p><b>{state}</b></p>" + identifier
         self.copy.disabled = False
         self.use_final.disabled = "structure_uuid" not in data
         old = self.result_box.children
+        for widget in old:
+            if hasattr(widget, 'set_active'):
+                widget.set_active(False)
         if data["finished"]:
             if data.get("scientific_success", data["successful"]):
                 self.result_box.children = [show_result(data)]
+                self.result_box.children[0].set_active(self.pages.selected_index == 2)
             else:
                 message = data["exit_message"] or "Workflow did not finish successfully"
                 details = "\n".join(data["reports"]) + "\n" + data.get("output_tail", "")
@@ -401,6 +410,11 @@ class OrcaApp(ipw.VBox):
 
 def close_widget_tree(widget):
     """Dispose owned result widgets when replacing a result view."""
+    if getattr(widget, '_orca_tree_closed', False):
+        return
+    widget._orca_tree_closed = True
+    if hasattr(widget, 'set_active'):
+        widget.set_active(False)
     for child in getattr(widget, "children", ()):
         close_widget_tree(child)
     widget.close()

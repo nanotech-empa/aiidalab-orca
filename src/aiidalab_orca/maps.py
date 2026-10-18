@@ -58,21 +58,26 @@ class DysonMaps(ipw.VBox):
         self.figures.observe(self._open_figure, names='value')
         self.image, self.download, self.details = ipw.Image(format='png'), ipw.HTML(), ipw.HTML()
         self.image.layout.display = 'none'
-        self.figure_box = ipw.VBox([ipw.HTML('<p><b>Shared intensity scale</b> · every panel uses the same explicit limits. '
-            'Numerical intensities are preserved without normalization. Change the limits to reveal faint features; '
-            'all panels change together.</p>'), ipw.HBox([self.vmin, self.vmax], layout=ipw.Layout(flex_flow='row wrap')),
+        from .presentation import ComputePanel
+        self.appearance = ComputePanel('Figure appearance / export…', [
+            ipw.HBox([self.vmin, self.vmax], layout=ipw.Layout(flex_flow='row wrap')),
             self.range_button, ipw.HBox([self.cmap, self.rotation], layout=ipw.Layout(flex_flow='row wrap')),
-            ipw.HBox([self.dpi, self.bar], layout=ipw.Layout(flex_flow='row wrap')), self.render,
-            self.figures, self.download, self.image, self.load_settings, self.details])
+            ipw.HBox([self.dpi, self.bar], layout=ipw.Layout(flex_flow='row wrap')), self.render])
+        self.figure_box = ipw.VBox([self.figures, ipw.HTML('<p><b>Shared intensity scale</b> · every panel uses the same explicit limits. '
+            'Numerical intensities are preserved without normalization. Change the limits to reveal faint features; '
+            'all panels change together.</p>'), self.download, self.image, self.appearance, self.load_settings, self.details])
         self.figure_box.layout.display = 'none'
-        super().__init__([ipw.HTML('<p>Adjust the <b>source slice in the 3D viewer above</b>. '
+        self.calculation = ComputePanel('Compute / extend constant-height maps…', [
+            ipw.HTML('<p>Adjust the <b>source slice in 3D orbitals and slicing plane below</b>. '
             'Its Center is the height-reference point; Offset is the source-slice height along Normal. '
             'Observation heights use that same reference and normal. Full-resolution amplitudes are extrapolated before squaring and combining; '
             'the displayed reduced cube only helps position the plane.</p>'), self.reset, self.plane_info,
             self.selection, self.kind, self.heights, ipw.HBox([self.kappa, self.padding], layout=ipw.Layout(flex_flow='row wrap')),
             ipw.HTML('<p>Blends use the energy/window, broadening and spin convention selected in the spectral viewer. '
                      'Individual maps use its spin convention. The model produces STM-like intensities, without absolute current calibration.</p>'),
-            self.review, self.message, self.compute, self.previous, self.figure_box])
+            self.review, self.compute])
+        self.empty = ipw.HTML()
+        super().__init__([self.previous,self.empty,self.figure_box,self.calculation,self.message])
         for w in (self.selection, self.kind, self.heights, self.kappa, self.padding):
             w.observe(self.invalidate, names='value')
         self.bind_viewer(viewer, preserve=False)
@@ -185,6 +190,7 @@ class DysonMaps(ipw.VBox):
 
     def _refresh(self, selected=None):
         rows = service.map_history(self.cube_uuid)
+        self.empty.value = '' if rows else '<p class="orca-notice">No constant-height maps have been computed for these cubes. Generate maps here when needed; the 3D orbital previews remain available.</p>'
         self.previous.options = [('Select numerical maps', None)]+rows
         if selected or rows:
             self.previous.value = selected or rows[0][1]

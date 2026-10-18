@@ -159,6 +159,7 @@ class MolecularRamanModel(RamanModel):
 
 class MolecularSpectrum(RamanWidget):
     def __init__(self, record, spectrum_type):
+        self._animation_active = True
         atoms = Atoms(record['symbols'], positions=record['positions'], pbc=False)
         model = MolecularRamanModel(record)
         super().__init__(model, record['data_uuid'], atoms, spectrum_type)
@@ -288,18 +289,63 @@ class MolecularSpectrum(RamanWidget):
 
     def _playback_state_changed(self, change):
         playing = change['new'].get('isPlaying')
+        if not self._animation_active:
+            # In-flight frame updates must not restart a viewer hidden by its
+            # parent after the pause command was sent.
+            if playing:
+                self.weas._widget.animationState = {'isPlaying': False, 'frameDuration': 100}
+            return
         if playing is not None and playing != self.play_animation.value:
             self.play_animation.value = playing
 
+    def set_active(self, active):
+        self._animation_active = active
+        if not active and self.rendered:
+            self.weas._widget.animationState = {'isPlaying': False, 'frameDuration': 100}
+
+
+class MolecularSpectra(ipw.Tab):
+    """Preserve mode settings and pause animations while their view is hidden."""
+
+    def __init__(self, record):
+        kinds = ['IR', 'Raman'] if record['summary']['raman'] else ['IR']
+        self.spectra = [MolecularSpectrum(record, kind) for kind in kinds]
+        self._active = True
+        self._playing = dict.fromkeys(range(len(kinds)), True)
+        super().__init__(children=self.spectra)
+        for index, kind in enumerate(kinds):
+            self.set_title(index, kind)
+        self.observe(self._selected, names='selected_index')
+        self._show_selected()
+
+    def _hide(self, index):
+        spectrum = self.spectra[index]
+        if spectrum.rendered:
+            self._playing[index] = spectrum.play_animation.value
+            spectrum.set_active(False)
+            spectrum.play_animation.value = False
+
+    def _show_selected(self):
+        index = self.selected_index or 0
+        spectrum = self.spectra[index]
+        spectrum.render()
+        spectrum.set_active(self._active)
+        spectrum.play_animation.value = self._playing[index] if self._active else False
+
+    def _selected(self, change):
+        if change['old'] is not None:
+            self._hide(change['old'])
+        self._show_selected()
+
+    def set_active(self, active):
+        if active == self._active:
+            return
+        if not active:
+            self._hide(self.selected_index or 0)
+        self._active = active
+        if active:
+            self._show_selected()
+
 
 def spectra_view(record):
-    kinds = ['IR', 'Raman'] if record['summary']['raman'] else ['IR']
-    widgets = [MolecularSpectrum(record, kind) for kind in kinds]
-    tabs = ipw.Tab(children=widgets)
-    for index, kind in enumerate(kinds):
-        tabs.set_title(index, kind)
-    def render(change=None):
-        widgets[tabs.selected_index or 0].render()
-    tabs.observe(render, names='selected_index')
-    render()
-    return tabs
+    return MolecularSpectra(record)

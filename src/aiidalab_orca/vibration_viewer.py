@@ -70,6 +70,7 @@ class MolecularResponse:
 
 class MolecularRamanModel(RamanModel):
     activity = tl.Bool(False)
+    amplitude = tl.Float(1.0)
 
     def __init__(self, record, **kwargs):
         self.record = record  # Serialized data only; never an ORM node.
@@ -272,6 +273,12 @@ class MolecularSpectrum(RamanWidget):
         if hasattr(self, 'play_animation'):
             # Unlike the initial-only phonon trait, the supported state importer
             # replaces an attached trajectory when mode or amplitude changes.
+            # WEAS resets its vector-mesh registry when replacing atoms. Remove
+            # existing arrows and invalidate stored settings first, so even a
+            # new mode at the same amplitude rebuilds its vector field.
+            self.weas._widget.send_js_task({'name': 'state.set',
+                'args': [{'plugins': {'vectorField': {'settings': None}}}]})
+            self.weas._widget.send_js_task({'name': 'avr.VFManager.applySettings', 'args': [{}]})
             self.weas.import_state(self._model.mode_animation_state(self.play_animation.value))
 
     def _playback_changed(self, change):

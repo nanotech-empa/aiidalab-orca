@@ -83,6 +83,24 @@ def test_molecular_optics_use_orca_activities_and_cartesian_tensors():
         response.prefactor(532, -1)
 
 
+def test_zero_raman_response_has_no_defined_depolarization():
+    atoms, arrays, _ = data()
+    vectors = arrays['displacements'][6:].reshape(6, 12)
+    vectors /= np.sqrt((vectors**2*np.repeat(arrays['masses'], 3)).sum(axis=1))[:, None]
+    derivatives = arrays['polarizability_derivatives']
+    target = vectors@derivatives
+    target[0] = 0  # A Raman-inactive mode, as occurs with inversion selection rules.
+    derivatives = np.linalg.pinv(vectors)@target
+    hess = (FIXTURE/'h2co.hess').read_text()
+    start = hess.index('$polarizability_derivatives')
+    end = hess.index('#', start)
+    block = '$polarizability_derivatives\n12\n'+'\n'.join(' '.join(f'{x:.16e}' for x in row) for row in derivatives)+'\n\n'
+    hess = hess[:start]+block+hess[end:]
+    text = (FIXTURE/'h2co.out').read_text().replace('1.349898', '0.000000')
+    result, _ = backend.parse_vibrations(text, hess, atoms, True)
+    assert result['raman_activities'][6] == 0
+
+
 def test_adapter_reuses_qe_viewer_and_mode_participation():
     from aiidalab_orca.vibration_viewer import MolecularRamanModel, MolecularSpectrum
     from aiidalab_qe_vibroscopy.app.widgets.ramanwidget import RamanWidget

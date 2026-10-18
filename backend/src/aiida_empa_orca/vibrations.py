@@ -174,7 +174,10 @@ def parse_vibrations(text, hessian_text, atoms, raman):
             raise ValueError('Raman tensor invariants do not reproduce ORCA activities')
         denominator = 45*mean**2 + 4*gamma
         depol = np.divide(3*gamma, denominator, out=np.zeros_like(gamma), where=denominator > 1e-14)
-        if not np.allclose(depol, depolarizations[first:], atol=2e-4, rtol=0):
+        # Depolarization is undefined for zero scattering. Symmetry-forbidden
+        # modes can have arbitrary ratios from numerical response noise.
+        active = activities[first:] > 1e-8
+        if not np.allclose(depol[active], depolarizations[first:][active], atol=2e-4, rtol=0):
             raise ValueError('Raman tensor invariants do not reproduce ORCA depolarizations')
         arrays['raman_tensors'] = tensors
     if any(not np.isfinite(value).all() for value in arrays.values()):

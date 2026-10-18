@@ -15,7 +15,7 @@ dependencies = [
   "nglview>=3",
   "matplotlib",
   # The reused vibroscopy widget imports the QE MVC Model.
-  "aiidalab-qe>=26.9.0",
+  "aiidalab-qe",
   # Shared IR/Raman spectra and WEAS mode animation, including atom participation (PR #189).
   "aiidalab-qe-vibroscopy @ git+https://github.com/aiidalab/aiidalab-qe-vibroscopy.git@ca637a459906c6a87c602f7fc5235773e4e9cba8",
   # Rendering CLI and image options, absent from cubehandler 0.2.1 (PR #14).

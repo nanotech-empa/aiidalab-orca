@@ -1,0 +1,123 @@
+{
+  "method": "spin_canonical",
+  "filename": "aiida.gbw",
+  "assignments": [
+    {
+      "spin": 0,
+      "index": 0,
+      "shell": "1s",
+      "atom_index": 1,
+      "occupation": 1.0,
+      "population": 0.997,
+      "spin_channel": "alpha",
+      "energy_hartree": -18.885108,
+      "atomic_populations": [
+        0.003,
+        0.997
+      ]
+    },
+    {
+      "spin": 0,
+      "index": 1,
+      "shell": "1s",
+      "atom_index": 0,
+      "occupation": 1.0,
+      "population": 0.996,
+      "spin_channel": "alpha",
+      "energy_hartree": -14.112696,
+      "atomic_populations": [
+        0.996,
+        0.004
+      ]
+    },
+    {
+      "spin": 1,
+      "index": 0,
+      "shell": "1s",
+      "atom_index": 1,
+      "occupation": 1.0,
+      "population": 0.997,
+      "spin_channel": "beta",
+      "energy_hartree": -18.876097,
+      "atomic_populations": [
+        0.003,
+        0.997
+      ]
+    },
+    {
+      "spin": 1,
+      "index": 1,
+      "shell": "1s",
+      "atom_index": 0,
+      "occupation": 1.0,
+      "population": 0.996,
+      "spin_channel": "beta",
+      "energy_hartree": -14.099114,
+      "atomic_populations": [
+        0.996,
+        0.004
+      ]
+    }
+  ],
+  "schema_version": 2,
+  "population_method": "ORCA Loewdin atomic populations per MO",
+  "minimum_population": 0.95,
+  "original_assignments": [
+    {
+      "spin": 0,
+      "index": 0,
+      "shell": "1s",
+      "atom_index": 1,
+      "occupation": 1.0,
+      "population": 0.997,
+      "spin_channel": "alpha",
+      "energy_hartree": -18.885108,
+      "atomic_populations": [
+        0.003,
+        0.997
+      ]
+    },
+    {
+      "spin": 0,
+      "index": 1,
+      "shell": "1s",
+      "atom_index": 0,
+      "occupation": 1.0,
+      "population": 0.996,
+      "spin_channel": "alpha",
+      "energy_hartree": -14.112696,
+      "atomic_populations": [
+        0.996,
+        0.004
+      ]
+    },
+    {
+      "spin": 1,
+      "index": 0,
+      "shell": "1s",
+      "atom_index": 1,
+      "occupation": 1.0,
+      "population": 0.997,
+      "spin_channel": "beta",
+      "energy_hartree": -18.876097,
+      "atomic_populations": [
+        0.003,
+        0.997
+      ]
+    },
+    {
+      "spin": 1,
+      "index": 1,
+      "shell": "1s",
+      "atom_index": 0,
+      "occupation": 1.0,
+      "population": 0.996,
+      "spin_channel": "beta",
+      "energy_hartree": -14.099114,
+      "atomic_populations": [
+        0.996,
+        0.004
+      ]
+    }
+  ]
+}

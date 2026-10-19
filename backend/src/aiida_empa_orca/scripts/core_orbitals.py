@@ -102,6 +102,10 @@ def main():
     text = Path('aiida.out').read_text()
     if 'MaxIter==0 has been chosen - skipping the SCF' not in text:
         raise ValueError('Unexpected SCF optimization during core preparation')
+    if request.get('schema_version') == 2:
+        import runpy
+        runpy.run_path('spin_core.py')['prepare_spin_core'](request, text)
+        return
     rows, verified = assignments(text, request['numbers'])
     localized = not verified
     if localized:

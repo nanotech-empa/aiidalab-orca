@@ -125,6 +125,45 @@ The planned user benchmark is **QE through the QE app on Daint versus ORCA
 locally**, at the supplied geometry, **without relaxation**. No QE benchmark
 has yet been run for the new supplied geometry.
 
+### Comparison with existing QE results at their stored geometry
+
+The existing QE-app formic-acid run covered only the carbonyl oxygen at a
+hand-built geometry. The optimized ORCA example below uses a different
+geometry and cannot be compared directly with that run. To remove this
+difference, an additional ORCA SCF and O2 1s ionization were computed at
+**exactly the stored QE atom order and Cartesian coordinates**, without
+relaxation. Both methods use PBE.
+
+| Calculation at the same stored geometry | Carbonyl O 1s binding energy (eV) |
+| --- | ---: |
+| Existing QE-app run, 30/240 Ry cutoffs | 537.83102 |
+| Existing standalone QE compatibility test, 60/480 Ry cutoffs | 538.02055 |
+| ORCA, PBE/def2-TZVP, explicit UKS core-ionized doublet | 537.21133 |
+
+ORCA lies **0.61969 eV below the QE-app result** and 0.80922 eV below the
+standalone QE test. The actual staged ground/core-hole pseudopotentials match
+by file hash in the two QE runs; their cutoffs and SCF thresholds differ.
+Their 0.18953 eV difference shows that numerical convergence still needs to be
+checked before an accuracy comparison. Both include the stored O 1s correction
+of 668.22 eV. Their valence calculations have one spin component; the core hole
+is represented by the pseudopotential. ORCA instead relaxes an explicit
+all-electron UKS doublet (final ⟨S²⟩ = 0.756508). Thus matching the geometry and
+functional does not make the core-hole, spin or basis approximations identical.
+
+This is a single-site development comparison, not an accuracy benchmark or a
+test of relative chemical shifts: the saved QE runs contain no second oxygen
+site. Both QE results are selectable as overlays in the XPS workspace of the
+new fixed-geometry ORCA reference.
+
+Provenance:
+
+- QE-app XPS: `c074ddf9-3bfa-462e-b99f-0bb4efa253e1` (parent
+  `3e07fea0-3281-42a5-93af-255d6a0e31b8`).
+- Standalone QE compatibility test: `f76a299c-173b-4eb0-8a3d-a6181b46b577`.
+- ORCA fixed-geometry SCF: `13668010-5649-4960-80f9-684ea3f434b5`.
+- ORCA XPS: `c70cb18e-1273-46e5-9fa4-ffdec48a94a3`.
+- ORCA site data: `1cf24625-705d-466d-8297-7b1cd7526229`.
+
 ## Local validation
 
 Native ORCA 6.1.1 ARM64 calculations were submitted through the app services.

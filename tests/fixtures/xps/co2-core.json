@@ -1,0 +1,45 @@
+{
+  "method": "core_only_pipek_mezey",
+  "filename": "aiida.gbw",
+  "assignments": [
+    {
+      "index": 0,
+      "atom_index": 0,
+      "occupation": 2.0,
+      "population": 0.992,
+      "energy_hartree": null,
+      "atomic_populations": [
+        0.992,
+        0.004,
+        0.004
+      ]
+    },
+    {
+      "index": 1,
+      "atom_index": 1,
+      "occupation": 2.0,
+      "population": 0.999,
+      "energy_hartree": null,
+      "atomic_populations": [
+        0.001,
+        0.999,
+        0.0
+      ]
+    },
+    {
+      "index": 2,
+      "atom_index": 2,
+      "occupation": 2.0,
+      "population": 0.999,
+      "energy_hartree": null,
+      "atomic_populations": [
+        0.001,
+        0.0,
+        0.999
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "population_method": "ORCA Loewdin atomic populations per MO",
+  "minimum_population": 0.95
+}

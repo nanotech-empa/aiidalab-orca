@@ -112,7 +112,7 @@ class OrcaApp(ipw.VBox):
             self.pages.set_title(i, title)
         self.pages.observe(self._page_changed, names="selected_index")
         super().__init__([
-            ipw.HTML(_APP_STYLE + "<div style='border-left:5px solid #237b98;padding:10px 20px;background:#f5f7fa'><h2 style='margin:0'>ORCA · Molecular analysis</h2><p>Geometry, orbitals, electronic states and vibrational spectroscopy with AiiDA provenance.</p></div>"),
+            ipw.HTML(_APP_STYLE + "<div style='border-left:5px solid #237b98;padding:10px 20px;background:#f5f7fa'><h2 style='margin:0'>ORCA · Molecular analysis</h2><p>Geometry, orbitals, electronic states and spectroscopy with AiiDA provenance.</p></div>"),
             self.error, self.pages,
         ], layout=ipw.Layout(max_width="1100px"))
         self.add_class("aiidalab-orca-app")

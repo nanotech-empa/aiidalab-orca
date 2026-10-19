@@ -1,0 +1,44 @@
+------------------------------------------------------------------------------
+                           ORCA ORBITAL LOCALIZATION
+------------------------------------------------------------------------------
+
+Input orbitals are from                  ... reference.gbw
+Output orbitals are to                   ... localized.gbw
+Max. number of iterations                ... 128
+Localizations seeded randomly            ... off
+Convergence tolerance                    ... 1.000e-08
+Threshold for strong local MOs           ... 9.500e-01
+Threshold for bond MOs                   ... 8.500e-01
+Operator                                 ... 0
+Orbital range for localization           ... 0 to 2
+Localization criterion                   ... PIPEK-MEZEY
+Warning: cannot retrieve the overlap matrix S
+        ... Overlap was succesfully recalculated
+Entering Jacobi type localization:
+Using Cholesky decomposition as initial guess.
+Initial value of the localization sum :     3.002568
+ITERATION   0 : L=    3.0026174732 DL=  4.90e-05 (MAX-T)=   0.142
+ITERATION   1 : L=    3.0026174732 DL=  5.80e-12 (MAX-T)=   0.000
+ITERATION   2 : L=    3.0026174732 DL=  0.00e+00 (MAX-T)=   0.000
+LOCALIZATION SUM CONVERGED
+
+
+--------------------------------------------------------------------------------
+                    LOCALIZED MOLECULAR ORBITAL COMPOSITIONS
+--------------------------------------------------------------------------------
+
+The Mulliken populations for each LMO on each atom are computed
+The LMO`s will be ordered according to atom index and type
+  (A) Strongly localized MO`s have populations of >=0.950 on one atom
+  (B) Two center bond orbitals have populations of >=0.850 on two atoms
+  (C) Other MO`s are considered to be `delocalized`
+
+FOUND  -   3 strongly local MO`s
+       -   0 two center bond MO`s
+       -   0 significantly delocalized MO`s
+
+Rather strongly localized orbitals:
+MO   2:   2O  -   0.998022
+MO   1:   1O  -   0.998022
+MO   0:   0C  -   1.005236
+Localized MO's were stored in: localized.gbw

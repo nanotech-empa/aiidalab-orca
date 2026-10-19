@@ -1,10 +1,16 @@
 # AiiDAlab ORCA: molecular spectroscopy
 
 **Independent analysis workspaces:** Results now opens with the geometry and
-offers separate **Orbitals & density**, **States & Dyson**, **Vibrations** and
+offers separate **Orbitals & density**, **States & Dyson**, **Vibrations**, **XPS** and
 **Calculation details** sections. Use just the analyses needed for a molecule;
 CASCI does not require Dyson, and vibrations do not require either. Saved results
 appear before optional calculation forms. See [the results guide](docs/results.md).
+
+**Site-resolved XPS draft:** select C/O atoms in the XPS results workspace to
+compute vertical 1s ΔSCF binding energies at the reference geometry. Core
+assignment/localization, final core-hole checks, doublet spin diagnostics,
+per-site reuse and inherited wavefunction preservation are included. The first
+version requires a closed-shell RKS singlet. See [the XPS guide](docs/xps.md).
 
 **Harmonic IR and Raman draft:** a separate section on optimized-geometry results
 now submits an independent frequency workflow, retains the Hessian and

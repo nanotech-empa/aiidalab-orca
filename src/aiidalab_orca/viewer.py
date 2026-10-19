@@ -99,6 +99,7 @@ class ResultsView(ipw.VBox):
             ('orbitals', 'Orbitals & density', self._orbitals),
             ('states', 'States & Dyson', self._states),
             ('vibrations', 'Vibrations', self._vibrations),
+            ('xps', 'XPS', self._xps),
             ('details', 'Calculation details', self._details),
         ])
         self.tabs.add_class('orca-property-tabs')
@@ -122,6 +123,7 @@ class ResultsView(ipw.VBox):
             ('orbitals', 'Orbitals & density', 'SCF levels, orbital cubes, spin density and QRO/UNO inspection.', 'cubes'),
             ('states', 'States & Dyson', 'CASCI states on their own, or optional Dyson transitions, spectra and maps.', 'exchange'),
             ('vibrations', 'Vibrations', 'Normal modes, IR and Raman at an optimized geometry.', 'music'),
+            ('xps', 'XPS', 'Core binding energies and chemical shifts for selected atoms.', 'bullseye'),
         ]:
             button = ipw.Button(description=title, icon=icon, layout=ipw.Layout(width='auto'))
             button.on_click(lambda _, section=key: self.tabs.show_section(section))
@@ -180,6 +182,12 @@ class ResultsView(ipw.VBox):
                                   + input_details(data.get('input_files', {}))))
         items.append(ipw.HTML('<h4>Provenance and identifiers</h4>'+provenance))
         return ipw.VBox(items)
+
+    def _xps(self):
+        if not self.data.get('levels'):
+            return ipw.HTML('<p class="orca-notice">XPS requires a completed SCF reference at this geometry.</p>')
+        from .xps import XpsSpectroscopy
+        return XpsSpectroscopy(self.data['uuid'])
 
     def _prepare_common(self):
         panel = self.tabs.show_section('states')

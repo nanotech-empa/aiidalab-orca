@@ -25,10 +25,12 @@ def validate_reference(structure, settings):
     s = reference_settings(settings)
     from .settings import validate_molecule
     validate_molecule(structure, s)
-    if s['multiplicity'] != 1 or reference(s) != 'RKS':
-        raise ValueError('This XPS draft requires a closed-shell RKS singlet; open-shell multiplets need a separate validated treatment.')
-    if set(structure.get_ase().numbers) - {1, 6, 7, 8, 9}:
-        raise ValueError('This K-edge draft supports molecules containing H, C, N, O and F, with C/O 1s ionization.')
+    if (s['multiplicity'], reference(s)) not in ((1, 'RKS'), (2, 'UKS')):
+        raise ValueError('This XPS protocol requires a closed-shell RKS singlet or a UKS doublet reference.')
+    if set(structure.get_ase().numbers) - {1, 6, 7, 8, 9, 27}:
+        raise ValueError('This XPS draft supports H/C/N/O/F and all-electron Co.')
+    if list(structure.get_ase().numbers).count(27) > 1:
+        raise ValueError('The initial Co extension supports one cobalt centre.')
     if any(v.get('ecp', 'none').lower() != 'none' for v in s['element_settings'].values()):
         raise ValueError('Core-ionization XPS requires an all-electron reference; ECPs are not supported.')
     if s['block_parameters']:
@@ -44,11 +46,18 @@ def core_parameters(settings):
     return p
 
 
-def site_parameters(settings, orbital_index):
+def site_parameters(settings, orbital_index, spin_channel='alpha', solver='standard'):
+    if spin_channel not in ('alpha', 'beta'):
+        raise ValueError('Choose alpha or beta ionization')
     p = single_point_parameters(settings)
     p['input_keywords'] = ['UKS' if x == 'RKS' else x for x in p['input_keywords']]
     p['input_keywords'] += ['MOREAD', 'DeltaSCF', 'NoDIIS', 'NoTRAH']
-    p['input_blocks']['scf'].update(IonizeAlpha=int(orbital_index))
+    p['input_blocks']['scf']['IonizeAlpha' if spin_channel == 'alpha' else 'IonizeBeta'] = int(orbital_index)
+    if solver == 'freeze_release':
+        p['input_keywords'] += ['FreezeAndRelease', 'SCFCheckGrad']
+        p['input_blocks']['scf'].update(DoMOM='false', SOSCFMaxStep=.1, SOSCFConstrainedMaxStep=.1, SOSCFConvFactor=100)
+    elif solver != 'standard':
+        raise ValueError('Choose standard or freeze_release DeltaSCF convergence')
     # ORCA 6.1.1 skips Löwdin analysis after IonizeAlpha because its population
     # routine still expects the reference NEL. Native Mulliken MO populations
     # remain available; electron counts are checked independently below.
@@ -83,8 +92,11 @@ class CoreOrbitalsCalculation(engine.CalcJob):
             handle.write(text.replace('"reference.gbw"', '"localized.gbw"'))
         with folder.open('core_orbitals.py', 'w') as handle:
             handle.write(files('aiida_empa_orca').joinpath('scripts/core_orbitals.py').read_text())
+        with folder.open('spin_core.py', 'w') as handle:
+            handle.write(files('aiida_empa_orca').joinpath('scripts/spin_core.py').read_text())
         with folder.open('request.json', 'w') as handle:
             json.dump({'numbers': self.inputs.structure.get_ase().numbers.tolist(),
+                       'schema_version': 2 if s['multiplicity'] == 2 or any(z in (7, 27) for z in self.inputs.structure.get_ase().numbers) else 1,
                        'orca': str(self.inputs.code.filepath_executable)}, handle)
         info = common.CalcInfo()
         copy_orbital(info, self.inputs)
@@ -102,12 +114,17 @@ class CoreOrbitalsParser(Parser):
     def parse(self, **kwargs):
         try:
             data = json.loads(self.retrieved.base.repository.get_object_content('core.json'))
-            if data.get('schema_version') != 1 or not data.get('assignments'):
+            if data.get('schema_version') not in (1, 2) or not data.get('assignments'):
                 raise ValueError('No verified core-orbital assignments')
             from .scripts.core_orbitals import assignments
-            localized = data['method'] == 'core_only_pipek_mezey'
+            localized = 'pipek_mezey' in data['method']
             text = self.retrieved.base.repository.get_object_content('localized.out' if localized else 'aiida.out')
-            rows, verified = assignments(text, self.node.inputs.structure.get_ase().numbers.tolist(), localized=localized)
+            if data['schema_version'] == 2:
+                from .scripts.spin_core import spin_assignments
+                rows, verified, _ = spin_assignments(text, self.node.inputs.structure.get_ase().numbers.tolist(),
+                    original=data['original_assignments'] if localized else None)
+            else:
+                rows, verified = assignments(text, self.node.inputs.structure.get_ase().numbers.tolist(), localized=localized)
             if not verified or rows != data['assignments']:
                 raise ValueError('Stored core assignments differ from the native population analysis')
             self.out('core_reference', orm.Dict(dict=data))
@@ -231,16 +248,21 @@ class CoreOrbitalsWorkChain(engine.WorkChain):
             self.out(key, node.outputs[key])
 
 
-def site_signature(structure, settings, code_uuid, retrieved_uuid, atom_index):
+def site_signature(structure, settings, code_uuid, retrieved_uuid, atom_index, spin_channel='alpha'):
     from aiida.orm.implementation import clean_value
     atoms = structure.get_ase()
     payload = {'model': 'rks_1s_delta_scf_v1', 'numbers': atoms.numbers.tolist(),
                'positions': atoms.positions.tolist(), 'parameters': clean_value(single_point_parameters(settings)),
                'code_uuid': str(code_uuid), 'source_retrieved_uuid': str(retrieved_uuid), 'atom_index': atom_index}
+    if settings['multiplicity'] == 2 or spin_channel != 'alpha':
+        payload.update(model='uks_1s_delta_scf_v2', spin_channel=spin_channel)
     return hashlib.sha256(json.dumps(payload, sort_keys=True, allow_nan=False).encode()).hexdigest()
 
 
-def parse_site(text, core_reference, atom_index, electron_count, ground_energy):
+def parse_site(text, core_reference, atom_index, electron_count, ground_energy, *, initial_multiplicity=1, spin_channel='alpha'):
+    if core_reference.get('schema_version') == 2:
+        from .xps_multiplets import parse_spin_site
+        return parse_spin_site(text, core_reference, atom_index, electron_count, ground_energy, initial_multiplicity, spin_channel)
     from .scripts.core_orbitals import levels, populations
     from .parser import reference_summary
     summary = reference_summary(text)
@@ -286,6 +308,8 @@ class XpsSiteCalculation(engine.CalcJob):
                           'atom_index': orm.Int}.items():
             spec.input(key, valid_type=kind)
         source_spec(spec)
+        spec.input('spin_channel', valid_type=orm.Str, default=lambda: orm.Str('alpha'))
+        spec.input('solver', valid_type=orm.Str, default=lambda: orm.Str('standard'))
         spec.input('metadata.options.parser_name', default='empa_orca.xps_site')
         spec.input('metadata.options.withmpi', default=False)
         spec.output('site_result', valid_type=orm.Dict)
@@ -294,12 +318,14 @@ class XpsSiteCalculation(engine.CalcJob):
     def prepare_for_submission(self, folder):
         s = validate_reference(self.inputs.structure, self.inputs.settings.get_dict())
         atom = self.inputs.atom_index.value
-        if not 0 <= atom < len(self.inputs.structure.sites) or self.inputs.structure.get_ase().numbers[atom] not in (6, 8):
-            raise ValueError('Select a C or O atom for 1s ionization')
-        rows = [r for r in self.inputs.core_reference.get_dict()['assignments'] if r['atom_index'] == atom]
+        if not 0 <= atom < len(self.inputs.structure.sites) or self.inputs.structure.get_ase().numbers[atom] not in (6, 7, 8, 9, 27):
+            raise ValueError('Select a C/N/O/F/Co atom for 1s ionization')
+        spin = self.inputs.spin_channel.value
+        rows = [r for r in self.inputs.core_reference.get_dict()['assignments'] if r['atom_index'] == atom
+                and r.get('shell', '1s') == '1s' and r.get('spin_channel', 'alpha') == spin]
         if len(rows) != 1 or rows[0]['population'] < .95:
             raise ValueError('The requested atom has no unique verified core orbital')
-        text = '%moinp "reference.gbw"\n' + render_input(site_parameters(s, rows[0]['index']), int(.75*s['memory_mb']/s['nprocs']), 'aiida.coords.xyz')
+        text = '%moinp "reference.gbw"\n' + render_input(site_parameters(s, rows[0]['index'], spin, self.inputs.solver.value), int(.75*s['memory_mb']/s['nprocs']), 'aiida.coords.xyz')
         with folder.open('aiida.inp', 'w') as handle:
             handle.write(text)
         OrcaCalculation._write_structure(self.inputs.structure, folder, 'aiida.coords.xyz')
@@ -318,9 +344,10 @@ class XpsSiteParser(Parser):
             text = self.retrieved.base.repository.get_object_content('aiida.out')
             result = parse_site(text, inputs.core_reference.get_dict(), inputs.atom_index.value,
                                 int(inputs.structure.get_ase().numbers.sum())-inputs.settings.get_dict()['charge'],
-                                source_energy(inputs.source_retrieved))
+                                source_energy(inputs.source_retrieved), initial_multiplicity=inputs.settings.get_dict()['multiplicity'],
+                                spin_channel=inputs.spin_channel.value)
             result['signature'] = site_signature(inputs.structure, inputs.settings.get_dict(), inputs.code.uuid,
-                                                  inputs.source_retrieved.uuid, inputs.atom_index.value)
+                                                  inputs.source_retrieved.uuid, inputs.atom_index.value, inputs.spin_channel.value)
             self.out('site_result', orm.Dict(dict=result))
         except (OSError, ValueError, KeyError, IndexError) as exc:
             self.logger.error(str(exc))
@@ -335,15 +362,17 @@ def validated_site(node):
     parsed = parse_site(node.outputs.retrieved.base.repository.get_object_content('aiida.out'),
                         node.inputs.core_reference.get_dict(), node.inputs.atom_index.value,
                         int(node.inputs.structure.get_ase().numbers.sum())-node.inputs.settings.get_dict()['charge'],
-                        source_energy(node.inputs.source_retrieved))
+                        source_energy(node.inputs.source_retrieved), initial_multiplicity=node.inputs.settings.get_dict()['multiplicity'],
+                        spin_channel=node.inputs.spin_channel.value if 'spin_channel' in node.inputs else 'alpha')
     expected = site_signature(node.inputs.structure, node.inputs.settings.get_dict(), node.inputs.code.uuid,
-                              node.inputs.source_retrieved.uuid, node.inputs.atom_index.value)
+                              node.inputs.source_retrieved.uuid, node.inputs.atom_index.value,
+                              node.inputs.spin_channel.value if 'spin_channel' in node.inputs else 'alpha')
     if saved != clean_value(parsed | {'signature': expected}):
         raise ValueError('The saved site result differs from the native ORCA output')
     return saved
 
 
-def matching_sites(structure, settings, code_uuid, retrieved_uuid):
+def matching_sites(structure, settings, code_uuid, retrieved_uuid, spin_channel='alpha'):
     result = {}
     query = orm.QueryBuilder().append(orm.FolderData, filters={'uuid': str(retrieved_uuid)}, tag='source').append(
         orm.CalcJobNode, with_incoming='source', edge_filters={'label': 'source_retrieved'}, tag='site',
@@ -356,7 +385,7 @@ def matching_sites(structure, settings, code_uuid, retrieved_uuid):
             continue
         try:
             data = validated_site(node)
-            if data['signature'] == site_signature(structure, settings, code_uuid, retrieved_uuid, atom):
+            if data['signature'] == site_signature(structure, settings, code_uuid, retrieved_uuid, atom, spin_channel):
                 result[atom] = str(uuid)
         except (ValueError, KeyError, OSError):
             continue
@@ -373,6 +402,8 @@ class XpsWorkChain(engine.WorkChain):
                           'source_retrieved': orm.FolderData, 'source_remote': orm.RemoteData}.items():
             spec.input(key, valid_type=kind)
         spec.input('force_recompute', valid_type=orm.Bool, default=lambda: orm.Bool(False))
+        spec.input('spin_channel', valid_type=orm.Str, default=lambda: orm.Str('alpha'))
+        spec.input('solver', valid_type=orm.Str, default=lambda: orm.Str('standard'))
         spec.output_namespace('sites', dynamic=True, valid_type=orm.Dict)
         spec.output('core_reference', valid_type=orm.Dict, required=False)
         spec.outline(cls.setup, engine.if_(cls.needs_core)(cls.prepare_core, cls.inspect_core),
@@ -385,6 +416,10 @@ class XpsWorkChain(engine.WorkChain):
     def setup(self):
         try:
             validate_reference(self.inputs.structure, self.inputs.settings.get_dict())
+            if self.inputs.spin_channel.value not in ('alpha', 'beta'):
+                raise ValueError('Choose alpha or beta ionization')
+            if self.inputs.spin_channel.value == 'beta' and self.inputs.settings.get_dict()['multiplicity'] == 1:
+                raise ValueError('Use the alpha representative for a closed-shell singlet')
             validate_source(self.inputs.structure, self.inputs.settings.get_dict(), self.inputs.code,
                             self.inputs.source_retrieved, self.inputs.source_remote)
             storage_policy(self.inputs.storage_policy.get_dict())
@@ -392,10 +427,11 @@ class XpsWorkChain(engine.WorkChain):
                 raise ValueError('The ORCA tools code must use the ORCA computer')
             atoms = self.inputs.atom_indices.get_list()
             numbers = self.inputs.structure.get_ase().numbers
-            if not atoms or len(set(atoms)) != len(atoms) or any(type(i) is not int or not 0 <= i < len(numbers) or numbers[i] not in (6, 8) for i in atoms):
-                raise ValueError('Select distinct C/O atom indices for 1s ionization')
+            if not atoms or len(set(atoms)) != len(atoms) or any(type(i) is not int or not 0 <= i < len(numbers) or numbers[i] not in (6, 7, 8, 9, 27) for i in atoms):
+                raise ValueError('Select distinct C/N/O/F/Co atom indices for 1s ionization')
             previous = {} if self.inputs.force_recompute.value else matching_sites(
-                self.inputs.structure, self.inputs.settings.get_dict(), self.inputs.code.uuid, self.inputs.source_retrieved.uuid)
+                self.inputs.structure, self.inputs.settings.get_dict(), self.inputs.code.uuid, self.inputs.source_retrieved.uuid,
+                self.inputs.spin_channel.value)
             self.ctx.pending, self.ctx.index = [], 0
             for atom in atoms:
                 if atom in previous:
@@ -432,10 +468,12 @@ class XpsWorkChain(engine.WorkChain):
                 b[key] = self.inputs[key]
             b.core_reference = self.ctx.core.outputs.core_reference
             b.atom_index = orm.Int(self.ctx.pending[self.ctx.index])
+            b.spin_channel = self.inputs.spin_channel
+            b.solver = self.inputs.solver
             attach_orbital(b, resolve_electronic(self.ctx.core.outputs.remote_folder, names=['aiida.gbw']), 'aiida.gbw')
             b.metadata.options = options(self.inputs.settings.get_dict())
             b.metadata.disable_cache = True
-            b.metadata.label = f'Atom {b.atom_index.value+1} · 1s core ionization · doublet'
+            b.metadata.label = f'Atom {b.atom_index.value+1} · 1s core ionization · {self.inputs.spin_channel.value}'
             return engine.ToContext(site=self.submit(b))
         except (ValueError, KeyError, OSError, RuntimeError) as exc:
             self.report(str(exc))

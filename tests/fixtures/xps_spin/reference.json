@@ -1,0 +1,46 @@
+{
+  "source_uuid": "6df5b64d-a57e-4330-991a-f865379d1547",
+  "ground_energy_hartree": -129.81611039323,
+  "numbers": [
+    7,
+    8
+  ],
+  "positions": [
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      1.151
+    ]
+  ],
+  "settings": {
+    "grid": "DEFGRID2",
+    "basis": "def2-TZVP",
+    "charge": 0,
+    "method": "PBE",
+    "nprocs": 4,
+    "protocol": "pbe-v1",
+    "memory_mb": 4096,
+    "reference": "UKS",
+    "dispersion": "default",
+    "constraints": [],
+    "multiplicity": 2,
+    "optimization": "NormalOpt",
+    "approximation": "auto",
+    "max_scf_steps": 300,
+    "schema_version": 2,
+    "auxiliary_basis": "def2/J",
+    "scf_convergence": "TightSCF",
+    "block_parameters": {},
+    "element_settings": {},
+    "wallclock_seconds": 1800,
+    "max_geometry_steps": 100
+  },
+  "method": "PBE/def2-TZVP",
+  "paper_doi": "10.1016/j.cplett.2019.136617",
+  "basis_difference": "Paper uses uncontracted Partridge (14s9p)+d; these are development fixtures, not a complete method reproduction."
+}

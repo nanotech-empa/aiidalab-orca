@@ -25,22 +25,33 @@ class XpsSpectrum(ipw.VBox):
                                  style={'description_width': 'initial'}, layout=ipw.Layout(width='260px'))
         self.width = ipw.BoundedFloatText(value=.4, min=.01, max=10, step=.01, description='Gaussian FWHM (eV)',
                                           style={'description_width': 'initial'}, layout=ipw.Layout(width='260px'))
+        self.spin_view = ipw.Dropdown(options=[('Triplet + estimated singlet', 'projected'), ('Raw UKS branches (HS / BS)', 'raw')],
+            description='Spin treatment', style={'description_width': 'initial'}, layout=ipw.Layout(width='480px', display='' if record.get('multiplets') else 'none'))
         self.qe = ipw.Dropdown(options=[('No QE overlay', -1)]+[(r['label']+' · '+r['uuid'][:8], i) for i, r in enumerate(comparisons)],
                               value=-1, description='Compare', layout=ipw.Layout(width='95%', display='' if comparisons else 'none'))
         self.figure = go.FigureWidget()
         self.figure.update_layout(template='plotly_white', height=390, margin=dict(l=60, r=20, t=25, b=55),
-                                   yaxis_title='Schematic intensity (equal area per atom)')
+                                   yaxis_title='Schematic intensity (equal area per component)')
         self.table, self.download = ipw.HTML(), ipw.HTML()
         super().__init__([ipw.HBox([self.edge, self.axis, self.width], layout=ipw.Layout(flex_flow='row wrap')),
-                          self.qe, self.figure, self.table, self.download,
-                          ipw.HTML('<p>Each selected atom contributes equal integrated area. These line shapes do not include photoionization cross sections or satellite intensities. '
+                          self.spin_view, self.qe, self.figure, self.table, self.download,
+                          ipw.HTML('<p>Each displayed component contributes equal integrated area. These schematic line shapes do not include photoionization cross sections, spin statistical weights or satellite intensities. '
                                    'Chemical shifts use the lowest binding energy within each displayed edge and method. QE absolute energies include its pseudopotential corrections.</p>')])
-        for control in (self.edge, self.axis, self.width, self.qe):
+        for control in (self.edge, self.axis, self.width, self.qe, self.spin_view):
             control.observe(self._update, names='value')
         self._update()
 
     def _update(self, event=None):
         sites = [s for s in self.record['sites'] if s['symbol'] == self.edge.value]
+        if self.record.get('multiplets') and self.spin_view.value == 'projected':
+            projected=[]
+            for pair in self.record['multiplets']:
+                hs=next((s for s in sites if s['atom_index']==pair['atom_index'] and s.get('spin_assignment')=='triplet_ms1'),None)
+                if hs:
+                    projected += [hs, hs | {'label': f"{hs['symbol']}{hs['atom_index']+1} · 1s · estimated singlet",
+                        'binding_energy_ev':pair['singlet_estimate_binding_energy_ev'], 'spin_squared':None,
+                        'data_uuid':pair['data_uuid'], 'spin_assignment':'singlet_energy_estimate'}]
+            sites=projected
         if not sites:
             return
         relative = self.axis.value == 'relative'
@@ -71,15 +82,18 @@ class XpsSpectrum(ipw.VBox):
         for s in sites:
             match = next((q for q in compare if s['atom_index'] in q.get('equivalent_atom_indices', [q['atom_index']])), None)
             qvalue = f"{match['binding_energy_ev']-qzero:.2f}" if match else '—'
-            rows.append(f"<tr><td>{s['label']}</td><td>{s['binding_energy_ev']-zero:.2f}</td><td>{qvalue}</td><td>{s['spin_squared']:.4f}</td><td>{100*s['hole_population']:.1f}%</td></tr>")
+            spin = f"{s['spin_squared']:.4f}" if s['spin_squared'] is not None else 'energy estimate'
+            population = f"{100*s['hole_population']:.1f}%" if s.get('spin_assignment') != 'singlet_energy_estimate' else '—'
+            rows.append(f"<tr><td>{s['label']}</td><td>{s['binding_energy_ev']-zero:.2f}</td><td>{qvalue}</td><td>{spin}</td><td>{population}</td></tr>")
         self.table.value = '<table class="table"><thead><tr><th>Site</th><th>ORCA (eV)</th><th>QE (eV)</th><th>Final ⟨S²⟩</th><th>Core MO on target atom (Mulliken)</th></tr></thead><tbody>'+''.join(rows)+'</tbody></table>'
         stream = io.StringIO()
         writer = csv.writer(stream)
-        writer.writerow(['atom_number', 'element', 'shell', 'binding_energy_eV', 'spin_squared', 'hole_population', 'site_data_uuid'])
-        writer.writerows([s['atom_index']+1, s['symbol'], s['shell'], s['binding_energy_ev'], s['spin_squared'], s['hole_population'], s['data_uuid']] for s in self.record['sites'])
+        writer.writerow(['atom_number', 'element', 'shell', 'component', 'binding_energy_eV', 'spin_squared', 'hole_population', 'site_data_uuid'])
+        writer.writerows([s['atom_index']+1, s['symbol'], s['shell'], s.get('spin_assignment','doublet'), s['binding_energy_ev'], s['spin_squared'],
+            '' if s.get('spin_assignment')=='singlet_energy_estimate' else s['hole_population'], s['data_uuid']] for s in sites)
         encoded = base64.b64encode(stream.getvalue().encode()).decode()
         snapshot = self.record | {'view': {'edge': self.edge.value, 'energy_axis': self.axis.value,
-            'gaussian_fwhm_ev': self.width.value, 'qe_uuid': None if self.qe.value < 0 else self.comparisons[self.qe.value]['uuid']}}
+            'spin_treatment':self.spin_view.value, 'gaussian_fwhm_ev': self.width.value, 'qe_uuid': None if self.qe.value < 0 else self.comparisons[self.qe.value]['uuid']}}
         config = base64.b64encode(json.dumps(snapshot, indent=2, allow_nan=False).encode()).decode()
         self.download.value = f'<a download="xps-sites.csv" href="data:text/csv;base64,{encoded}">Download site energies</a> · <a download="xps-view.json" href="data:application/json;base64,{config}">Download view and provenance</a>'
 
@@ -98,8 +112,9 @@ class XpsSpectroscopy(ipw.VBox):
         self.review = ipw.Button(description='Review XPS calculation', icon='list', button_style='primary', layout=ipw.Layout(width='auto'))
         self.submit = ipw.Button(description='Compute XPS', icon='play', button_style='success', disabled=True, layout=ipw.Layout(width='auto'))
         self.calculation = ComputePanel('Compute / extend XPS…', [
-            ipw.HTML('<p>Select C/O atoms for 1s ionization (Ctrl/Cmd selects several). Atom numbers match the geometry viewer. '
-                     'The geometry, functional and basis remain those of the selected reference. Initial singlet → core-ionized doublet. '
+            ipw.HTML('<p>Select atoms for 1s ionization (Ctrl/Cmd selects several). Atom numbers match the geometry viewer. '
+                     'The geometry, functional and basis remain those of the selected reference. A singlet reference gives a doublet core hole; '
+                     'a doublet reference gives high-spin and spin-mixed branches, with an approximate singlet-energy estimate. '
                      'Core orbitals are assigned to atoms before ionization and localized within the occupied 1s subspace only when necessary.</p>'),
             self.atoms, self.force, self.review, self.submit])
         super().__init__([ipw.HTML('<h3>X-ray photoelectron spectroscopy</h3><p>Site-resolved vertical ΔSCF binding energies at this geometry.</p>'),
@@ -110,6 +125,7 @@ class XpsSpectroscopy(ipw.VBox):
         self.previous.observe(self._open, names='value')
         for control in (self.atoms, self.force):
             control.observe(self._invalidate, names='value')
+        info={}
         try:
             info = service.reference_info(source_uuid)
             self.atoms.options = [(f"{a['symbol']}{a['index']+1} · 1s · ({', '.join(f'{x:.2f}' for x in a['position'])}) Å", a['index']) for a in info['atoms']]
@@ -117,6 +133,12 @@ class XpsSpectroscopy(ipw.VBox):
             self.review.disabled = True
             self._error(exc)
         self._refresh()
+        if any(a['symbol']=='Co' for a in info.get('atoms', [])):
+            from .cobalt_view import CobaltXpsPanel
+            one_s=ipw.VBox(self.children[1:])
+            methods=ipw.Tab(children=[one_s,CobaltXpsPanel(self.source_uuid)])
+            methods.set_title(0,'1s · ΔSCF');methods.set_title(1,'Co 2p · multiplets')
+            self.children=(ipw.HTML('<h3>X-ray photoelectron spectroscopy</h3><p>Independent methods at the same frozen geometry.</p>'),methods)
 
     def _error(self, exc):
         self.message.value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
@@ -134,6 +156,10 @@ class XpsSpectroscopy(ipw.VBox):
             reused = len(self.plan['reuse'])
             self.message.value = f'<p><b>{count} new site calculation(s), {reused} verified site result(s) reused.</b> Calculations run sequentially. '
             self.message.value += ('Missing wavefunction: repeat the fixed-geometry SCF first. ' if self.plan['regenerate_reference'] else '') + '</p>'
+            if self.plan.get('open_shell'):
+                reused_branches=sum(len(v) for v in self.plan['branch_reuse'].values())
+                self.message.value += f'<p>{2*len(self.plan["atom_indices"])-reused_branches} new spin-branch CalcJob(s); {reused_branches} branch result(s) reused.</p>'
+            self.message.value += ''.join('<p>'+html.escape(w)+'</p>' for w in self.plan['warnings'])
             self.message.value += '<p>Final core-hole location, electron count and spin are checked before a binding energy is accepted.</p>'
             policy = self.plan['storage_policy']
             self.message.value += f"<p>Wavefunctions follow the reference storage policy: retrieve bundles up to {policy['threshold_mb']:g} MiB; stash larger bundles in <code>{html.escape(policy['stash_directory'])}</code>.</p>"
@@ -208,8 +234,10 @@ class XpsSpectroscopy(ipw.VBox):
             self.viewer.children = (XpsSpectrum(record, service.qe_comparisons(self.source_uuid)),) if record['sites'] else ()
             self._shown_uuid = uuid
             self.details.value = '<p>'+('Complete' if record['complete'] else 'Partial results · inspect the failed site before interpretation') + '</p><details><summary>Provenance and validation</summary>'
-            self.details.value += ''.join(f"<p>{s['label']} · initial singlet → final doublet · {s['localization']}<br>Site data: <code>{s['data_uuid']}</code><br>CalcJob: <code>{s['calculation_uuid']}</code></p>" for s in record['sites'])+'</details>'
+            self.details.value += ''.join(f"<p>{s['label']} · initial multiplicity {s['initial_multiplicity']} · {s.get('spin_assignment', 'doublet')} · {s['localization']}<br>Site data: <code>{s['data_uuid']}</code><br>CalcJob: <code>{s['calculation_uuid']}</code></p>" for s in record['sites'])+'</details>'
             self.details.value += ''.join('<p style="color:#a02020">'+html.escape(w)+'</p>' for s in record['sites'] for w in s['warnings'])
+            if record.get('multiplets'):
+                self.details.value += '<p class="orca-notice">The estimated singlet energies use approximate two-state Yamaguchi spin projection. Raw UKS branches remain available in the spin-treatment selector. No spin-pure singlet wavefunction or physical relative intensities are implied.</p>'
         except Exception as exc:
             self._error(exc)
 

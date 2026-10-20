@@ -97,6 +97,18 @@ def test_slurm_reference_uses_requested_single_node_allocation(aiida_profile_cle
         process.close()
 
 
+def test_code_selector_omits_hidden_codes(aiida_profile_clean, aiida_localhost):
+    from aiidalab_orca.services import codes
+
+    computer = orm.Computer(label='tigu-test', hostname='test.invalid', transport_type='core.ssh', scheduler_type='core.slurm', workdir='/scratch/{username}/aiida').store()
+    expected = []
+    for target in (aiida_localhost, computer):
+        visible = orm.InstalledCode(label='orca', computer=target, filepath_executable='/opt/orca/orca', default_calc_job_plugin='orca.orca').store()
+        orm.InstalledCode(label='retired-orca', computer=target, filepath_executable='/opt/retired/orca', default_calc_job_plugin='orca.orca', is_hidden=True).store()
+        expected.append((visible.full_label, str(visible.uuid)))
+    assert codes() == sorted(expected)
+
+
 def test_remote_storage_controls_and_invalid_modes(aiida_profile_clean, aiida_localhost):
     from aiidalab_orca.storage import WavefunctionStorage
     code = orm.InstalledCode(computer=aiida_localhost, filepath_executable='/bin/true', default_calc_job_plugin='empa_orca.electronic_storage').store()

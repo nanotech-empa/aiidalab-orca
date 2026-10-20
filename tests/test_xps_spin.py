@@ -1,6 +1,8 @@
 """Native NO spin branches and the independently published Co RAS dimensions."""
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 from aiida_empa_orca.xps import parse_site, site_parameters
@@ -23,6 +25,34 @@ def test_native_no_has_two_independent_core_sets():
     assert verified
     assert {(r['atom_index'],r['spin_channel']) for r in rows}=={(0,'alpha'),(0,'beta'),(1,'alpha'),(1,'beta')}
     assert all(r['occupation']==1 and r['population']>.99 for r in rows)
+
+
+def test_staged_core_helper_runs_without_installed_backend(tmp_path):
+    from importlib.resources import files
+
+    for name in ('core_orbitals.py', 'spin_core.py'):
+        (tmp_path/name).write_text(files('aiida_empa_orca').joinpath('scripts',name).read_text())
+    (tmp_path/'aiida.out').write_text((FILES/'no-core.out').read_text())
+    (tmp_path/'request.json').write_text(json.dumps({'numbers':[7,8], 'schema_version':2, 'orca':'/unused/orca'}))
+    # The remote helper runtime has the standard library, not the AiiDA plugin.
+    subprocess.run([sys.executable,'-I','-S','-c',
+        "import runpy; runpy.run_path('core_orbitals.py', run_name='__main__')"],
+        cwd=tmp_path,check=True,capture_output=True,text=True)
+    data=json.loads((tmp_path/'core.json').read_text())
+    assert data['schema_version']==2 and data['method']=='spin_canonical'
+    assert {(r['atom_index'],r['spin_channel'],r['shell']) for r in data['assignments']}=={
+        (0,'alpha','1s'),(0,'beta','1s'),(1,'alpha','1s'),(1,'beta','1s')}
+
+
+def test_core_helper_reports_native_failure_before_scf_diagnostic(tmp_path,monkeypatch):
+    from aiida_empa_orca.scripts.core_orbitals import main
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path/'request.json').write_text(json.dumps({'numbers':[27], 'schema_version':2}))
+    (tmp_path/'aiida.out').write_text('Maximum # iterations MaxIter .... 0\nORCA finished by error termination in GUESS\n')
+    with pytest.raises(ValueError,match='ORCA did not terminate normally during core preparation'):
+        main()
+    assert not (tmp_path/'core.json').exists()
 
 
 def test_no_raw_determinants_are_not_mislabelled_as_pure_singlets():

@@ -7,7 +7,12 @@ import math
 
 
 def spin_assignments(text, numbers, *, original=None):
-    from aiida_empa_orca.scripts.core_orbitals import levels, populations
+    from pathlib import Path
+    from runpy import run_path
+
+    # The CalcJob stages both scripts; its runtime need not install the plugin.
+    shared = run_path(str(Path(__file__).with_name('core_orbitals.py')))
+    levels, populations = shared['levels'], shared['populations']
     if ('ORCA TERMINATED NORMALLY' not in text or 'Using GuessMode=CMatrix' in text
             or 'Input Geometry matches current geometry' not in text
             or 'Input basis set matches current basis set' not in text):

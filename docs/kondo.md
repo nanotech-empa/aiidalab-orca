@@ -95,5 +95,19 @@ PP-STM CO-tip maps quantitatively.
   applied a second time. Full original energies/amplitudes are required for
   a quantitative comparison of those curves.
 
+## Executed draft checks
+
+The existing NO CAS(3,3) data completed exchange, three 80³ amplitude cubes,
+cubehandler reduction, individual channel maps at observation heights 3 and
+5 Å, and shared-scale PNG/PDF rendering through the app services and AiiDA
+daemon. Full cubes remained in their original working directory. A repeated
+exchange workflow returned the same stored channel node with no child
+CalcJobs. No new electronic calculation was submitted for this test.
+
+The reference exchange test yields one AFM and two FM eigenchannels at μ=0;
+this is internal execution evidence, not a prediction of an experimental
+Kondo resonance in NO. The ETRI molecular benchmark is reserved for **tigu**,
+at most 12 processes per submission, with no stashing. It has not been run.
+
 Prepared with the assistance of Codex. Scientific attribution remains with
 the cited authors; existing Dyson, cubehandler and map-engine credits apply.

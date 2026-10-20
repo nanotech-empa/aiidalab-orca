@@ -136,3 +136,20 @@ def test_channel_maps_are_squared_normalized_amplitudes_without_exchange_or_spin
     assert 'NRG' in metadata['model']
     with pytest.raises(ValueError):map_parameters(p | {'spin_convention':'unpolarized'})
     with pytest.raises(ValueError):map_parameters(p | {'kind':'blend'})
+
+
+def test_reopening_channels_selects_the_first_stored_cube(monkeypatch):
+    from aiidalab_orca import kondo as ui
+    data = exchange(table(), {})
+    monkeypatch.setattr(ui.service, 'history', lambda _: [('Stored channels', 'run')])
+    monkeypatch.setattr(ui.service, 'progress', lambda _: dict(finished=True, success=True))
+    monkeypatch.setattr(ui.service, 'result', lambda _: dict(channels_uuid='channels', data=data))
+    monkeypatch.setattr(ui.service, 'cube_history', lambda _: [('Stored cubes', 'cubes')])
+    monkeypatch.setattr(ui, 'property_result', lambda _: dict(finished=True, successful=True,
+        manifest=dict(cubes=[dict(filename='kondo_ko_1.cube')])))
+    selected = []
+    monkeypatch.setattr(ui.KondoChannels, '_show_cube', lambda self, _=None: selected.append(self.cube.value))
+    widget = ui.KondoChannels('table', 'tools', 'cubehandler')
+    assert widget.cube.value == 'kondo_ko_1.cube'
+    assert selected == ['kondo_ko_1.cube']
+    widget.close()

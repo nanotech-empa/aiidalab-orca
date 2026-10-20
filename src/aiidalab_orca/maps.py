@@ -285,7 +285,8 @@ class DysonMaps(ipw.VBox):
             links = []
             for key, mime in (('png', 'image/png'), ('pdf', 'application/pdf')):
                 encoded = base64.b64encode(result['images'][key]).decode()
-                links.append(f'<a download="dyson-maps.{key}" href="data:{mime};base64,{encoded}">Download {key.upper()}</a>')
+                filename = 'kondo-channel-maps' if self.kondo else 'dyson-maps'
+                links.append(f'<a download="{filename}.{key}" href="data:{mime};base64,{encoded}">Download {key.upper()}</a>')
             self.download.value = ' · '.join(links)+'<p>Stored image nodes: <code>'+result['png_uuid']+'</code> / <code>'+result['pdf_uuid']+'</code>.</p>'
             for key in ('vmin', 'vmax', 'cmap', 'dpi', 'rotation'):
                 getattr(self, key).value = result['settings'][key]

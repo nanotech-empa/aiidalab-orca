@@ -250,7 +250,8 @@ class CobaltXpsWorkChain(engine.WorkChain):
         return engine.ToContext(core=self.submit(b))
 
     def check_core(self):
-        if not self.ctx.core.is_finished_ok:return self.exit_codes.ERROR_CORE
+        if not self.ctx.core.is_finished_ok:
+            report_failure(self,self.ctx.core);return self.exit_codes.ERROR_CORE
 
     def run_spectrum(self):
         b=co.CobaltStatesCalculation.get_builder()

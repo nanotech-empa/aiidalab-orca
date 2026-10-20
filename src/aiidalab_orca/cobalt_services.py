@@ -37,7 +37,12 @@ def reference_status(source_uuid,valence_uuid):
     if not row['success']:
         return {'compatible':False,'recoverable':False,'message':'Choose a successfully completed valence preparation.'}
     if row['compatible']:
-        return {'compatible':True,'recoverable':False,'message':'Ready: the neutral reference uses the consistent integration protocol.'}
+        data=orm.load_node(valence_uuid).outputs.reference.get_dict()
+        message='The neutral reference uses the consistent integration protocol.'
+        above=data.get('reference_above_computed_minimum_ev',0.)
+        if above>1e-7*co.HARTREE_TO_EV:
+            message+=f' Warning: the selected doublet lies {above:.3f} eV above the lowest computed neutral spin sector. The spectrum describes this chosen doublet; its molecular ground-state assignment needs investigation.'
+        return {'compatible':True,'recoverable':False,'message':message}
     return {'compatible':False,'recoverable':True,
             'message':'Update required: this reference uses an older integration protocol. Reuse the geometry and saved valence orbitals, and reconverge the neutral reference with the consistent grid before computing Co 2p.'}
 

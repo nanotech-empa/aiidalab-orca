@@ -15,7 +15,7 @@ from aiida.engine.utils import instantiate_process
 from ase import Atoms
 
 from aiida_empa_orca import cobalt_xps as co
-from aiida_empa_orca.cobalt_core import CobaltCoreCalculation, source_calculation
+from aiida_empa_orca.cobalt_core import CobaltCoreCalculation, CobaltCoreParser, source_calculation
 from aiida_empa_orca.scripts.casscf_core import core_reference
 
 FILES = Path(__file__).parent/'fixtures'/'xps_spin'
@@ -109,3 +109,27 @@ def test_calcjob_stages_only_native_text_and_checks_provenance(aiida_profile, ai
                                source.outputs.reference, source.outputs.retrieved, source.inputs.code)
     finally:
         process.close()
+
+
+@pytest.mark.parametrize('tamper', [False, True])
+def test_parser_compares_remote_report_with_original_native_source(aiida_profile, aiida_localhost, tamper):
+    source = orm.load_node(make_source(aiida_localhost))
+    node = orm.CalcJobNode(process_type='aiida.calculations:empa_orca.cobalt_core')
+    for key, value in {'structure': source.inputs.structure, 'code': source.inputs.code,
+                       'source_reference': source.outputs.reference, 'source_retrieved': source.outputs.retrieved}.items():
+        node.base.links.add_incoming(value, link_type=LinkType.INPUT_CALC, link_label=key)
+    node.store()
+    text = source.outputs.retrieved.base.repository.get_object_content('aiida.out')
+    data = core_reference(text, NUMBERS, source.uuid)
+    if tamper:
+        data['assignments'][0]['index'] = 1
+    retrieved = orm.FolderData()
+    retrieved.base.repository.put_object_from_filelike(io.StringIO(json.dumps(data)), 'core.json')
+    retrieved.base.links.add_incoming(node, link_type=LinkType.CREATE, link_label='retrieved')
+    retrieved.store()
+    parser = CobaltCoreParser(node)
+    result = parser.parse()
+    if tamper:
+        assert result.status == 310 and not parser.outputs
+    else:
+        assert result is None and parser.outputs['core_reference'].get_dict()['source_calculation_uuid'] == source.uuid

@@ -49,3 +49,4 @@ The parent neutral reference was reconverged through the app in workflow
 `13f2c6c4-ad1e-4a88-b32c-ed7921687942`. Both the frozen-restart and active-only
 natural-rotation energy checks pass the unchanged 1e−7 Hartree guard. This is
 a reference-preparation regression, not a full Co 2p spectrum validation.
+Trailing whitespace is removed from the new excerpts; native numeric values are unchanged.

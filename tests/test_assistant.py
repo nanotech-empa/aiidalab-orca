@@ -61,6 +61,43 @@ def test_load_structure_preserves_source_uuid(adapter, aiida_profile):
     assert adapter.app.structure.atoms.get_chemical_formula() == "H2"
 
 
+def test_import_smiles_uses_gui_builder_and_preserves_smiles_provenance(adapter, aiida_profile):
+    from aiida import orm
+    from aiidalab_ai_assistant.tools import ToolRegistry
+    from aiidalab_orca.structure_io import store_reviewed_structure
+    registry = ToolRegistry()
+    adapter.register(registry)
+    result = registry.call("orca_import_smiles", {
+        "smiles": "c1ccccc1", "expected_revision": adapter.context()["revision"],
+    })
+    assert "error" not in result, result
+    assert result["formula"] == "C6H6" and result["formal_charge"] == 0
+    assert adapter.app.structure.smiles.smiles.value == result["smiles"]
+    assert adapter.app.structure.importers.selected_index == 3
+    assert adapter.app.structure.ready
+    assert not adapter.app._submitted
+    uuid = store_reviewed_structure(adapter.app.structure.atoms,
+                                   imported=adapter.app.structure.imported)
+    node = orm.load_node(uuid)
+    assert node.creator.process_label == "record_structure_import"
+    assert node.creator.inputs.source_file.get_content() == result["smiles"]
+    assert orm.QueryBuilder().append(orm.CalcJobNode).count() == 0
+
+
+def test_smiles_failure_or_stale_revision_preserves_existing_structure(adapter):
+    before = adapter.context()["revision"]
+    with pytest.raises(ValueError):
+        adapter.import_smiles("not a valid smiles", before)
+    assert adapter.context()["revision"] == before
+    assert adapter.app.structure.atoms.get_chemical_formula() == "NO"
+    adapter.app.label.value = "Manual edit"
+    with pytest.raises(ValueError, match="form changed"):
+        adapter.import_smiles("c1ccccc1", before)
+    adapter.app._submitted = True
+    with pytest.raises(ValueError, match="submitted"):
+        adapter.import_smiles("c1ccccc1", adapter.context()["revision"])
+
+
 def test_review_from_assistant_worker_records_import_provenance(adapter, tmp_path, aiida_profile_clean, aiida_localhost):
     """Exercise the real calcfunction review path from a running notebook loop."""
     import asyncio

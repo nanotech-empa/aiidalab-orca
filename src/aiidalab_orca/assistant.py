@@ -150,6 +150,37 @@ class OrcaAssistantAdapter:
         self._undo = self._after = None
         return self._state()
 
+    def import_smiles(self, smiles, expected_revision):
+        """Use the existing GUI builder; no scientific generation algorithm changes."""
+        self._require_revision(expected_revision)
+        if self.app._submitted:
+            raise ValueError("Use Edit a copy before replacing the submitted structure")
+        widget = self.app.structure.smiles
+        canonical = widget.canonicalize_smiles(smiles)
+        widget.output.value = ""
+        atoms = widget._mol_from_smiles(canonical)
+        if atoms is None:
+            raise ValueError(_MessageText(widget.output.value).text() or "SMILES geometry generation failed")
+        # Update the same fields and trait callback as Generate molecule in the GUI.
+        widget.smiles.value = canonical
+        widget.structure = atoms
+        self.app.structure.importers.selected_index = 3
+        self.app.pages.selected_index = 0
+        self.app.steps.selected_index = 0
+        self._undo = self._after = None
+        from rdkit import Chem
+        mol = Chem.MolFromSmiles(canonical)
+        return {
+            "smiles": canonical,
+            "formula": atoms.get_chemical_formula(),
+            "formal_charge": Chem.GetFormalCharge(mol),
+            "radical_electrons": sum(atom.GetNumRadicalElectrons() for atom in mol.GetAtoms()),
+            "unassigned_stereocenters": [index for index, label in Chem.FindMolChiralCenters(mol, includeUnassigned=True) if label == "?"],
+            "message": "Generated a starting conformer with the existing GUI builder. Review the geometry, charge and multiplicity before calculation review.",
+            "builder_message": _MessageText(widget.output.value).text(),
+            "state": self._state(),
+        }
+
     def select_process(self, process_uuid):
         def select():
             from .history import inspect_run
@@ -198,6 +229,8 @@ class OrcaAssistantAdapter:
             object_schema(revision, ["expected_revision"]), self.undo)
         add("orca_load_structure", "Load an existing StructureData UUID into the visible draft, preserving its provenance.",
             object_schema({**revision, "structure_uuid": string}, ["expected_revision", "structure_uuid"]), self.load_structure)
+        add("orca_import_smiles", "Generate a starting molecular conformer from an unambiguous or user-confirmed SMILES using the visible Build from SMILES GUI. Does not submit or optimize with ORCA. Resolve uncertain image chemistry before using this tool.",
+            object_schema({**revision, "smiles": {"type": "string", "minLength": 1, "maxLength": 5000}}, ["expected_revision", "smiles"]), self.import_smiles)
         registry.add("orca_open_calculation", "Open an ORCA calculation's results and return its structure UUID and metadata.",
             object_schema({"process_uuid": string}, ["process_uuid"]), self.select_process)
         add("orca_review", "Validate and prepare the existing ORCA form. Uses the app's review path, which may store the reviewed structure, but does not submit.",

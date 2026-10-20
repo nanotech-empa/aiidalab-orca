@@ -52,6 +52,14 @@ Constant-height Dyson maps now have a separate draft component: full-resolution
 amplitude sampling, explicit source/observation planes, meqpy-style vacuum
 propagation, stored numerical maps and submitted PNG/PDF rendering. Combined
 panels share an explicit intensity scale. See [the map guide](docs/maps.md).
+
+The draft [Kondo orbital component](docs/kondo.md) reuses compatible CASCI/Dyson
+results to compute exchange eigenchannels and individual channel maps. It keeps
+chemical potential, spin factors and equal-hybridization assumptions explicit.
+NO is the inexpensive integration test; the neutral-triplet ETRI C36H16 example
+from Calvo-Fernández et al., PRB 110, 165113 (2024), is the molecular benchmark
+target. NRG-based resonance widths and combined experimental maps are separate
+future work.
 The [linked transition explorer](docs/transition-explorer.md) connects clickable
 spectral regions to exact state endpoints, Dyson weights, CG multiplet factors
 and available orbital previews.

@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+from contextlib import nullcontext
 
 import numpy as np
 from dyson_orca_tools.io.cube import write_cube, pyscf_molecule, orca_label_to_pyscf
@@ -30,7 +31,9 @@ def cube_comments(path,first=None,second=None):
 
 def main():
     request = json.loads(Path('request.json').read_text())
-    p,table = request['parameters'],request['table']
+    p = request['parameters']
+    kondo = 'channels' in request
+    table = request['channels'] if kondo else request['table']
     initial = load_export('initial.json.gz',request['artifact'])
     wf = initial['wavefunction']
     mol = pyscf_molecule(wf)
@@ -49,18 +52,31 @@ def main():
     full.mkdir()
     manifest = {'retention':p['retention'],'grid_points':p['grid_points'],'cubes':[],
                 'reduction':{'program':'cubehandler','method':'slicing','low_precision':False},
-                'orbital_source':{'kind':'Dyson','initial_state_uuid':table['initial_state_uuid']},
-                'strength_convention':'highest_ms_component'}
-    with np.load('coefficients.npz',allow_pickle=False) as arrays:
+                'orbital_source':{'kind':'Kondo' if kondo else 'Dyson','initial_state_uuid':table['initial_state_uuid']},
+                'strength_convention':'unit_normalized_eigenchannel' if kondo else 'highest_ms_component'}
+    if kondo:
+        from dyson_orca_tools.dyson import Dyson
+        c = Dyson.get_mo_coeff_array(None, wf)[:, table['active_space']['orbitals']]
+        if not np.allclose(c.T @ np.asarray(wf['Molecule']['S-Matrix']) @ c, np.eye(c.shape[1]), atol=1e-7, rtol=0):
+            raise ValueError('Kondo active orbitals are not orthonormal in the exported AO basis')
+        coefficient_source = nullcontext({r['id']: c @ np.asarray(r['active_coefficients']) for r in table['channels']})
+        manifest['channels_uuid'] = request['channels_uuid']
+    else:
+        coefficient_source = np.load('coefficients.npz', allow_pickle=False)
+    with coefficient_source as arrays:
         for _,index in p['orbitals']:
-            row = table['transitions'][index]
-            filename = 'dyson_'+row['id']+'.cube'
+            row = table['channels' if kondo else 'transitions'][index]
+            filename = ('kondo_' if kondo else 'dyson_')+row['id']+'.cube'
             # Use upstream orbital evaluation, leaving amplitudes unnormalized.
             write_cube(wf,arrays[row['id']],str(full/filename),nx=p['grid_points'],ny=p['grid_points'],nz=p['grid_points'],margin=8.)
-            cube_comments(full/filename,first='Dyson orbital amplitude (atomic units)')
+            cube_comments(full/filename,first=('Kondo' if kondo else 'Dyson')+' orbital amplitude (atomic units)')
             record = inspect_cube(full/filename)
-            manifest['cubes'].append({'filename':filename,'kind':'dyson','transition_id':row['id'],
-                'index':index,'energy_ev':row['energy_ev'],'strength':row['strength'],'full':record})
+            if kondo:
+                manifest['cubes'].append(dict(filename=filename, kind='kondo', channel_id=row['id'], index=index,
+                    exchange_over_v2_inv_ev=row['exchange_over_v2_inv_ev'], coupling=row['coupling'], full=record))
+            else:
+                manifest['cubes'].append({'filename':filename,'kind':'dyson','transition_id':row['id'],
+                    'index':index,'energy_ev':row['energy_ev'],'strength':row['strength'],'full':record})
     if request.get('blend'):
         blended,template = None,None
         for cube in manifest['cubes']:

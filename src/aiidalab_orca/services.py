@@ -29,8 +29,10 @@ def codes():
     result = []
     for uuid, label in orm.QueryBuilder().append(orm.InstalledCode, project=["uuid", "label"]).all():
         code = orm.load_code(uuid)
-        if (code.default_calc_job_plugin in ("orca.orca", "empa_orca.optimization", "empa_orca.single_point")
-                and code.computer.scheduler_type == "core.direct" and code.computer.transport_type == "core.local"):
+        if (not code.is_hidden
+                and code.default_calc_job_plugin in ("orca.orca", "empa_orca.optimization", "empa_orca.single_point")
+                and (code.computer.scheduler_type, code.computer.transport_type) in
+                (("core.direct", "core.local"), ("core.slurm", "core.ssh"))):
             result.append((f"{label}@{code.computer.label}", str(uuid)))
     return sorted(result)
 

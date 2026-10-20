@@ -9,7 +9,8 @@ description = "AiiDAlab interface for composable molecular ORCA workflows"
 requires-python = ">=3.12"
 dependencies = [
   "aiida-empa-orca==0.1.0",
-  "aiidalab>=26.9.0",
+  # Scoped assistant-integration compatibility exception; see docs/assistant-integration.md.
+  "aiidalab>=26.6.0",
   "ipywidgets>=8,<9",
   "anywidget",
   "nglview>=3",

@@ -3,12 +3,15 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        aiidalab: ['26.6.0', '26.9.0']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install -e 'backend[dyson]' -e . pytest 'aiida-core==2.9.2' 'aiidalab==26.9.0'
+      - run: python -m pip install -e 'backend[dyson]' -e . pytest 'aiida-core==2.9.2' 'aiidalab==${{ matrix.aiidalab }}'
       - run: python -m pip check
       - run: python -m pytest tests -q
         env:

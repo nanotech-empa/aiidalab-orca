@@ -280,7 +280,7 @@ Candidate acceptance cases for the eventual implementation follow. Run the appli
 - [aiida-nanotech-empa](https://github.com/nanotech-empa/aiida-nanotech-empa): existing molecular and scanning-probe workflows and a possible home for shared components.
 - [aiidalab-qe](https://github.com/aiidalab/aiidalab-qe): reference for the user-facing application flow.
 
-The geometry prototype separates `aiida-empa-orca` (backend) from `aiidalab-orca` (interface), initially in this repository. It targets Python >=3.12, AiiDA >=2.9.2, and AiiDAlab >=26.9.0. Future spectroscopy package boundaries remain design decisions. The application should reuse maintained scientific packages rather than duplicate their numerical implementations.
+The geometry prototype separates `aiida-empa-orca` (backend) from `aiidalab-orca` (interface), initially in this repository. It targets Python >=3.12 and AiiDA >=2.9.2. The assistant integration branch also supports AiiDAlab 26.6 under the [scoped compatibility exception](docs/assistant-integration.md); the wider support policy remains AiiDAlab >=26.9.0. Future spectroscopy package boundaries remain design decisions. The application should reuse maintained scientific packages rather than duplicate their numerical implementations.
 
 This draft was prepared with Codex assistance from the initial discussion and source inspection. It awaits scientific and design review.
 

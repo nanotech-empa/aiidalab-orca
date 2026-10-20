@@ -48,6 +48,8 @@ flowchart TD
 Supported baseline: Python 3.12+, AiiDA 2.9.2+ within the upstream-supported 2.x
 series, AiiDAlab 26.9.0+, ipywidgets 8. The modern EMPA support policy sets these
 minimum versions; they are not claims that earlier releases necessarily fail.
+The assistant integration branch has an explicit, user-authorized exception for
+AiiDAlab 26.6; see [integration and compatibility](assistant-integration.md).
 
 ```bash
 python -m pip install -r requirements.txt

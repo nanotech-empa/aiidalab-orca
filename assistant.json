@@ -2,6 +2,6 @@
   "schema_version": 1,
   "title": "ORCA molecular analysis",
   "notebook": "orca.ipynb",
-  "capabilities": ["molecular geometry optimization", "single-point electronic structure", "molecular orbitals", "CASCI states", "Dyson spectroscopy", "IR spectra", "Raman spectra"],
+  "capabilities": ["molecular geometry optimization", "single-point electronic structure", "molecular orbitals", "CASCI states", "Dyson spectroscopy", "IR spectra", "Raman spectra", "site-resolved XPS", "experimental cobalt 2p multiplet spectroscopy"],
   "assistant": {"adapter": "aiidalab_orca.assistant.OrcaAssistantAdapter", "version": 1}
 }

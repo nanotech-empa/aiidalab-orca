@@ -72,7 +72,7 @@ class CasciStates(ipw.VBox):
         self.diagram_box = ipw.VBox()
         self.empty = ipw.HTML()
         self.analysis = ipw.ToggleButtons(options=[('Many-electron states', 'states'),
-            ('Dyson spectrum', 'spectrum'), ('Dyson orbitals & maps', 'maps')],
+            ('Dyson spectrum', 'spectrum'), ('Dyson orbitals & maps', 'maps'), ('Kondo orbitals & maps', 'kondo')],
             style={'button_width': 'auto'}, layout=ipw.Layout(width='100%'))
         self.analysis.observe(self._analysis_changed, names='value')
         self.inspection_box = ipw.Accordion(children=[ipw.HTML("Select common orbitals to inspect.")],selected_index=None)

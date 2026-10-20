@@ -23,6 +23,9 @@ orca-dyson = "aiida_empa_orca.dyson_tools:main"
 orca-tools = "aiida_empa_orca.tools:main"
 
 [project.entry-points."aiida.calculations"]
+"empa_orca.kondo" = "aiida_empa_orca.kondo:KondoCalculation"
+"empa_orca.kondo_cubes" = "aiida_empa_orca.kondo:KondoCubesCalculation"
+"empa_orca.kondo_maps" = "aiida_empa_orca.maps:KondoMapsCalculation"
 "empa_orca.vibrations" = "aiida_empa_orca.vibrations:VibrationsCalculation"
 "empa_orca.dyson_maps" = "aiida_empa_orca.maps:DysonMapsCalculation"
 "empa_orca.map_figure" = "aiida_empa_orca.maps:MapFigureCalculation"
@@ -39,6 +42,9 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.calculation:SinglePointCalculation"
 
 [project.entry-points."aiida.parsers"]
+"empa_orca.kondo" = "aiida_empa_orca.kondo:KondoParser"
+"empa_orca.kondo_cubes" = "aiida_empa_orca.kondo:KondoCubesParser"
+"empa_orca.kondo_maps" = "aiida_empa_orca.maps:DysonMapsParser"
 "empa_orca.vibrations" = "aiida_empa_orca.vibrations:VibrationsParser"
 "empa_orca.dyson_maps" = "aiida_empa_orca.maps:DysonMapsParser"
 "empa_orca.map_figure" = "aiida_empa_orca.maps:MapFigureParser"
@@ -55,6 +61,8 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.parser:SinglePointParser"
 
 [project.entry-points."aiida.workflows"]
+"empa_orca.kondo" = "aiida_empa_orca.kondo:KondoWorkChain"
+"empa_orca.kondo_cubes" = "aiida_empa_orca.kondo:KondoCubesWorkChain"
 "empa_orca.vibrations" = "aiida_empa_orca.vibrations:VibrationsWorkChain"
 "empa_orca.dyson_export" = "aiida_empa_orca.dyson:StateExportWorkChain"
 "empa_orca.dyson" = "aiida_empa_orca.dyson:DysonWorkChain"

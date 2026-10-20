@@ -239,20 +239,14 @@ class CobaltXpsWorkChain(engine.WorkChain):
         if not self.ctx.spectator_reused and not self.ctx.spectator_storage.is_finished_ok:return self.exit_codes.ERROR_STORAGE
 
     def inspect_core(self):
-        from .xps import CoreOrbitalsCalculation
-        from .protocols import protocol_settings
-        # This is only a matching-basis NoIter population inspection. Its DFT
-        # expectation value is not a reference energy for the multireference XPS.
-        s=protocol_settings(overrides={'reference':'UKS','multiplicity':2,'charge':0,'basis':self.ctx.model['basis'],
-            'element_settings':{'Co':{'basis':self.ctx.model['cobalt_basis']}},
-            'nprocs':self.ctx.model['nprocs'],'memory_mb':self.ctx.model['memory_mb']})
-        b=CoreOrbitalsCalculation.get_builder()
-        b.structure,b.settings,b.code=self.inputs.structure,orm.Dict(dict=s),self.inputs.code
+        from .cobalt_core import CobaltCoreCalculation
+        b=CobaltCoreCalculation.get_builder()
+        b.structure,b.code=self.inputs.structure,self.inputs.helper_code
         spectator=orm.load_node(self.ctx.spectator_uuid)
-        b.helper_code,b.source_retrieved=self.inputs.helper_code,spectator.outputs.retrieved
-        attach_orbital(b,resolve_electronic(spectator.outputs.remote_folder,names=['aiida.gbw']),'aiida.gbw')
-        b.metadata.options=options(self.ctx.model);b.metadata.disable_cache=True
-        b.metadata.label='Inspect Co 1s/2p identities in the SA-CASSCF orbital basis'
+        b.source_reference,b.source_retrieved=spectator.outputs.reference,spectator.outputs.retrieved
+        b.metadata.options=options(self.ctx.model)|{'resources':{'num_machines':1,'num_mpiprocs_per_machine':1}}
+        b.metadata.disable_cache=True
+        b.metadata.label='Verify native CASSCF Co 1s/2p identities · unchanged wavefunction'
         return engine.ToContext(core=self.submit(b))
 
     def check_core(self):

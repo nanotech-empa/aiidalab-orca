@@ -169,7 +169,12 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
                 self._start(change['new'], 'cubes')
             elif data['successful']:
                 self.process_uuid = str(change['new'])
-                self.cube.options = [(c['filename'], c['filename']) for c in data['manifest']['cubes']]
+                self.cube.unobserve(self._show_cube, names='value')
+                try:
+                    self.cube.options = [(c['filename'], c['filename']) for c in data['manifest']['cubes']]
+                    self.cube.value = self.cube.options[0][1]
+                finally:
+                    self.cube.observe(self._show_cube, names='value')
                 self._show_cube()
             else:
                 raise ValueError(data['message'])

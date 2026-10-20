@@ -107,7 +107,9 @@ CalcJobs. No new electronic calculation was submitted for this test.
 The reference exchange test yields one AFM and two FM eigenchannels at μ=0;
 this is internal execution evidence, not a prediction of an experimental
 Kondo resonance in NO. The ETRI molecular benchmark is reserved for **tigu**,
-at most 12 processes per submission, with no stashing. It has not been run.
+initially **6 processes** per submission, with no stashing. Twelve is the
+authorized upper limit, not a benchmarked optimum. Scaling must be measured
+before increasing the request. It has not been run.
 
 Prepared with the assistance of Codex. Scientific attribution remains with
 the cited authors; existing Dyson, cubehandler and map-engine credits apply.

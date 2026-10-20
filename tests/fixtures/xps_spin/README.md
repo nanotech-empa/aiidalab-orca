@@ -34,3 +34,18 @@ Native ORCA 6.1.1 ARM64 regression output.
   and does not start the spectrum. This fixture tests that failure explicitly.
 
 No ORCA executable or wavefunction is included.
+
+# Fixed-grid validation
+
+`copc-fixed-cosx-grids.out` contains only the native generated COSX grid section
+from diagnostic CalcJob `658608c9-114a-4139-9bea-24eaec2cef15` (ORCA 6.1.1 ARM64).
+All three grids have 183,635 points and default radial accuracy 4.338. This is
+grid-parser evidence, not a reconverged orbital or Co 2p spectrum benchmark.
+
+`copc-fixed-natural-excerpt.out` and `copc-fixed-neutral-reference.json` retain
+the native generated grids, finalization control flow, energies, state composition
+and population columns 138–149 from `d5f2b6de-4f0e-43b0-aca2-c5137b761de0`.
+The parent neutral reference was reconverged through the app in workflow
+`13f2c6c4-ad1e-4a88-b32c-ed7921687942`. Both the frozen-restart and active-only
+natural-rotation energy checks pass the unchanged 1e−7 Hartree guard. This is
+a reference-preparation regression, not a full Co 2p spectrum validation.

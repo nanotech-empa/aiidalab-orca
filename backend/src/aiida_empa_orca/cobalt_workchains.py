@@ -3,6 +3,29 @@ from aiida import engine,orm
 from . import cobalt_xps as co
 from .artifacts import resolve_electronic,storage_builder
 from .common_orbitals import CommonOrbitalsWorkChain,attach_orbital,options,validate_source
+from .reference import ArtifactUnavailable
+
+
+def valence_restart_source(structure,code,reference,retrieved,folder,model):
+    """Validate the unchanged producing calculation before reusing its orbitals."""
+    parent=reference.creator
+    if (parent is None or parent.process_type!=co.CALC_PROCESS or parent.inputs.stage.value!='valence'
+            or parent.outputs.reference.uuid!=reference.uuid
+            or parent.outputs.retrieved.uuid!=retrieved.uuid
+            or parent.outputs.remote_folder.uuid!=folder.uuid
+            or parent.inputs.structure.uuid!=structure.uuid or parent.inputs.code.uuid!=code.uuid):
+        raise ValueError('Restart reference, geometry and orbital files must share their verified producing calculation')
+    previous=co.model_settings(parent.inputs.model.get_dict());current=co.model_settings(model)
+    if any(previous[k]!=current[k] for k in ('basis','cobalt_basis','auxiliary_basis')):
+        raise ValueError('Valence reconvergence requires the same orbital and auxiliary basis sets')
+    co.validated_calculation(parent)
+    return resolve_electronic(folder,names=['aiida.gbw'])
+
+
+def report_failure(workchain,node):
+    workchain.report('Calculation '+str(node.uuid)+' failed: '+(node.exit_message or 'native validation failed'))
+    for entry in orm.Log.collection.get_logs_for(node):
+        if entry.levelname in ('ERROR','CRITICAL'):workchain.report(entry.message)
 
 
 def available_calculation(parent_uuid,stage,model,code_uuid):
@@ -43,9 +66,11 @@ class CobaltValenceWorkChain(engine.WorkChain):
         super().define(spec)
         spec.expose_inputs(CommonOrbitalsWorkChain)
         spec.input('model',valid_type=orm.Dict)
+        for key,kind in {'restart_reference':orm.Dict,'restart_retrieved':orm.FolderData,
+                         'restart_folder':orm.RemoteData}.items():spec.input(key,valid_type=kind,required=False)
         for key,kind in {'reference':orm.Dict,'retrieved':orm.FolderData,'remote_folder':orm.RemoteData}.items():spec.output(key,valid_type=kind)
-        spec.outline(cls.setup,engine.if_(cls.needs_calculation)(cls.common,cls.inspect_common,
-            cls.avas,cls.inspect_avas,cls.preserve_avas,cls.check_avas_storage,
+        spec.outline(cls.setup,engine.if_(cls.needs_calculation)(engine.if_(cls.needs_preparation)(cls.common,cls.inspect_common,
+            cls.avas,cls.inspect_avas,cls.preserve_avas,cls.check_avas_storage),
             cls.valence,cls.inspect_valence,cls.preserve_valence,cls.check_valence_storage),cls.results)
         spec.exit_code(400,'ERROR_INPUT',message='Unsupported CoPc reference or unavailable source wavefunction.')
         spec.exit_code(401,'ERROR_STAGE',message='Co orbital preparation failed; inspect the native output.')
@@ -56,8 +81,15 @@ class CobaltValenceWorkChain(engine.WorkChain):
         try:
             co.validate_copc(self.inputs.structure,self.inputs.settings.get_dict())
             self.ctx.model=co.model_settings(self.inputs.model.get_dict())
+            if self.ctx.model['protocol']!=co.PROTOCOL:raise ValueError('Use the consistent integration protocol for new orbital preparation')
             validate_source(self.inputs.structure,self.inputs.settings.get_dict(),self.inputs.code,
                 self.inputs.source_retrieved,self.inputs.source_remote)
+            restart_keys=('restart_reference','restart_retrieved','restart_folder')
+            supplied=[k in self.inputs for k in restart_keys]
+            if any(supplied) and not all(supplied):raise ValueError('Supply the complete valence restart reference and its producing files')
+            if all(supplied):
+                self.ctx.restart_location=valence_restart_source(self.inputs.structure,self.inputs.code,
+                    self.inputs.restart_reference,self.inputs.restart_retrieved,self.inputs.restart_folder,self.ctx.model)
             if not self.inputs.force_recompute.value:
                 rows=orm.QueryBuilder().append(orm.FolderData,filters={'uuid':self.inputs.source_retrieved.uuid},tag='source').append(
                     orm.WorkChainNode,with_incoming='source',edge_filters={'label':'source_retrieved'},
@@ -71,10 +103,11 @@ class CobaltValenceWorkChain(engine.WorkChain):
                         resolve_electronic(n.outputs.remote_folder,names=['aiida.gbw'])
                     except (ValueError,KeyError,OSError):continue
                     self.ctx.reuse_uuid=str(uid);break
-        except (ValueError,KeyError,OSError) as exc:
+        except (ValueError,KeyError,OSError,ArtifactUnavailable) as exc:
             self.report(str(exc));return self.exit_codes.ERROR_INPUT
 
     def needs_calculation(self):return self.ctx.reuse_uuid is None
+    def needs_preparation(self):return 'restart_reference' not in self.inputs
 
     def common(self):
         b=CommonOrbitalsWorkChain.get_builder()
@@ -105,7 +138,8 @@ class CobaltValenceWorkChain(engine.WorkChain):
     def inspect_stage(self,stage):
         if not self.ctx[stage+'_reused']:
             n=self.ctx[stage]
-            if not n.is_finished_ok:return self.exit_codes.ERROR_STAGE
+            if not n.is_finished_ok:
+                report_failure(self,n);return self.exit_codes.ERROR_STAGE
             self.ctx[stage+'_uuid']=str(n.uuid)
 
     def inspect_avas(self):return self.inspect_stage('avas')
@@ -121,6 +155,9 @@ class CobaltValenceWorkChain(engine.WorkChain):
         if not self.ctx.avas_reused and not self.ctx.avas_storage.is_finished_ok:return self.exit_codes.ERROR_STORAGE
 
     def valence(self):
+        if 'restart_reference' in self.inputs:
+            self.report('Reconverging the neutral reference from saved valence orbitals; geometry unchanged')
+            return self.launch('valence',self.inputs.restart_reference,self.ctx.restart_location)
         n=orm.load_node(self.ctx.avas_uuid)
         return self.launch('valence',n.outputs.reference,resolve_electronic(n.outputs.remote_folder,names=['aiida.gbw']))
 
@@ -160,12 +197,15 @@ class CobaltXpsWorkChain(engine.WorkChain):
                     or parent.outputs.retrieved.uuid!=self.inputs.valence_retrieved.uuid
                     or parent.inputs.structure.uuid!=self.inputs.structure.uuid):
                 raise ValueError('Co orbital metadata, structure and wavefunction must share their producing calculation')
+            if parent.inputs.code.uuid!=self.inputs.code.uuid:
+                raise ValueError('The spectrum and neutral reference must use the same ORCA code')
+            co.require_consistent_reference(co.validated_calculation(parent),self.ctx.model)
             if not self.inputs.force_recompute.value:
                 self.ctx.reuse_uuid=matching_spectrum(self.inputs.valence_reference.uuid,self.ctx.model,self.inputs.code.uuid)
             if not self.ctx.reuse_uuid:
                 existing=available_calculation(self.inputs.valence_reference.uuid,'spectator',self.ctx.model,self.inputs.code.uuid)
                 if not existing:resolve_electronic(self.inputs.valence_folder,names=['aiida.gbw'])
-        except (ValueError,KeyError,OSError) as exc:
+        except (ValueError,KeyError,OSError,ArtifactUnavailable) as exc:
             self.report(str(exc));return self.exit_codes.ERROR_INPUT
 
     def needs_calculation(self):return self.ctx.reuse_uuid is None
@@ -185,7 +225,8 @@ class CobaltXpsWorkChain(engine.WorkChain):
 
     def check_spectator(self):
         if not self.ctx.spectator_reused:
-            if not self.ctx.spectator.is_finished_ok:return self.exit_codes.ERROR_INPUT
+            if not self.ctx.spectator.is_finished_ok:
+                report_failure(self,self.ctx.spectator);return self.exit_codes.ERROR_INPUT
             self.ctx.spectator_uuid=str(self.ctx.spectator.uuid)
 
     def preserve_spectator(self):
@@ -229,7 +270,8 @@ class CobaltXpsWorkChain(engine.WorkChain):
         return engine.ToContext(spectrum=self.submit(b))
 
     def check_spectrum(self):
-        if not self.ctx.spectrum.is_finished_ok:return self.exit_codes.ERROR_SPECTRUM
+        if not self.ctx.spectrum.is_finished_ok:
+            report_failure(self,self.ctx.spectrum);return self.exit_codes.ERROR_SPECTRUM
 
     def preserve(self):
         b=storage_builder(self.ctx.spectrum.outputs.remote_folder,self.inputs.helper_code,self.inputs.storage_policy.get_dict(),names=['aiida.gbw'])

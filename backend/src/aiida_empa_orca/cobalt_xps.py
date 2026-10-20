@@ -18,19 +18,28 @@ from .input import render_input
 VALENCE_PROCESS = 'aiida.workflows:empa_orca.cobalt_valence'
 SPECTRUM_PROCESS = 'aiida.workflows:empa_orca.cobalt_xps'
 CALC_PROCESS = 'aiida.calculations:empa_orca.cobalt_states'
-PROTOCOL = 'copc_rasci_soc_core_transition_v1'
+LEGACY_PROTOCOL = 'copc_rasci_soc_core_transition_v1'
+PROTOCOL = 'copc_rasci_soc_core_transition_v2'
 HARTREE_TO_EV = 27.211386245988
 
 
 def model_settings(values=None):
     defaults = {'protocol': PROTOCOL, 'nprocs': 8, 'memory_mb': 12288, 'wallclock_seconds': 14400,
                 'basis': 'cc-pVTZ', 'cobalt_basis': 'cc-pwCVTZ', 'auxiliary_basis': 'cc-pVTZ/C',
-                'max_macroiterations': 100}
+                'max_macroiterations': 100, 'cosx_grid': 3}
     values = dict(values or {})
     if set(values)-set(defaults):
         raise ValueError('Unknown cobalt multiplet setting')
     s=defaults | values
-    for key in ('protocol', 'basis', 'cobalt_basis', 'auxiliary_basis'):
+    if s['protocol'] not in (PROTOCOL, LEGACY_PROTOCOL):
+        raise ValueError('Unknown CoPc protocol')
+    if s['protocol']==LEGACY_PROTOCOL:
+        # Read old provenance without silently upgrading its numerical protocol.
+        s['cosx_grid']=values.get('cosx_grid')
+        if s['cosx_grid'] is not None:raise ValueError('Legacy CoPc protocol has no fixed COSX grid')
+    elif type(s['cosx_grid']) is not int or s['cosx_grid']!=3:
+        raise ValueError('The consistent CoPc protocol requires COSX angular grid 3')
+    for key in ('basis', 'cobalt_basis', 'auxiliary_basis'):
         if s[key] != defaults[key]:
             raise ValueError('This draft validates the explicit CoPc core/valence basis protocol only')
     for key in ('nprocs', 'memory_mb', 'wallclock_seconds', 'max_macroiterations'):
@@ -39,6 +48,47 @@ def model_settings(values=None):
     if s['memory_mb']<256*s['nprocs']:
         raise ValueError('Provide at least 256 MiB per process')
     return s
+
+
+def integration_protocol(model=None):
+    s=model_settings(model)
+    if s['protocol']!=PROTOCOL:return None
+    return {'scheme':'fixed_cosx_v1','angular_grids':[s['cosx_grid']]*3,
+            'radial_accuracy':'orca_default'}
+
+
+def reference_compatible(reference, model=None):
+    """Legacy data remain readable but cannot seed a new spectrum directly."""
+    expected=integration_protocol(model)
+    return (expected is not None and reference.get('protocol')==PROTOCOL
+            and reference.get('integration_protocol')==expected)
+
+
+def require_consistent_reference(reference, model=None):
+    if not reference_compatible(reference,model):
+        raise ValueError('Update required: this reference does not use the consistent integration protocol. '
+                         'Review "Reconverge reference with consistent grid" to reuse its geometry and saved orbitals.')
+
+
+def integration_metadata(text,model):
+    """Validate generated grids, rather than trusting echoed input keywords."""
+    protocol=integration_protocol(model)
+    if protocol is None:return {}
+    grids=[]
+    for marker in re.finditer(r'GRIDX (\d)\s*\n-+\s*\n(.*?)(?=\nGRIDX|Grids setup|\Z)',text,re.S):
+        fragment=marker[2]
+        angular=re.search(r'AngularGrid\s+\.\.\.\s+(\d+)',fragment)
+        radial=re.search(r'IntAcc\s+\.\.\.\s+([\d.]+)',fragment)
+        points=re.search(r'Total number of grid points\s+\.\.\.\s+(\d+)',fragment)
+        if not all((angular,radial,points)):raise ValueError('Incomplete native COSX grid definitions')
+        grids.append({'index':int(marker[1]),'angular':int(angular[1]),
+                      'intacc':float(radial[1]),'points':int(points[1])})
+    if ([g['index'] for g in grids]!=[1,2,3] or
+            [g['angular'] for g in grids]!=protocol['angular_grids'] or
+            any(abs(g['intacc']-4.338)>1e-6 or g['points']<=0 for g in grids) or
+            len({g['points'] for g in grids})!=1):
+        raise ValueError('Native COSX grids do not match the consistent integration protocol')
+    return {'integration_protocol':protocol,'generated_cosx_grids':grids}
 
 
 def model_identity(values):
@@ -54,7 +104,8 @@ def validated_calculation(node):
     stage=node.inputs.stage.value
     text=node.outputs.retrieved.base.repository.get_object_content('aiida.out')
     parent=node.inputs.parent_reference.get_dict() if 'parent_reference' in node.inputs else None
-    parsed=parse_spectrum(text,parent) if stage=='spectrum' else parse_reference(text,stage,parent)
+    model=node.inputs.model.get_dict()
+    parsed=parse_spectrum(text,parent,model) if stage=='spectrum' else parse_reference(text,stage,parent,model)
     if clean_value(parsed)!=node.outputs.reference.get_dict():
         raise ValueError('Stored Co result differs from the native output')
     return parsed
@@ -110,13 +161,16 @@ def csf_dimension(configurations, multiplicity):
 
 def input_text(structure, stage, model, parent=None, core=None):
     s=model_settings(model)
+    if s['protocol']!=PROTOCOL:
+        raise ValueError('Legacy CoPc protocols are read-only; use the consistent integration protocol for new calculations')
     validate_copc(structure,{'charge':0,'multiplicity':2})
     if stage not in ('avas','valence','spectator','spectrum'):
         raise ValueError('Unknown cobalt stage')
     params={'charge':1 if stage=='spectrum' else 0,'multiplicity':3 if stage=='spectrum' else 2,
         'input_keywords':[s['basis'],s['auxiliary_basis'],'RIJCOSX','SARC/J','TightSCF','MOREAD','NoIter'],
         'input_blocks':{'pal':{'nprocs':s['nprocs']},'basis':{'NewGTO Co':f'"{s["cobalt_basis"]}" end'},
-            'rel':{'FiniteNuc':'true'},'method':{'FrozenCore':'FC_NONE'}}}
+            'rel':{'FiniteNuc':'true'},'method':{'FrozenCore':'FC_NONE',
+                'AngularGridX':'3,3,3','IntAccX':'-1,-1,-1'}}}
     text='%moinp "reference.gbw"\n'
     if stage=='avas':
         params['input_keywords']+=['AVAS(Valence-D)']
@@ -127,7 +181,10 @@ def input_text(structure, stage, model, parent=None, core=None):
         params['input_blocks']['scf']={'MaxIter':0}
         if parent is None or 'valence_selection' not in parent:
             raise ValueError('Verified five-d plus ligand-pi orbital selection is required')
-        swaps=parent['valence_selection']['swaps']
+        if parent.get('stage') not in ('avas','valence'):
+            raise ValueError('Choose verified AVAS orbitals or an optimized valence reference for reconvergence')
+        # A valence restart already contains the selected active space.
+        swaps=parent['valence_selection']['swaps'] if parent['stage']=='avas' else []
         if swaps:
             text+='%scf\n rotate\n'+''.join(f'  {{{i},{j},90,0,0}}\n' for i,j in swaps)+' end\nend\n'
         text+=(f'%casscf\n nel 9\n norb 6\n mult 2,4\n nroots 70,20\n maxiter {s["max_macroiterations"]}\n'
@@ -135,6 +192,7 @@ def input_text(structure, stage, model, parent=None, core=None):
     elif stage=='spectator':
         if parent is None or parent['stage']!='valence':
             raise ValueError('A completed state-averaged valence reference is required')
+        require_consistent_reference(parent,s)
         # ORCA forces all final representations to unchanged for MaxIter=1
         # (including NoIter). Stop before the first orbital update instead,
         # then permit the natural-orbital finalization and final CAS-CI pass.
@@ -145,6 +203,7 @@ def input_text(structure, stage, model, parent=None, core=None):
     else:
         if parent is None or core is None:
             raise ValueError('Verified SA-CASSCF and core identification are required')
+        require_consistent_reference(parent,s)
         co=next(i for i,z in enumerate(structure.get_ase().numbers) if z==27)
         rows=[r for r in core['assignments'] if r['atom_index']==co and r.get('spin',0)==0]
         one_s=[r['index'] for r in rows if r.get('shell')=='1s']
@@ -166,10 +225,8 @@ def input_text(structure, stage, model, parent=None, core=None):
         text+=(' end\n rel\n  DoSOC true\n  XESSOC true\n  XASMOs 137\n  DoDTensor false\n end\nend\n')
     text+='%output Print[P_AtPopMO_L] 1 end\n'
     rendered=render_input(params,int(.75*s['memory_mb']/s['nprocs']),'aiida.coords.xyz')
-    if stage=='spectator':
-        # Explicit controls must follow TightSCF, which otherwise resets GTol.
-        return rendered.replace('* xyzfile ',text+'* xyzfile ',1)
-    return text+rendered
+    # Keep all explicit scientific controls after simple keyword processing.
+    return rendered.replace('* xyzfile ',text+'* xyzfile ',1)
 
 
 def verify_natural_finalization(text):
@@ -193,9 +250,15 @@ def verify_natural_finalization(text):
     return energies[1]-energies[0]
 
 
-def parse_reference(text, stage, parent=None):
+def parse_reference(text, stage, parent=None, model=None):
+    model=model_settings(model or {'protocol':LEGACY_PROTOCOL})
     if 'ORCA TERMINATED NORMALLY' not in text or 'CI-PROBLEM SOLVED' not in text:
         raise ValueError('The native multireference calculation did not finish successfully')
+    numerical=integration_metadata(text,model)
+    if stage=='spectator' and model['protocol']==PROTOCOL:
+        require_consistent_reference(parent or {},model)
+        if numerical['generated_cosx_grids']!=parent.get('generated_cosx_grids'):
+            raise ValueError('Generated COSX grids differ from the neutral reference; review reference reconvergence before retrying')
     if stage=='spectator':
         verify_natural_finalization(text)
     nel=re.findall(r'Number of active electrons\s+\.\.\.\s+(\d+)',text)
@@ -204,7 +267,7 @@ def parse_reference(text, stage, parent=None):
     if not nel or not norb or (int(nel[-1]),int(norb[-1]))!=expected or expected not in ((7,5),(9,6)):
         raise ValueError('The native active space differs from the requested Co model')
     info={'schema_version':1,'stage':stage,'active_electrons':expected[0],'active_orbitals':expected[1],
-          'protocol':PROTOCOL,'geometry_mode':'fixed','reference_doi':'10.26434/chemrxiv-2026-t0g71'}
+          'protocol':model['protocol'],'geometry_mode':'fixed','reference_doi':'10.26434/chemrxiv-2026-t0g71',**numerical}
     if stage=='avas':
         avas=re.findall(r'AVAS orbitals\s*:\s*(\d+)',text)
         if not avas or int(avas[-1])!=expected[1]:
@@ -253,7 +316,7 @@ def parse_reference(text, stage, parent=None):
             if abs(difference)>1e-7:
                 raise ValueError('Frozen neutral energy differs from the saved SA-CASSCF reference by '
                     f'{difference:.9g} Hartree ({difference*HARTREE_TO_EV:.6g} eV); '
-                    'check restart consistency before computing the spectrum')
+                    'spectrum stopped. Review the neutral reference and reconverge it with the consistent grid before retrying')
             info['active_representation']='state-specific natural orbitals'
             info['orbital_optimization_performed']=False
             info['canonicalization_energy_change_hartree']=verify_natural_finalization(text)
@@ -355,9 +418,9 @@ class CobaltStatesParser(Parser):
             stage=self.node.inputs.stage.value
             text=self.retrieved.base.repository.get_object_content('aiida.out')
             if stage=='spectrum':
-                data=parse_spectrum(text,self.node.inputs.parent_reference.get_dict())
+                data=parse_spectrum(text,self.node.inputs.parent_reference.get_dict(),self.node.inputs.model.get_dict())
             else:
-                data=parse_reference(text,stage,self.node.inputs.parent_reference.get_dict() if 'parent_reference' in self.node.inputs else None)
+                data=parse_reference(text,stage,self.node.inputs.parent_reference.get_dict() if 'parent_reference' in self.node.inputs else None,self.node.inputs.model.get_dict())
             self.out('reference',orm.Dict(dict=data))
         except (ValueError,KeyError,OSError) as exc:
             self.logger.error(str(exc));return self.exit_codes.ERROR_STATES
@@ -404,9 +467,15 @@ def soc_states(text, *, expected_counts=None):
     return states,spectators,source_roots
 
 
-def parse_spectrum(text,parent):
+def parse_spectrum(text,parent,model=None):
+    model=model_settings(model or {'protocol':parent.get('protocol',LEGACY_PROTOCOL)})
     if 'ORCA TERMINATED NORMALLY' not in text:
         raise ValueError('The native RAS-CI/SOC calculation did not terminate normally')
+    numerical=integration_metadata(text,model)
+    if model['protocol']==PROTOCOL:
+        require_consistent_reference(parent,model)
+        if numerical['generated_cosx_grids']!=parent.get('generated_cosx_grids'):
+            raise ValueError('Generated COSX grids differ from the neutral reference; spectrum validation stopped')
     counts=[re.findall(r'Number of active '+kind+r'\s+\.\.\.\s+(\d+)',text) for kind in ('electrons','orbitals')]
     total=re.findall(r'Total number of electrons\s+\.\.\.\s+(\d+)',text)
     if any(not v for v in counts) or [int(v[-1]) for v in counts]!=[16,10] or not total or int(total[-1])!=290:
@@ -435,7 +504,7 @@ def parse_spectrum(text,parent):
     sticks=[{'final_state':i,'binding_energy_ev':(energies[i]-parent['ground_energy_hartree'])*HARTREE_TO_EV,
              'raw_dipole_strength':value,'weight':value/total}
             for i,value in sorted(contributions.items()) if value/total>1e-12]
-    return {'schema_version':1,'protocol':PROTOCOL,'reference_doi':'10.26434/chemrxiv-2026-t0g71',
+    return {'schema_version':1,'protocol':model['protocol'],**numerical,'reference_doi':'10.26434/chemrxiv-2026-t0g71',
             'geometry_mode':'fixed','neutral_reference_energy_hartree':parent['ground_energy_hartree'],
             'energy_reference':'neutral doublet root 0, spin-free SA-CASSCF orbitals; neutral SOC not included',
             'soc_state_count':len(states),'spin_free_counts':{'triplet':376,'singlet':316},

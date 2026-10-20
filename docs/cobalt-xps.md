@@ -6,6 +6,34 @@ submissions. Review each stage before submitting it. The automatic active-space
 selection currently requires planar C32H16CoN8 oriented close to the xy plane;
 unsupported or ambiguous orbital character stops preparation.
 
+**Integration protocol: Consistent grid (recommended)** is applied automatically
+when preparing new Co valence orbitals. There is no grid setting to remember
+for the later spectrum. Numerical details are available under **Numerical
+settings**. Protocol v2 pins all three COSX angular grids to 3, with their
+default radial accuracy, and verifies the actual generated grids in native
+output. The neutral reference, natural-orbital step and spectrum carry the
+protocol and generated grid definitions in provenance. The 1e−7 Hartree energy
+guard remains unchanged.
+
+Older references remain visible, marked **update required**. Spectrum review
+and submission are blocked for these references, including direct workflow
+submission outside the GUI. Select the older reference and click **Review
+reference update**, then **Reconverge reference with consistent grid**. This
+submits a new neutral SA-CASSCF reference from the saved optimized valence
+orbitals. The geometry, electron count, spin sectors, basis and active-space
+selection are retained. Geometry optimization, DFT and AVAS are not repeated.
+The original calculation and reference energy are preserved. Recovery does not
+submit a spectrum; after it succeeds the updated reference is selected and
+**Review Co 2p calculation** becomes available.
+
+Recovery checks the repository, stash and remote folder for the required GBW.
+If the saved orbitals are unavailable, the review explains that orbital
+preparation must be rebuilt. The generic **Recompute this stage** checkbox is
+not needed to update an old protocol; it controls reuse of already compatible
+results. Compatible results are reused by provenance and actual file availability,
+independently of AiiDA caching. Detailed native validation failures are shown
+in the app, including the measured energy difference when that guard fails.
+
 The protocol follows Carniato et al.,
 [Ionization-Induced Double Charge Transfer in Metallophthalocyanines Revealed
 by Ab Initio Simulation of 2p Photoelectron Spectra](https://doi.org/10.26434/chemrxiv-2026-t0g71),
@@ -88,7 +116,7 @@ are adjustable; CSV and view JSON retain the scientific and display values.
 
 ## Validation status
 
-Native ORCA 6.1.1 ARM64 completed the CoPc SA-CASSCF preparation on eight
+The original protocol v1 ORCA 6.1.1 ARM64 run completed CoPc SA-CASSCF on eight
 processes in about 37 minutes, at the existing PBE geometry. The gradient
 converged to 1.08e−4; the doublet root-0 energy is −3038.6762444642 Hartree.
 The 20.4 MiB GBW was preserved in the AiiDA repository and its checksum checked.
@@ -163,11 +191,48 @@ describes three COSX grids and their use at different stages. These controls
 are numerical integration settings, separate from the orbital basis and
 physical active-space model.
 
-No replacement reference has been accepted, no production grid settings or
-energy tolerance have been changed, and no Co 2p spectrum has been submitted.
-The proposed resolution is to use one explicit COSX grid throughout the Co
-protocol, record it in the protocol identity so incompatible results are not
-reused, and reconverge the neutral reference from its saved optimized orbitals.
-Using the existing largest grid is the preferred next numerical protocol;
-its convergence and subsequent natural-orbital invariance still need validation.
-The original results remain preserved with their provenance.
+These diagnostics did not accept a replacement reference or change an energy
+tolerance. The subsequently user-approved protocol v2 now uses the same explicit
+largest grid throughout the Co calculations. The protocol identity prevents
+reuse of incompatible v1 results. A separate reference-update workflow can
+reconverge from saved optimized valence orbitals, with direct input links to the
+original producing calculation's reference and files. Original results remain
+preserved. Live reconvergence and subsequent natural-orbital validation are
+recorded below; the full molecular spectrum is still unvalidated.
+
+
+### Live validation of protocol v2 and app recovery
+
+The browser selected the old reference, confirmed the pre-submission block,
+reviewed the update and submitted workflow
+`13f2c6c4-ad1e-4a88-b32c-ed7921687942`. Its only children were native
+SA-CASSCF CalcJob `35f2d164-26b6-42d9-a7df-c429bc7c8728` and electronic-file
+preservation. It converged in four optimization macro-iterations plus the
+final printing pass, in 15 minutes 48 seconds on eight processes. The final
+orbital gradient is 1.31e−4, below the unchanged 2.5e−4 criterion. The new
+neutral doublet root-0 energy is −3038.6768378690 Hartree. Geometry node
+`0314a4b4-d54c-44f9-845e-0c56cb6ba381` is unchanged. The original protocol v1
+reference remains intact.
+
+Native natural-orbital validation
+`d5f2b6de-4f0e-43b0-aca2-c5137b761de0` then passed both unchanged energy checks:
+its neutral energy agrees with the reconverged reference at printed precision,
+and the final native CAS macro reports an energy change of −4.55e−12 Hartree.
+No orbital-update step occurred during this representation-only calculation.
+All three generated grids have 183,635 points in both calculations. The new
+natural-orbital GBW was preserved by
+`f0845138-3c35-4137-8438-cb6d8e55bb47`, ready for later provenance-based reuse.
+This validation was a native CalcJob; the full spectrum was not submitted.
+
+A repeat recovery request, workflow
+`90e0b710-366d-4b63-a939-5c6017ca3d92`, reused the compatible result with zero
+child CalcJobs, without AiiDA caching. Browser tests also checked the updated
+reference's ready state, spectrum review, blocking when selecting an old
+reference and invalidation of an earlier review after switching references.
+The app-discovery audit passed. Focused XPS/protocol/UI regression tests:
+32 passed. Labelled native excerpts cover both the original mismatch and the
+successful fixed-grid restart; no executable or wavefunction is distributed.
+
+The model's lowest quartet still lies 0.489 eV below the selected doublet.
+The integration fix does not resolve that separate model/spin-ordering issue
+or validate a molecular Co 2p spectrum against experiment.

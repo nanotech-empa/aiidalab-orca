@@ -107,18 +107,21 @@ def test_cobalt_valence_optimizes_orbitals_but_spectrum_keeps_them_fixed(aiida_p
     assert 'MaxIter 0' in valence and 'maxiter 100' in valence
     assert '{140,141,90,0,0}' in valence
     assert 'nroots 70,20' in valence
-    spectator=input_text(structure,'spectator',model_settings(),{'stage':'valence'})
+    numerical={'protocol':model_settings()['protocol'],'integration_protocol':{'scheme':'fixed_cosx_v1','angular_grids':[3,3,3],'radial_accuracy':'orca_default'}}
+    spectator=input_text(structure,'spectator',model_settings(),{'stage':'valence',**numerical})
     assert 'NoIter' not in spectator and 'MaxIter 0' in spectator
     assert 'maxiter 2' in spectator and 'GTol 1e6' in spectator
     assert 'ActOrbs NatOrbs' in spectator
     assert spectator.index('TightSCF')<spectator.index('GTol 1e6')<spectator.index('* xyzfile')
     core={'assignments':[{'atom_index':48,'spin':0,'shell':shell,'index':i,'population':.999}
                          for i,shell in [(0,'1s'),(2,'2p'),(3,'2p'),(4,'2p')]]}
-    spectrum=input_text(structure,'spectrum',model_settings(),{'spectator_occupation':[2,2,2,2,1,0]},core)
+    spectrum=input_text(structure,'spectrum',model_settings(),{'spectator_occupation':[2,2,2,2,1,0],**numerical},core)
     assert 'NoIter' in spectrum and 'maxiter 1' in spectrum
     assert 'nroots 376,316' in spectrum and 'XESSOC true' in spectrum
     assert '{0,137,90,0,0}' in spectrum
     assert 'ActOrbs unchanged' in spectrum and 'IntOrbs unchanged' in spectrum
+    for text in (input_text(structure,'avas',model_settings()),valence,spectator,spectrum):
+        assert 'AngularGridX 3,3,3' in text and 'IntAccX -1,-1,-1' in text
 
 
 def test_native_natural_finalization_preserves_energy_without_optimization():

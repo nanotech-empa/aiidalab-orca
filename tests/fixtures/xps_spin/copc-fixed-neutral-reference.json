@@ -1,0 +1,37 @@
+{
+  "stage": "valence",
+  "protocol": "copc_rasci_soc_core_transition_v2",
+  "integration_protocol": {
+    "scheme": "fixed_cosx_v1",
+    "angular_grids": [
+      3,
+      3,
+      3
+    ],
+    "radial_accuracy": "orca_default"
+  },
+  "generated_cosx_grids": [
+    {
+      "index": 1,
+      "intacc": 4.338,
+      "points": 183635,
+      "angular": 3
+    },
+    {
+      "index": 2,
+      "intacc": 4.338,
+      "points": 183635,
+      "angular": 3
+    },
+    {
+      "index": 3,
+      "intacc": 4.338,
+      "points": 183635,
+      "angular": 3
+    }
+  ],
+  "ground_energy_hartree": -3038.676837869,
+  "reference_above_computed_minimum_ev": 0.48895668916211,
+  "reference_uuid": "fae9cce7-9f84-469a-8b74-d82ea03a38e5",
+  "natural_calculation_uuid": "d5f2b6de-4f0e-43b0-aca2-c5137b761de0"
+}

@@ -10,6 +10,10 @@ The app's **Automatic checks and supported scope** explains which validation
 runs without user configuration. This is a CoPc-specific protocol; changing the
 metal to Fe or Zn does not establish a supported active space or spin model.
 Passing numerical checks does not establish the physical ground state.
+When the selected doublet is above another computed neutral spin sector, the
+reference notice shows the energy difference before spectrum submission. It
+remains an explicit reference choice; numerical compatibility does not resolve
+the spin ordering.
 
 **Integration protocol: Consistent grid (recommended)** is applied automatically
 when preparing new Co valence orbitals. There is no grid setting to remember
@@ -252,3 +256,15 @@ successful fixed-grid restart; no executable or wavefunction is distributed.
 The model's lowest quartet still lies 0.489 eV below the selected doublet.
 The integration fix does not resolve that separate model/spin-ordering issue
 or validate a molecular Co 2p spectrum against experiment.
+
+### Native core assignment on tigu
+
+On 2026-10-20, `empa_orca.cobalt_core` CalcJob
+`5836cad3-f07f-45a5-bf8a-035743791db9` completed and passed parser validation
+on tigu. It reads the native population table from successful natural-orbital
+producer `c64ca4a7-a549-465f-b53b-fdaa6956aa49`: Co 1s is MO 0 and Co 2p
+is MOs 2–4, each with 100% Co s/p character at printed precision and occupation
+2. The report links the original producer and fingerprints its native output.
+Only text was staged for this one-process check; the wavefunction was not
+converted, copied or localized. This validates the core-assignment stage,
+not the full molecular RAS-CI/SOC spectrum.

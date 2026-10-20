@@ -121,6 +121,53 @@ reference.
 Across all 90 states, restart energies differ from the saved SA-CASSCF values
 by −0.01330 to −0.01386 eV. Wavefunction checksums, geometry and exported
 occupied/active subspaces were verified; no significant change on file read
-was found. The cause of this native restart discrepancy remains under
-investigation. The natural-orbital rotation itself passes its invariance check,
+was found. The natural-orbital rotation itself passes its invariance check,
 but the complete molecular RAS-CI/SOC spectrum remains unvalidated.
+
+### Restart discrepancy: controlled COSX grid comparison
+
+Further native CalcJob diagnostics on 2026-10-20 locate the discrepancy in the
+COSX quadrature used by the two execution paths. Geometry, original GBW,
+orbital basis, fitting bases, finite-nucleus treatment, integral thresholds,
+active space and all 70 doublets/20 quartets were held fixed. No diagnostic
+performed an orbital-optimization step.
+
+ORCA printed identical default grid definitions for the original optimization
+and the default frozen restart. Explicitly making all three grids identical
+removes ambiguity about which grid is used. The current documented control is
+`AngularGridX`; `IntAccX -1,-1,-1` retains the default radial accuracy for each
+selected angular grid. The generated grids, including their point counts,
+were checked in the native output.
+
+| Calculation / evaluation | Generated COSX grids | Neutral doublet root 0 (Hartree) |
+| --- | --- | --- |
+| Original SA-CASSCF result | Default definitions: 41,976 / 86,516 / 183,635 points | −3038.6762444642 |
+| All grids set to angular grid 2 | 86,516 points each; IntAcc 4.020 | −3038.6762444642 |
+| Default frozen restart | Same default definitions as the original run | −3038.6767387580 |
+| All grids set to angular grid 3 | 183,635 points each; IntAcc 4.338 | −3038.6767387580 |
+
+The medium-grid restart (`111aa667-2707-453d-8116-c4605bc0b7f5`) reproduces
+all 90 original state energies within about 1e−10 Hartree at the printed precision.
+The largest-grid control (`658608c9-114a-4139-9bea-24eaec2cef15`) reproduces
+all 90 default-restart energies exactly at the printed precision.
+Thus the original result behaves as a medium-grid evaluation, while the
+frozen restart and natural-finalization job behave as largest-grid evaluations.
+The source-code mechanism is not established; this is a controlled numerical
+diagnosis, not a claim that the GBW changed or that state selection changed
+the Hamiltonian. A legacy `GridX`/explicit-radial control
+(`044d7258-4514-4e98-9f3b-39efb7f7d199`) generated different radial grids and
+is not used as the decisive comparison.
+
+The [ORCA manual](https://www.faccts.de/docs/orca/6.1/manual/contents/essentialelements/RI.html#cosx-numerical-grids)
+describes three COSX grids and their use at different stages. These controls
+are numerical integration settings, separate from the orbital basis and
+physical active-space model.
+
+No replacement reference has been accepted, no production grid settings or
+energy tolerance have been changed, and no Co 2p spectrum has been submitted.
+The proposed resolution is to use one explicit COSX grid throughout the Co
+protocol, record it in the protocol identity so incompatible results are not
+reused, and reconverge the neutral reference from its saved optimized orbitals.
+Using the existing largest grid is the preferred next numerical protocol;
+its convergence and subsequent natural-orbital invariance still need validation.
+The original results remain preserved with their provenance.

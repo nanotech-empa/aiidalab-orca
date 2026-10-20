@@ -86,7 +86,8 @@ PP-STM CO-tip maps quantitatively.
 - The CC BY 4.0 [2020 experimental dataset](https://doi.org/10.5281/zenodo.4243077)
   includes SIESTA-relaxed ETRI coordinates. Those are a sourced starting point,
   not verified as the exact 2024 PBE0 geometry. No idealized geometry is passed
-  off as a matched reference.
+  off as a matched reference. The [example geometry](../examples/etri/README.md)
+  preserves its source member, checksum, conversion and scientific credit.
 - `tests/fixtures/kondo/etri-tabulated.json` transcribes Tables 3 and 7 of
   the 2024 paper. Six rounded orbital components and two doublets per charging
   direction check the reduced-amplitude conversion. This truncated excerpt

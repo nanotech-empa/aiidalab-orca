@@ -107,6 +107,11 @@ def test_cobalt_valence_optimizes_orbitals_but_spectrum_keeps_them_fixed(aiida_p
     assert 'MaxIter 0' in valence and 'maxiter 100' in valence
     assert '{140,141,90,0,0}' in valence
     assert 'nroots 70,20' in valence
+    spectator=input_text(structure,'spectator',model_settings(),{'stage':'valence'})
+    assert 'NoIter' not in spectator and 'MaxIter 0' in spectator
+    assert 'maxiter 2' in spectator and 'GTol 1e6' in spectator
+    assert 'ActOrbs NatOrbs' in spectator
+    assert spectator.index('TightSCF')<spectator.index('GTol 1e6')<spectator.index('* xyzfile')
     core={'assignments':[{'atom_index':48,'spin':0,'shell':shell,'index':i,'population':.999}
                          for i,shell in [(0,'1s'),(2,'2p'),(3,'2p'),(4,'2p')]]}
     spectrum=input_text(structure,'spectrum',model_settings(),{'spectator_occupation':[2,2,2,2,1,0]},core)
@@ -114,6 +119,28 @@ def test_cobalt_valence_optimizes_orbitals_but_spectrum_keeps_them_fixed(aiida_p
     assert 'nroots 376,316' in spectrum and 'XESSOC true' in spectrum
     assert '{0,137,90,0,0}' in spectrum
     assert 'ActOrbs unchanged' in spectrum and 'IntOrbs unchanged' in spectrum
+
+
+def test_native_natural_finalization_preserves_energy_without_optimization():
+    import re
+    from aiida_empa_orca.cobalt_xps import verify_natural_finalization,parse_reference
+    unchanged=(FILES/'co-natural-one-pass.out').read_text()
+    natural=(FILES/'co-natural-finalization.out').read_text()
+    assert 'ORCA TERMINATED NORMALLY' in natural
+    verify_natural_finalization(natural)
+    with pytest.raises(ValueError,match='without orbital optimization'):
+        parse_reference(unchanged,'spectator')
+    with pytest.raises(ValueError,match='without orbital optimization'):
+        verify_natural_finalization(natural+'\n--- Orbital Update [SuperCI(PT)]\n')
+    with pytest.raises(ValueError,match='without orbital optimization'):
+        verify_natural_finalization(natural.replace('MACRO-ITERATION   2:','MACRO-ITERATION   3:'))
+    changed=re.sub(r'(E\(CAS\)=\s*)-1381\.091420891',r'\g<1>-1381.081420891',natural,count=1)
+    with pytest.raises(ValueError,match='changed the frozen CAS energy'):
+        verify_natural_finalization(changed)
+    # Native fixed-orbital CAS-CI energy before/after the representation change.
+    roots=lambda text:[float(v) for v in re.findall(r'ROOT\s+0:\s*E=\s*([-+\d.Ee]+)\s+Eh',text)]
+    assert roots(natural)[-1]==pytest.approx(roots(unchanged)[-1],abs=1e-9)
+    assert 'Orbital Update' not in natural
 
 
 def test_native_soc_xes_format_preserves_spin_coupling_and_energy_differences():
@@ -138,6 +165,17 @@ def test_native_soc_xes_format_preserves_spin_coupling_and_energy_differences():
     assert sum(r['dipole_strength'] for r in transitions)/4==pytest.approx(.001917795445,rel=1e-8)
     with pytest.raises(ValueError,match='Missing native'):
         xes_transitions(text.replace('SOC CORRECTED   EMISSION SPECTRUM','removed'))
+
+
+def test_copc_natural_rotation_passes_but_inconsistent_reference_blocks_spectrum():
+    from aiida_empa_orca.cobalt_xps import verify_natural_finalization,parse_reference
+    text=(FILES/'copc-natural-excerpt.out').read_text()
+    assert abs(verify_natural_finalization(text))<1e-7
+    # Real preceding SA-CASSCF result, not an adjusted energy reference.
+    parent={'stage':'valence','ground_energy_hartree':-3038.6762444642,
+            'reference_above_computed_minimum_ev':.48863789961062204}
+    with pytest.raises(ValueError,match='Frozen neutral energy differs from the saved SA-CASSCF reference'):
+        parse_reference(text,'spectator',parent)
 
 
 def test_spin_spectrum_exposes_raw_and_estimated_energies_without_fictitious_intensities():

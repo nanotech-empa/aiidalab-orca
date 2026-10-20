@@ -26,7 +26,17 @@ references independently; it does not redistribute the paper or SI.
 3. Canonicalize the selected neutral doublet into state-specific natural
    orbitals in a separate CAS-CI step. Its total energy must match the
    state-averaged-orbital reference within 1e−7 Hartree. This is an active-space
-   change of representation, not another orbital optimization.
+   change of representation, not another orbital optimization. ORCA 6.1.1 forces
+   the final representation to `unchanged` for `maxiter 1`, including `NoIter`.
+   This step instead skips preliminary SCF (`MaxIter 0`), permits two CAS-CI
+   passes, and uses `GTol 1e6` to stop before any orbital update and allow final
+   natural-orbital rotation. Explicit controls follow `TightSCF` in the input,
+   which would otherwise reset the gradient threshold. The parser requires
+   exactly these two passes,
+   active-only natural finalization, unchanged internal/external representations
+   and no orbital-update step. The loose threshold is a control for this
+   representation-only job; its convergence banner is not evidence of optimized
+   orbitals. The original SA-CASSCF remains the optimized orbital reference.
 4. Rotate verified Co 1s and three Co 2p orbitals into the active space.
    Frozen-orbital RAS-CI(16,10) includes one 1s-hole spectator configuration,
    all 2p-hole configurations with nine valence electrons, and all
@@ -91,6 +101,26 @@ needs investigation before interpreting a spectrum or comparing with experiment.
 
 The generated 376/316 spin-free dimensions and the native SOC/emission parser
 have regression tests, including a reduced atomic format calculation. That
-reduced calculation is not a molecular spectrum validation. The separate
-neutral natural-orbital stage and the complete CoPc RAS-CI/SOC spectrum have
-not yet been run end to end; this remains an experimental draft.
+reduced calculation is not a molecular spectrum validation.
+
+On 2026-10-20 the representation-only CoPc calculation
+`b0543a93-2153-4361-8dda-c3aa21044291` terminated normally, without any orbital
+update. Its CAS energy before/after natural finalization agreed to about
+3e−12 Hartree. However, its neutral energy, −3038.6767387580 Hartree, differs
+from the preceding optimized SA-CASSCF result by −0.0004942938 Hartree
+(−0.0134504 eV). The unchanged 1e−7 Hartree reference guard rejects this result,
+and the Co 2p spectrum is not launched. Its GBW is preserved for diagnosis;
+this does not make it an accepted spectrum reference.
+
+An independent frozen CAS-CI restart with the original 70/20 state average,
+`484abd89-4fc9-4595-ae52-ff9d61e73ed3`, reproduces the new neutral energy.
+Native ORCA terminated normally; the generic upstream ORCA parser used for this
+diagnostic is not CAS-aware and returned 311. Native text, rather than that
+generic parser's status, supplies the comparison; this is not an accepted app
+reference.
+Across all 90 states, restart energies differ from the saved SA-CASSCF values
+by −0.01330 to −0.01386 eV. Wavefunction checksums, geometry and exported
+occupied/active subspaces were verified; no significant change on file read
+was found. The cause of this native restart discrepancy remains under
+investigation. The natural-orbital rotation itself passes its invariance check,
+but the complete molecular RAS-CI/SOC spectrum remains unvalidated.

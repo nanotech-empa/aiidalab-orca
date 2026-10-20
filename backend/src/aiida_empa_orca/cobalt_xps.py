@@ -135,7 +135,13 @@ def input_text(structure, stage, model, parent=None, core=None):
     elif stage=='spectator':
         if parent is None or parent['stage']!='valence':
             raise ValueError('A completed state-averaged valence reference is required')
-        text+='%casscf\n nel 9\n norb 6\n mult 2\n nroots 1\n maxiter 1\n TrafoStep RI\n ActOrbs NatOrbs\n IntOrbs unchanged\n ExtOrbs unchanged\nend\n'
+        # ORCA forces all final representations to unchanged for MaxIter=1
+        # (including NoIter). Stop before the first orbital update instead,
+        # then permit the natural-orbital finalization and final CAS-CI pass.
+        # This is canonicalization only, never an orbital-convergence claim.
+        params['input_keywords'].remove('NoIter')
+        params['input_blocks']['scf']={'MaxIter':0}
+        text+='%casscf\n nel 9\n norb 6\n mult 2\n nroots 1\n maxiter 2\n GTol 1e6\n TrafoStep RI\n ActOrbs NatOrbs\n IntOrbs unchanged\n ExtOrbs unchanged\nend\n'
     else:
         if parent is None or core is None:
             raise ValueError('Verified SA-CASSCF and core identification are required')
@@ -159,12 +165,39 @@ def input_text(structure, stage, model, parent=None, core=None):
         text+=''.join('  { '+' '.join(map(str,c))+' }\n' for c in configs)
         text+=(' end\n rel\n  DoSOC true\n  XESSOC true\n  XASMOs 137\n  DoDTensor false\n end\nend\n')
     text+='%output Print[P_AtPopMO_L] 1 end\n'
-    return text+render_input(params,int(.75*s['memory_mb']/s['nprocs']),'aiida.coords.xyz')
+    rendered=render_input(params,int(.75*s['memory_mb']/s['nprocs']),'aiida.coords.xyz')
+    if stage=='spectator':
+        # Explicit controls must follow TightSCF, which otherwise resets GTol.
+        return rendered.replace('* xyzfile ',text+'* xyzfile ',1)
+    return text+rendered
+
+
+def verify_natural_finalization(text):
+    """Require a frozen CAS-CI pass, active-only rotation and final CI pass.
+
+    A deliberately loose GTol skips optimization in this representation-only
+    job. Native control flow, not its convergence banner, establishes that no
+    orbital-optimization step was taken. The parent energy is checked separately.
+    """
+    if (not re.search(r'Active\s+Orbitals\s+\.\.\.\s+natural\b',text)
+            or not re.search(r'Internal\s+Orbitals\s+\.\.\.\s+unchanged\b',text)
+            or not re.search(r'External\s+Orbitals\s+\.\.\.\s+unchanged\b',text)
+            or 'FINALIZING ORBITALS' not in text
+            or 'Orbital Update' in text
+            or [int(i) for i in re.findall(r'MACRO-ITERATION\s+(\d+):',text)]!=[1,2]):
+        raise ValueError('Natural-orbital finalization must rotate only the active representation without orbital optimization')
+    energies=[float(v) for v in re.findall(r'E\(CAS\)=\s*([-+\d.Ee]+)',text)]
+    if (len(energies)!=2 or not all(math.isfinite(v) for v in energies)
+            or abs(energies[1]-energies[0])>1e-7):
+        raise ValueError('Natural-orbital finalization changed the frozen CAS energy')
+    return energies[1]-energies[0]
 
 
 def parse_reference(text, stage, parent=None):
     if 'ORCA TERMINATED NORMALLY' not in text or 'CI-PROBLEM SOLVED' not in text:
         raise ValueError('The native multireference calculation did not finish successfully')
+    if stage=='spectator':
+        verify_natural_finalization(text)
     nel=re.findall(r'Number of active electrons\s+\.\.\.\s+(\d+)',text)
     norb=re.findall(r'Number of active orbitals\s+\.\.\.\s+(\d+)',text)
     expected=(int(nel[-1]),int(norb[-1])) if stage=='avas' and nel and norb else (9,6)
@@ -214,8 +247,16 @@ def parse_reference(text, stage, parent=None):
             valence_selection=selection,
             energy_reference='neutral doublet root 0 at the optimized state-averaged orbitals')
         if stage=='spectator':
-            if parent is None or abs(info['ground_energy_hartree']-parent['ground_energy_hartree'])>1e-7:
-                raise ValueError('Natural-orbital canonicalization changed the neutral CAS energy')
+            if parent is None:
+                raise ValueError('Missing state-averaged orbital reference')
+            difference=info['ground_energy_hartree']-parent['ground_energy_hartree']
+            if abs(difference)>1e-7:
+                raise ValueError('Frozen neutral energy differs from the saved SA-CASSCF reference by '
+                    f'{difference:.9g} Hartree ({difference*HARTREE_TO_EV:.6g} eV); '
+                    'check restart consistency before computing the spectrum')
+            info['active_representation']='state-specific natural orbitals'
+            info['orbital_optimization_performed']=False
+            info['canonicalization_energy_change_hartree']=verify_natural_finalization(text)
             info['parent_valence_stage']=parent['stage']
             info['reference_above_computed_minimum_ev']=parent['reference_above_computed_minimum_ev']
     return info

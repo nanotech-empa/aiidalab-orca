@@ -2,8 +2,24 @@
 import copy
 import hashlib
 import json
+from html.parser import HTMLParser
 
 from . import services, structure_io
+
+
+class _MessageText(HTMLParser):
+    """Expose displayed messages as text, without style/markup or attributes."""
+
+    def __init__(self, value):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.feed(value)
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+    def text(self):
+        return " ".join(" ".join(self.parts).split())
 
 
 class OrcaAssistantAdapter:
@@ -29,7 +45,23 @@ class OrcaAssistantAdapter:
                   "constraints_revision": app.structure.constraints.revision}
         values["revision"] = hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
         values["available_codes"] = [{"label": label, "uuid": value} for label, value in app.code.options]
+        # Display-only changes must not invalidate an otherwise unchanged draft.
+        values["messages"] = self._messages()
+        values["review_ready"] = app.review is not None
+        values["page"] = app.pages.get_title(app.pages.selected_index) if app.pages.selected_index is not None else None
+        values["setup_step"] = app.steps.selected_index
         return values
+
+    def _messages(self):
+        app = self.app
+        widgets = {"app": app.error, "structure": app.structure.message,
+                   "settings": app.science_message, "resources": app.resource_message}
+        return {name: text for name, widget in widgets.items()
+                if (text := _MessageText(widget.value).text())}
+
+    def _failure(self, fallback):
+        messages = self._messages()
+        return ValueError("; ".join(f"{name}: {text}" for name, text in messages.items()) or fallback)
 
     def context(self):
         return self.dispatch(self._state)
@@ -123,8 +155,8 @@ class OrcaAssistantAdapter:
             from .history import inspect_run
             data = inspect_run(process_uuid)
             self.app.load_run(process_uuid)
-            if self.app.process_uuid != process_uuid:
-                raise ValueError("The app could not open this calculation")
+            if self.app.process_uuid != process_uuid or self.app.error.value:
+                raise self._failure("The app could not open this calculation")
             return {"state": self._state(), "calculation": data}
         return self.dispatch(select)
 
@@ -133,10 +165,10 @@ class OrcaAssistantAdapter:
         self.app._confirm_structure()
         self.app._confirm_settings()
         if not self.app._settings_confirmed:
-            raise ValueError("The app could not validate these settings")
+            raise self._failure("The app could not validate these settings")
         self.app._review()
         if self.app.review is None:
-            raise ValueError("The app could not prepare the calculation; inspect its validation message")
+            raise self._failure("The app could not prepare the calculation")
         return {"review": self.app.review, "state": self._state()}
 
     def submit(self, expected_revision):
@@ -145,14 +177,14 @@ class OrcaAssistantAdapter:
             raise ValueError("Prepare and review the current inputs first")
         self.app._submit()
         if not self.app._submitted:
-            raise ValueError("Submission did not complete; inspect the app error")
+            raise self._failure("Submission did not complete")
         return {"process_uuid": self.app.process_uuid, "state": self._state()}
 
     def register(self, registry):
         from aiidalab_ai_assistant.tools import object_schema
         string = {"type": "string"}
         revision = {"expected_revision": string}
-        registry.add("orca_get_state", "Read the visible ORCA form, selected process, allowed codes and revision.",
+        registry.add("orca_get_state", "Read the ORCA form, current page, visible error/validation messages, review readiness, selected process, allowed codes and revision. Inspect this after an operation fails.",
                      object_schema(), self.context)
         def add(name, description, schema, handler, action=False):
             registry.add(name, description, schema, lambda **args: self.dispatch(lambda: handler(**args)), action)

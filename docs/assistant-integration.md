@@ -28,6 +28,11 @@ The shared package supplies openBIS inspection tools and a Git-maintained how-to
 Creation, import, export and upload use links to the existing openBIS GUI.
 Automatic prefilling of those notebooks is not implemented.
 
+The form adapter also reports the current page, review readiness and displayed
+structure/settings/resource/error messages. Review and submission failures return
+the actual displayed text. These display-only fields do not change the revision
+used to protect the user's newer edits.
+
 Install the assistant and this frontend/backend from their intended checkouts,
 using `--no-deps` when retaining an already provisioned scientific environment,
 and run `python -m pip check`. Reopen the application after switching checkouts;

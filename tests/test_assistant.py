@@ -59,3 +59,69 @@ def test_load_structure_preserves_source_uuid(adapter, aiida_profile):
     result = adapter.load_structure(str(original.uuid), adapter.context()["revision"])
     assert result["source_uuid"] == str(original.uuid)
     assert adapter.app.structure.atoms.get_chemical_formula() == "H2"
+
+
+def test_review_from_assistant_worker_records_import_provenance(adapter, tmp_path, aiida_profile_clean, aiida_localhost):
+    """Exercise the real calcfunction review path from a running notebook loop."""
+    import asyncio
+    from aiida import orm
+    AssistantPanel = pytest.importorskip("aiidalab_ai_assistant.panel").AssistantPanel
+    from aiidalab_ai_assistant.sessions import SessionStore
+
+    original = b"2\nNO\nN 0 0 0\nO 0 0 1.2\n"
+    adapter.app.structure.set_atoms(
+        Atoms("NO", positions=[[0, 0, 0], [0, 0, 1.2]]),
+        imported={"kind": "file", "filename": "no.xyz", "content": original},
+    )
+    # This disposable code is only reviewed; no CalcJob is submitted.
+    code_uuid = str(orm.InstalledCode(
+        computer=aiida_localhost, filepath_executable="/bin/true",
+        default_calc_job_plugin="orca.orca",
+    ).store().uuid)
+    adapter.app.code.options = [("Test ORCA code", code_uuid)]
+    adapter.app.code.value = code_uuid
+    adapter.app.wavefunction_storage.enabled.value = False
+
+    async def scenario():
+        panel = AssistantPanel(adapter=adapter, store=SessionStore(tmp_path), autoconnect=False)
+        try:
+            result = await asyncio.to_thread(
+                panel.service.registry.call, "orca_review",
+                {"expected_revision": adapter.context()["revision"]},
+            )
+            assert "error" not in result, result
+            assert adapter.app.review is not None
+            assert not adapter.app.submit_button.disabled
+            assert not adapter.app._submitted
+            return result["review"]["structure_uuid"]
+        finally:
+            panel.close()
+
+    uuid = asyncio.run(scenario())
+    node = orm.load_node(uuid)
+    assert node.creator.process_label == "record_structure_import"
+    assert node.creator.is_finished_ok
+    assert node.creator.inputs.source_file.get_content().encode() == original
+    assert orm.QueryBuilder().append(orm.CalcJobNode).count() == 0
+
+
+def test_review_failure_exposes_displayed_error_without_changing_revision(adapter, monkeypatch):
+    ToolRegistry = pytest.importorskip("aiidalab_ai_assistant.tools").ToolRegistry
+
+    message = "Cannot run awaitable: no greenback portal; use <current task> & retry."
+
+    def fail(*args, **kwargs):
+        raise RuntimeError(message)
+
+    monkeypatch.setattr("aiidalab_orca.services.prepare", fail)
+    adapter.app.wavefunction_storage.enabled.value = False
+    registry = ToolRegistry()
+    adapter.register(registry)
+    before = registry.call("orca_get_state", {})
+    result = registry.call("orca_review", {"expected_revision": before["revision"]})
+    assert result["error"] == "resources: " + message
+    after = registry.call("orca_get_state", {})
+    assert after["messages"]["resources"] == message
+    assert after["revision"] == before["revision"]
+    assert after["review_ready"] is False
+    assert after["setup_step"] == 2

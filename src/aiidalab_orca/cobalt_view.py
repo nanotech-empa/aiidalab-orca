@@ -61,6 +61,7 @@ class CobaltXpsPanel(ipw.VBox):
         self.message,self.status,self.details=ipw.HTML(),ipw.HTML(),ipw.HTML()
         self.reference_notice=ipw.HTML()
         self.integration=ipw.HTML('<p><b>Integration protocol:</b> Consistent grid (recommended). Applied automatically to orbital preparation, neutral reconvergence and the Co 2p spectrum.</p><details><summary>Numerical settings</summary><p>COSX angular grids 3,3,3 with default radial accuracy. Generated grids are validated. The neutral-energy tolerance remains 10⁻⁷ Hartree.</p></details>')
+        self.validation_help=ipw.HTML('<details><summary>Automatic checks and supported scope</summary><p>This draft supports neutral doublet CoPc only. Fe, Zn and other molecular models need separately validated protocols.</p><p>You do not need to enable checks: the workflows verify the active-space character, integration grids, frozen-reference energy, Co 1s/2p identities and final RAS/SOC results. Core identities are read from the producing CASSCF output; its wavefunction is left unchanged.</p><p>A failed check stops the affected stage. Review the diagnostic before retrying; valid earlier steps are reused when their required files remain available. An older integration protocol has a dedicated reference-update action below.</p></details>')
         self.references=ipw.Dropdown(description='Valence orbitals',style={'description_width':'initial'},layout=ipw.Layout(width='95%'))
         self.previous=ipw.Dropdown(description='Co 2p calculations',style={'description_width':'initial'},layout=ipw.Layout(width='95%'))
         self.refresh=ipw.Button(description='Refresh Co calculations',icon='refresh',layout=ipw.Layout(width='auto'))
@@ -75,7 +76,7 @@ class CobaltXpsPanel(ipw.VBox):
         self.viewer=ipw.VBox()
         self.compute=ComputePanel('Prepare / compute Co 2p…',[
             ipw.HTML('<p>Neutral CoPc · CoII d7 + ligand π² model. Prepare SA-CASSCF(9,6) orbitals first, then compute RAS-CI(16,10) and spin–orbit-coupled Co 2p multiplets. The geometry stays fixed. Basis: cc-pwCVTZ on Co, cc-pVTZ on C/N/H. This is a multireference calculation, separate from 1s ΔSCF.</p>'),
-            self.integration,self.references,self.reference_notice,self.recovery_controls,self.force,
+            self.integration,self.validation_help,self.references,self.reference_notice,self.recovery_controls,self.force,
             ipw.HBox([self.review_reference,self.prepare],layout=ipw.Layout(flex_flow='row wrap')),
             ipw.HBox([self.review_spectrum,self.submit],layout=ipw.Layout(flex_flow='row wrap')),self.message])
         super().__init__([ipw.HTML('<h4>Co 2p multiplets · draft</h4><p>Published RAS-CI/SOC core-transition protocol. <a href="https://doi.org/10.26434/chemrxiv-2026-t0g71" target="_blank">Method and approximations (preprint)</a>.</p>'),

@@ -50,3 +50,9 @@ The parent neutral reference was reconverged through the app in workflow
 natural-rotation energy checks pass the unchanged 1e−7 Hartree guard. This is
 a reference-preparation regression, not a full Co 2p spectrum validation.
 Trailing whitespace is removed from the new excerpts; native numeric values are unchanged.
+
+`copc-native-core-excerpt.out` contains the first native Löwdin orbital-composition
+block and normal-termination banner from the successful tigu natural-orbital
+CalcJob `c64ca4a7-a549-465f-b53b-fdaa6956aa49` (ORCA 6.1.1, x86-64). Co is atom
+12 (zero based); MO 0 is Co 1s, MO 1 is Co 2s and MOs 2–4 are Co 2p. This
+tests core identity without converting the unchanged CASSCF GBW into a UKS guess.

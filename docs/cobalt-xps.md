@@ -6,6 +6,11 @@ submissions. Review each stage before submitting it. The automatic active-space
 selection currently requires planar C32H16CoN8 oriented close to the xy plane;
 unsupported or ambiguous orbital character stops preparation.
 
+The app's **Automatic checks and supported scope** explains which validation
+runs without user configuration. This is a CoPc-specific protocol; changing the
+metal to Fe or Zn does not establish a supported active space or spin model.
+Passing numerical checks does not establish the physical ground state.
+
 **Integration protocol: Consistent grid (recommended)** is applied automatically
 when preparing new Co valence orbitals. There is no grid setting to remember
 for the later spectrum. Numerical details are available under **Numerical
@@ -65,7 +70,16 @@ references independently; it does not redistribute the paper or SI.
    and no orbital-update step. The loose threshold is a control for this
    representation-only job; its convergence banner is not evidence of optimized
    orbitals. The original SA-CASSCF remains the optimized orbital reference.
-4. Rotate verified Co 1s and three Co 2p orbitals into the active space.
+4. A separate `empa_orca.cobalt_core` CalcJob verifies Co 1s and three Co 2p
+   identities from the successful CASSCF's native Löwdin orbital-composition
+   table. It checks atom identity, deep-core character, full occupations and
+   at least 95% Co s/p populations. The same producing node, geometry and
+   native output are required; the parser independently repeats the check
+   and verifies the source-output fingerprint. No GBW is read or modified by
+   this inspection. It avoids ORCA 6.1.1's GUESS crash when reading the
+   CASSCF GBW into a UKS inspection. The following native spectrum calculation
+   reads the original, unchanged natural-orbital GBW and rotates the verified
+   Co 1s and three Co 2p orbitals into the active space.
    Frozen-orbital RAS-CI(16,10) includes one 1s-hole spectator configuration,
    all 2p-hole configurations with nine valence electrons, and all
    valence-ionized configurations with eight valence electrons. The resulting
@@ -100,6 +114,8 @@ The 1s ΔSCF spin-projection formula is not applied to Co 2p.
 
 - `empa_orca.cobalt_valence`: composes common orbitals, AVAS and SA-CASSCF.
 - `empa_orca.cobalt_states`: native ORCA CalcJob for each independent stage.
+- `empa_orca.cobalt_core`: submitted native-output core assignment; no SCF or
+  localization and no wavefunction copy.
 - `empa_orca.cobalt_xps`: neutral natural-orbital preparation, core inspection,
   RAS-CI/SOC and preservation.
 

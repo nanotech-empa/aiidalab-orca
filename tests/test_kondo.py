@@ -140,7 +140,7 @@ def test_channel_maps_are_squared_normalized_amplitudes_without_exchange_or_spin
 
 def test_reopening_channels_selects_the_first_stored_cube(monkeypatch):
     from aiidalab_orca import kondo as ui
-    data = exchange(table(), {})
+    data = exchange(table(), {'chemical_potential_ev':.5})
     monkeypatch.setattr(ui.service, 'history', lambda _: [('Stored channels', 'run')])
     monkeypatch.setattr(ui.service, 'progress', lambda _: dict(finished=True, success=True))
     monkeypatch.setattr(ui.service, 'result', lambda _: dict(channels_uuid='channels', data=data))
@@ -152,4 +152,17 @@ def test_reopening_channels_selects_the_first_stored_cube(monkeypatch):
     widget = ui.KondoChannels('table', 'tools', 'cubehandler')
     assert widget.cube.value == 'kondo_ko_1.cube'
     assert selected == ['kondo_ko_1.cube']
+    assert widget.mu.value == .5
+    assert 'μ=0.50 eV' in widget.summary.value
+    widget.mu.value = .7  # Editing a prospective run does not relabel saved data.
+    assert 'μ=0.50 eV' in widget.summary.value
     widget.close()
+
+
+def test_exported_kondo_panels_include_stored_mu_without_changing_numerical_metadata():
+    from aiida_empa_orca.scripts.render_maps import figure_metadata
+    metadata=dict(observable='kondo_channel_intensity',chemical_potential_ev=1.234,
+                  panels=['ko_1','ko_2'],panel_labels=['First channel','Second channel'])
+    result=figure_metadata(metadata)
+    assert result['panel_labels']==['First channel\nμ=1.23 eV','Second channel\nμ=1.23 eV']
+    assert metadata['panel_labels']==['First channel','Second channel']

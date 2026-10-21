@@ -131,8 +131,10 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
                 return
             self.record = service.result(change['new'])
             data = self.record['data']
+            self.mu.value = data['parameters']['chemical_potential_ev']
             rows = data['channels']
-            text = '<table><tr><th>Channel</th><th>j/V² (eV⁻¹)</th><th>Coupling</th></tr>'
+            text = f"<p>Selected result: <b>μ={self.mu.value:.2f} eV</b>.</p>"
+            text += '<table><tr><th>Channel</th><th>j/V² (eV⁻¹)</th><th>Coupling</th></tr>'
             text += ''.join(f"<tr><td>{r['id']}</td><td>{r['exchange_over_v2_inv_ev']:.5f}</td><td>{r['coupling']}</td></tr>" for r in rows)
             text += '</table><p>Individual unit-normalized channel maps; couplings are not map brightness weights. '
             text += 'A combined experimental Kondo map and resonance width require further modelling.</p>'

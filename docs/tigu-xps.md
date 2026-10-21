@@ -55,11 +55,17 @@ loss. Existing immutable records are not modified.
 
 ## Helper runtime and readiness
 
-The `orca-tools` code is a narrow runner for standard-library CalcJob scripts,
+The `orca-tools` code is a narrow runner for allowlisted CalcJob scripts,
 not a generic PythonJob or a user-selected Python executable. On tigu, it uses
 an isolated standalone CPython 3.12 runtime because the system Python is 3.8.
 No AiiDA installation is needed on tigu. Software setup and read-only checks
 are separate from scientific submissions.
+
+Cube inspection additionally needs NumPy and ASE. The versioned numerical
+runtime provides these alongside Dyson processing and cubehandler. The
+`orca-tools-numerical@tigu` code uses that runtime; the earlier standard-library
+helper is hidden from new selections but remains available to its historical
+CalcJobs. Hidden helper codes are excluded from automatic runtime selection.
 
 The prepared CoPc plan requires explicit user approval before any molecular
 submission. It does not automatically launch jobs when imported or reviewed.

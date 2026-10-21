@@ -150,6 +150,7 @@ def test_import_is_searchable_and_native_casci_keeps_the_imported_basis(external
         assert panel.electrons.value == 3 and panel.norb.value == 3
         assert panel.threshold.value == 1e-9
         assert 'Imported fixed-orbital reference' in view.children[0].value
+        assert 'Frozen CASCI source' in view.children[0].value and 'reported orbital generator' in view.children[0].value
     finally:
         close_widget_tree(view)
 

@@ -77,8 +77,11 @@ def inspect_run(uuid):
         try:
             reference_location(node)
             data['reuse_status'] = 'Imported fixed orbitals are available for native CASCI calculations.'
-        except (OSError, ValueError, RuntimeError, KeyError) as exc:
+        except (FileNotFoundError, ValueError, KeyError) as exc:
             data['reuse_status'] = 'Imported orbitals are unavailable; re-import the original source before computing: '+str(exc)
+        except Exception as exc:
+            data['reuse_status'] = ('Imported-orbital availability could not be checked; stored results remain accessible. '
+                                   f'Check remote access before reusing the orbitals: {type(exc).__name__}: {exc}')
     elif node.is_finished_ok and (data["optimize"] or scf):
         try:
             if scf:

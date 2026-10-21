@@ -124,6 +124,30 @@ def test_import_requires_verified_frozen_source_output(external_reference,old,ne
     assert error.status == 310
 
 
+@pytest.mark.parametrize('error', [AttributeError('public_blob'), PermissionError('SSH unavailable')])
+def test_imported_results_remain_accessible_when_storage_probe_fails(external_reference, monkeypatch, error):
+    from aiida_empa_orca import common_orbitals
+    from aiidalab_orca import history, services, casci_services
+
+    _, uuid, *_ = external_reference()
+
+    def inaccessible(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(common_orbitals, 'reference_location', inaccessible)
+    widget = history.HistoryWidget(lambda _: None, lambda _: None, lambda _: None)
+    try:
+        widget.select(uuid)
+        assert widget.selected_uuid == uuid and not widget.view.disabled
+        assert 'could not be checked' in widget.detail.value
+        assert 're-import' not in widget.detail.value
+        assert services.result(uuid)['imported_reference']
+        with pytest.raises(type(error), match=str(error)):
+            casci_services.prepare_casci(uuid, 3, 3, {'multiplicity': 2, 'tprintwf': 1e-9})
+    finally:
+        widget.close()
+
+
 def test_import_is_searchable_and_native_casci_keeps_the_imported_basis(external_reference,monkeypatch):
     _,uuid,request,molecule,code_uuid = external_reference()
     from aiidalab_orca import services, casci_services, history, viewer

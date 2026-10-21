@@ -44,6 +44,9 @@ Original GBW/density files remain in their producing calculation directories;
 only text, parsed data and manifests are retrieved. A new optional
 `electronic_remote` output identifies the original folder. Downstream steps
 use normal AiiDA remote staging and retain their working files as well.
+The Dyson export step follows this policy too: its compressed wavefunction
+export stays in the export CalcJob directory, with only the compact artifact
+metadata retrieved. Automatic preservation retains its existing behaviour.
 
 Reuse checks the original files. A manifest alone is not evidence that a lost
 scratch file is still available. Missing files require regeneration; an
@@ -66,3 +69,41 @@ and an AiiDA runner without broker submission; child WorkChains and CalcJobs
 then run with the same source, without changing another session's live app or
 daemon. The resulting provenance nodes remain visible through the ordinary
 ORCA app search and result services.
+
+## Job-local MPI backing files
+
+A geometry job failed with a missing MPI shared-memory backing file. Another
+running job had mappings to deleted `/dev/shm/osc_sm...` files. The host's
+`RemoveIPC` configuration makes cleanup on the last logout a plausible cause;
+the exact cause of the crash is not established.
+
+The separate `orca-job-scratch@tigu` code uses the same ORCA 6.1.1 executable
+and Open MPI 4.1.1 as `orca@tigu`, with these additional prepend commands:
+
+```sh
+ORCA_MPI_DIRECTORY="$PWD/.mpi-shm"
+mkdir -m 700 -p "$ORCA_MPI_DIRECTORY"
+export OMPI_MCA_osc_sm_backing_directory="$ORCA_MPI_DIRECTORY"
+export OMPI_MCA_btl_vader_backing_directory="$ORCA_MPI_DIRECTORY"
+export OMPI_MCA_shmem_mmap_backing_file_base_dir="$ORCA_MPI_DIRECTORY"
+export OMPI_MCA_shmem_mmap_relocate_backing_file=1
+```
+
+These parameter names were checked against the installed `ompi_info`. The
+directory is private to each CalcJob and remains inside its working directory.
+The original code, system configuration and scientific inputs are unchanged.
+This is a host-specific runtime configuration; check the installed MPI
+parameters and scratch filesystem before adopting it elsewhere.
+
+A six-process water HF/def2-SVP CalcJob terminated normally and reproduced
+the earlier two-process energy exactly at the printed precision:
+−75.959340313442 Hartree. Its AiiDA UUID is
+`f2fe092d-8030-4dac-bb1d-3e67d5536338`. The approved ETRI triplet optimization
+uses this separate code; longer-run validation is still in progress.
+
+Independent remote NO postprocessing also completed through submitted
+CalcJobs: exchange analysis, Kondo cubes, cubehandler reduction, constant-height
+maps and PNG/PDF figures. The remote/local intensity-array relative L2
+difference was `2.22e-16` for that test. This checks the remote numerical
+pipeline, not the physical applicability of a Kondo model to NO or convergence
+of a larger molecule's charged-state manifold.

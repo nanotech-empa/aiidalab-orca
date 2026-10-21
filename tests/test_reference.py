@@ -11,6 +11,7 @@ from aiida.common.folders import SandboxFolder
 from aiida.engine import ProcessState, run_get_node
 from aiida.engine.utils import instantiate_process
 from ase import Atoms
+from paramiko.ssh_exception import SSHException
 
 from aiida_empa_orca import reference
 from aiida_empa_orca.calculation import SinglePointCalculation
@@ -132,6 +133,40 @@ def test_reuse_checks_files_and_preserves_coordinates(electronic_source):
     assert plan['action'] == 'compute' and len(plan['unavailable']) == 2
     builder = reference.get_reference_builder(source.inputs.structure, source.inputs.settings.get_dict(), source.inputs.code, plan=plan)
     assert builder.bypass_cache.value
+
+
+@pytest.mark.parametrize('error', [AttributeError('public_blob'), SSHException('SSH authentication failed')])
+def test_ssh_availability_error_keeps_stored_results_accessible(electronic_source, monkeypatch, error):
+    from aiidalab_orca import history, services
+
+    uuid, _ = electronic_source()
+
+    def inaccessible(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(reference, 'check_wavefunction', inaccessible)
+    opened = []
+    widget = history.HistoryWidget(lambda selected: opened.append(services.result(selected)),
+                                   lambda _: None, lambda _: None)
+    try:
+        widget.select(uuid)
+        assert widget.selected_uuid == uuid
+        assert not widget.view.disabled and not widget.geometry.disabled and not widget.copy.disabled
+        assert 'could not be checked' in widget.detail.value
+        assert 'recomputation' not in widget.detail.value
+        widget.view.click()
+        assert len(opened) == 1
+        assert opened[0]['summary']['energy_hartree'] == -129.7
+        assert opened[0]['scientific_success']
+        assert 'could not be checked' in opened[0]['artifact_status']
+
+        # Opening durable results must not relax the checks used to recompute
+        # or reuse a wavefunction for a new scientific calculation.
+        source = orm.load_node(uuid)
+        with pytest.raises(type(error), match=str(error)):
+            reference.plan_reference(source.inputs.structure, source.inputs.settings.get_dict(), source.inputs.code)
+    finally:
+        widget.close()
 
 
 def test_reuses_final_optimization_state_only_at_matching_geometry(electronic_source):

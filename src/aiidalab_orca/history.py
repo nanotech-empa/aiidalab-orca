@@ -81,6 +81,11 @@ def inspect_run(uuid):
             data["reuse_status"] = f"Required {'electronic' if scf else 'optimization'} data are missing or invalid; this step needs recomputation: {exc}"
         except (OSError, ArtifactUnavailable) as exc:
             data["reuse_status"] = f"Availability could not be checked; retry when storage is reachable: {exc}"
+        except Exception as exc:
+            # A transport/library failure must not prevent opening durable
+            # results. New calculations still use the strict backend checks.
+            data["reuse_status"] = ("Electronic-file availability could not be checked; stored results remain accessible. "
+                                    f"Check remote access before reusing the wavefunction: {type(exc).__name__}: {exc}")
     return data
 
 

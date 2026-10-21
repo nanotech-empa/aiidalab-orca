@@ -67,8 +67,11 @@ def external_reference(electronic_source, registered_import):
                             for row,occ in zip(np.eye(28).tolist(),[2.]*6+[1.]*3+[0.]*19)]},
                         **{'S-Matrix':np.eye(28).tolist()})
         report = check_export(molecule,request) | {'source_manifest':manifest}
+        helper = orm.InstalledCode(label='import-helper',computer=original.inputs.code.computer,
+                                   filepath_executable='/bin/true').store()
         calc = orm.CalcJobNode(process_type=CALCULATION, computer=original.inputs.code.computer)
         for name,value in {'structure':original.inputs.structure,'settings':settings,
+                           'code':helper,
                            'source_manifest':orm.Dict(dict=manifest).store()}.items():
             calc.base.links.add_incoming(value,link_type=LinkType.INPUT_CALC,link_label=name)
         calc.store()
@@ -90,7 +93,7 @@ def external_reference(electronic_source, registered_import):
         run = orm.WorkChainNode(process_type=PROCESS)
         for name,value in {'structure':original.inputs.structure,'settings':settings,'code':original.inputs.code,
                 'source_remote':remote,'source_manifest':orm.Dict(dict=manifest).store(),
-                'storage_code':original.inputs.code,'storage_policy':orm.Dict(dict={'mode':'remote','threshold_mb':0,'stash_directory':''}).store()}.items():
+                'storage_code':helper,'storage_policy':orm.Dict(dict={'mode':'remote','threshold_mb':0,'stash_directory':''}).store()}.items():
             run.base.links.add_incoming(value,link_type=LinkType.INPUT_WORK,link_label=name)
         run.label = 'Imported NO fixed orbitals';run.store()
         for name,value in {'orbital_reference':reference,'structure':original.inputs.structure,'remote_folder':remote,'retrieved':folder}.items():
@@ -161,6 +164,27 @@ def test_manifest_does_not_accept_unbound_paths_or_discontinuous_spaces(external
     with pytest.raises(ValueError):checked_manifest(bad)
     bad = deepcopy(request['manifest']);bad['active_space']['orbitals']=[6,8]
     with pytest.raises(ValueError):checked_manifest(bad)
+
+
+def test_imported_casci_setup_uses_declared_orca_and_rejects_helper(external_reference,aiida_manager):
+    _,uuid,_,_,code_uuid = external_reference()
+    from aiidalab_orca import casci_services
+    plan = casci_services.prepare_casci(uuid,3,3,{'multiplicity':2})
+    builder = casci_services.casci_builder(plan)
+    reference = orm.load_node(uuid).outputs.orbital_reference
+    assert reference.creator.inputs.code.uuid != code_uuid
+    assert casci.reference_orca_code(reference) == code_uuid
+    for accepted in (True,False):
+        builder.code = orm.load_code(code_uuid) if accepted else reference.creator.inputs.code
+        process = instantiate_process(aiida_manager.get_runner(),builder)
+        try:
+            error = process.setup()
+            if accepted:
+                assert error is None and process.ctx.location['kind']=='remote'
+            else:
+                assert error.status == 400
+        finally:
+            process.close()
 
 
 def test_import_calcjob_stages_copies_and_never_retrieves_the_large_wavefunction(external_reference,aiida_manager):

@@ -127,13 +127,14 @@ class StateExportCalculation(engine.CalcJob):
             path = str(base/'aiida.gbw')
         stage(info,source,dict(location,path=path),'aiida.gbw')
         policy = storage_policy(self.inputs.storage_policy.get_dict())
-        expected_stash = stash_options(policy['stash_directory'],'exports')
-        if dict(self.inputs.metadata.options.stash) != expected_stash:
+        expected_stash = (stash_options(policy['stash_directory'],'exports')
+                          if policy.get('mode') != 'remote' else {})
+        if dict(self.inputs.metadata.options.get('stash',{})) != expected_stash:
             raise ValueError('Export stash does not match its preservation policy')
         with folder.open('orca.json.conf','w') as handle:
             json.dump({'MOCoefficients':True,'Basisset':True,'1elIntegrals':['S'],'JSONFormats':['json']},handle)
         request = {'identity':self.inputs.state_energies.get_dict(),'state_uuid':str(self.inputs.state_energies.uuid),
-                   'file':item,'threshold_mb':policy['threshold_mb'],
+                   'file':item,'threshold_mb':0 if policy.get('mode') == 'remote' else policy['threshold_mb'],
                    'positions':calc.inputs.structure.get_ase().positions.tolist(),
                    'atomic_numbers':calc.inputs.structure.get_ase().numbers.tolist()}
         script(folder,'export_dyson.py',request)
@@ -152,7 +153,11 @@ class StateExportParser(Parser):
                 raise ValueError('Export identity differs from the requested CASCI states')
             if data['size_bytes'] < 1 or len(data['sha256']) != 64 or not data['ci_norms']:
                 raise ValueError('Incomplete export metadata')
-            if 'remote_stash' not in self.node.outputs:
+            policy = storage_policy(self.node.inputs.storage_policy.get_dict())
+            if policy.get('mode') == 'remote':
+                if data['retrieved_copy'] or 'remote_stash' in self.node.outputs:
+                    raise ValueError('Remote-only export unexpectedly retrieved or stashed its wavefunction')
+            elif 'remote_stash' not in self.node.outputs:
                 raise ValueError('Native export stash is missing')
             self.out('artifact',orm.Dict(dict=data))
         except (OSError,KeyError,ValueError) as exc:
@@ -198,7 +203,9 @@ class StateExportWorkChain(engine.WorkChain):
                                                                 self.inputs.helper_code,self.inputs.storage_policy)
         b.source,b.location = orm.load_node(self.ctx.location['uuid']),orm.Dict(dict=self.ctx.location)
         b.metadata.options = calcjob_options(calc.outputs.remote_folder,seconds=1800)
-        b.metadata.options.stash = stash_options(storage_policy(self.inputs.storage_policy.get_dict())['stash_directory'],'exports')
+        policy = storage_policy(self.inputs.storage_policy.get_dict())
+        if policy.get('mode') != 'remote':
+            b.metadata.options.stash = stash_options(policy['stash_directory'],'exports')
         b.metadata.disable_cache = True
         return engine.ToContext(export=self.submit(b))
 

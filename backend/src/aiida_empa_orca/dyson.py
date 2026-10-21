@@ -252,11 +252,14 @@ def validate_transitions(node):
 
 def runtime_settings(values):
     """Execution controls are independent of the physical state selection."""
-    if not isinstance(values,dict) or set(values)-{'workers','max_wallclock_seconds'}:
+    if not isinstance(values,dict) or set(values)-{'workers','max_wallclock_seconds','memory_mb'}:
         raise ValueError('Unknown Dyson execution option')
     result = {'workers':1,'max_wallclock_seconds':3600} | values
     if any(type(value) is not int or value < 1 for value in result.values()):
         raise ValueError('Dyson workers and wall time must be positive integers')
+    result.setdefault('memory_mb',4096*result['workers'])
+    if result['memory_mb'] < 256*result['workers']:
+        raise ValueError('Allocate at least 256 MiB per Dyson worker')
     return result
 
 
@@ -377,7 +380,8 @@ class DysonWorkChain(engine.WorkChain):
     def compute(self):
         b = DysonCalculation.get_builder()
         b.code,b.initial,b.selection = self.inputs.code,self.inputs.initial,orm.Dict(dict=self.ctx.selected)
-        b.runtime = orm.Dict(dict=self.ctx.runtime)
+        runtime = runtime_settings(self.ctx.runtime)
+        b.runtime = orm.Dict(dict=runtime)
         for key,state in self.inputs.finals.items():
             b.finals[key] = state
         locations = {}
@@ -391,8 +395,9 @@ class DysonWorkChain(engine.WorkChain):
             locations[key] = location
         b.locations = orm.Dict(dict=locations)
         b.metadata.options = calcjob_options(state_source(self.inputs.initial).outputs.remote_folder,
-                                            seconds=self.ctx.runtime['max_wallclock_seconds'])
-        b.metadata.options.resources = {'num_machines':1,'num_mpiprocs_per_machine':self.ctx.runtime['workers']}
+                                            seconds=runtime['max_wallclock_seconds'])
+        b.metadata.options.resources = {'num_machines':1,'num_mpiprocs_per_machine':runtime['workers']}
+        b.metadata.options.max_memory_kb = runtime['memory_mb']*1024
         b.metadata.disable_cache = True
         return engine.ToContext(dyson=self.submit(b))
 

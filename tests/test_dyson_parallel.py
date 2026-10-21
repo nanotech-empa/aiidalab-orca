@@ -93,7 +93,7 @@ def test_workchain_forwards_workers_and_wall_time_to_one_non_mpi_calcjob(common_
     b.code = b.export_code = orm.load_code(code_uuid)
     b.selection = orm.Dict(dict={'initial_root':0,'final_roots':{'f':[0]},'max_missing_ci_norm':1e-5})
     b.storage_policy = orm.Dict(dict={'mode':'remote','threshold_mb':100,'stash_directory':''})
-    b.runtime = orm.Dict(dict={'workers':3,'max_wallclock_seconds':7200})
+    b.runtime = orm.Dict(dict={'workers':3,'max_wallclock_seconds':7200,'memory_mb':32768})
     process = instantiate_process(aiida_manager.get_runner(),b)
     source = orm.FolderData().store()
     captured = []
@@ -111,6 +111,7 @@ def test_workchain_forwards_workers_and_wall_time_to_one_non_mpi_calcjob(common_
         process.compute()
         assert captured[0].metadata.options.resources['num_mpiprocs_per_machine'] == 3
         assert captured[0].metadata.options.max_wallclock_seconds == 7200
+        assert captured[0].metadata.options.max_memory_kb == 32768*1024
         assert captured[0].metadata.options.withmpi is False
         child = instantiate_process(aiida_manager.get_runner(),captured[0])
         try:
@@ -132,7 +133,7 @@ def test_app_reviews_resources_and_remote_only_retention_without_python_selectio
     monkeypatch.setattr(frontend.service,'runs',lambda *_:[])
     monkeypatch.setattr(frontend.service,'codes',lambda _:dict(export=[('Export','export')],
         dyson=[('Dyson','dyson')],cubehandler=[],storage_policy={'mode':'remote'},
-        runtime={'workers':6,'max_wallclock_seconds':10800}))
+        runtime={'workers':6,'max_wallclock_seconds':10800,'memory_mb':65536}))
     calls = []
     def review(*args,**kwargs):
         calls.append(kwargs)
@@ -141,7 +142,7 @@ def test_app_reviews_resources_and_remote_only_retention_without_python_selectio
     widget = frontend.DysonStates('common',[{'reference_charge':0}])
     try:
         widget._review()
-        assert calls[0]['runtime'] == {'workers':6,'max_wallclock_seconds':10800}
+        assert calls[0]['runtime'] == {'workers':6,'max_wallclock_seconds':10800,'memory_mb':65536}
         assert widget.retention.value == 'leave' and widget.stash.layout.display == 'none'
         assert 'native stash' not in widget.message.value
         assert 'export calculation directories' in widget.message.value
@@ -149,3 +150,10 @@ def test_app_reviews_resources_and_remote_only_retention_without_python_selectio
         assert widget.plan is None and widget.submit.disabled
     finally:
         widget.close()
+
+
+@pytest.mark.parametrize('values',[{'workers':True},{'workers':0},{'memory_mb':-1},
+                                 {'workers':6,'memory_mb':256},{'memory_mb':1024.5}])
+def test_invalid_runtime_resources_are_rejected(values):
+    with pytest.raises(ValueError):
+        dyson.runtime_settings(values)

@@ -17,7 +17,9 @@ def codes(common_uuid):
     common = common_node(common_uuid)
     computer_uuid = common.inputs.code.computer.uuid
     result['storage_policy'] = common.inputs.storage_policy.get_dict()
-    result['runtime'] = backend.runtime_settings({'workers':min(6,common.inputs.settings.get_dict()['nprocs'])})
+    settings = common.inputs.settings.get_dict()
+    result['runtime'] = backend.runtime_settings({'workers':min(6,settings['nprocs']),
+                                                 'memory_mb':settings['memory_mb']})
     result['dyson'] = []
     for uuid in orm.QueryBuilder().append(orm.InstalledCode,project=['uuid']).all(flat=True):
         node = orm.load_code(uuid)

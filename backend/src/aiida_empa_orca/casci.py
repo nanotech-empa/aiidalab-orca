@@ -107,6 +107,8 @@ def parse_states(text, reference, space, settings):
     ranges = re.findall(r'Active\s+(\d+)\s*-\s*(\d+)\s*\(',text)
     if not ranges or list(map(int,ranges[-1])) != [space['orbitals'][0],space['orbitals'][-1]]:
         raise ValueError('ORCA used different active orbital indices')
+    if re.search(r'^\s*WARNING:\s*CI-ITERATIONS\s+NOT\s+CONVERGED\b', text, re.I | re.M):
+        raise ValueError('CI iterations did not converge; recompute this sector before using its states')
     if 'CI-PROBLEM SOLVED' not in text:
         raise ValueError('CI convergence was not confirmed')
     if '>>> CAS-CI.' not in text:

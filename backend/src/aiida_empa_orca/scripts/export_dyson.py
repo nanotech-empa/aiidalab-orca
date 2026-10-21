@@ -1,6 +1,7 @@
 """Preserve a self-contained CASCI wavefunction export inside its CalcJob."""
 import gzip
 import hashlib
+import io
 import json
 from pathlib import Path
 import shutil
@@ -9,6 +10,14 @@ import numpy as np
 from dyson_orca_tools.io.orca_output import parse_orca_output
 
 from aiida_empa_orca.dyson_data import checked_ci
+
+
+def write_export(path, payload):
+    """Stream the existing JSON format without allocating a second full export."""
+    with path.open('wb') as raw:
+        with gzip.GzipFile(fileobj=raw,mode='wb',mtime=0) as zipped:
+            with io.TextIOWrapper(zipped,encoding='utf-8',newline='') as text:
+                json.dump(payload,text,allow_nan=False,separators=(',',':'))
 
 
 def main():
@@ -62,9 +71,7 @@ def main():
     path = Path('exports/state.json.gz')
     payload = {'schema_version':1,'state_uuid':request['state_uuid'],'identity':identity,
                'wavefunction':state,'ci_roots':roots,'source_gbw_sha256':digest}
-    with path.open('wb') as raw:
-        with gzip.GzipFile(fileobj=raw,mode='wb',mtime=0) as zipped:
-            zipped.write(json.dumps(payload,allow_nan=False,separators=(',',':')).encode())
+    write_export(path,payload)
     with path.open('rb') as handle:
         sha = hashlib.file_digest(handle,'sha256').hexdigest()
     size = path.stat().st_size

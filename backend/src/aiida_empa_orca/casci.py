@@ -147,6 +147,23 @@ def validate_reference(reference_node, source_remote):
     return reference_node.get_dict()
 
 
+def reference_orca_code(reference_node):
+    """Imported references are validated by a helper, not the future ORCA code."""
+    from .fixed_orbitals_data import CALCULATION, PROCESS
+    producer = reference_node.creator
+    if producer.process_type != CALCULATION:
+        return str(producer.inputs.code.uuid)
+    candidates = set()
+    for triple in reference_node.base.links.get_incoming(link_type=common.LinkType.RETURN).all():
+        parent = triple.node
+        if (parent.process_type == PROCESS and parent.is_finished_ok and
+                parent.outputs.remote_folder.uuid == producer.outputs.remote_folder.uuid):
+            candidates.add(str(parent.inputs.code.uuid))
+    if len(candidates) != 1:
+        raise ValueError('Imported orbitals require their successful preparation workflow and declared ORCA code')
+    return candidates.pop()
+
+
 class CasciCalculation(engine.CalcJob):
     @classmethod
     def define(cls, spec):
@@ -230,7 +247,7 @@ class CasciWorkChain(engine.WorkChain):
             storage_policy(self.inputs.storage_policy.get_dict())
             if self.inputs.code.computer.uuid != self.inputs.storage_code.computer.uuid:
                 raise ValueError('ORCA and storage codes must use the same computer')
-            if str(self.inputs.code.uuid) != str(self.inputs.orbital_reference.creator.inputs.code.uuid):
+            if str(self.inputs.code.uuid) != reference_orca_code(self.inputs.orbital_reference):
                 raise ValueError('Use the same ORCA code as the common-orbital preparation')
             expected = signature(self.inputs.orbital_reference.uuid, self.ctx.space, self.ctx.settings, self.inputs.code.uuid)
             if not self.inputs.force_recompute.value:

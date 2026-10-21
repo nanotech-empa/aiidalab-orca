@@ -19,7 +19,7 @@ def tool_codes(computer_uuid=None):
     result = {'python':[], 'plot':[], 'cubehandler':[]}
     for (uuid,) in orm.QueryBuilder().append(orm.InstalledCode,project=['uuid']).all():
         code=orm.load_code(uuid)
-        if computer_uuid and code.computer.uuid!=computer_uuid:
+        if code.is_hidden or (computer_uuid and code.computer.uuid!=computer_uuid):
             continue
         name=Path(code.filepath_executable).name
         role=code.base.extras.get('aiidalab_orca_role', None)
@@ -135,7 +135,8 @@ def prepare_property(source_uuid, parameters, policy, codes):
         plan['electronic_location']=location['kind']
         total=sum(f['size_bytes'] for f in location['files'])
         plan['wavefunction_bytes']=total
-        plan['storage_action']=('retrieve' if total<=policy['threshold_mb']*1024**2 else 'stash') if location['kind']=='remote' else 'already preserved'
+        plan['storage_action']=('leave in the calculation directory' if policy.get('mode')=='remote' else
+                                'retrieve' if total<=policy['threshold_mb']*1024**2 else 'stash') if location['kind']=='remote' else 'already preserved'
     except (FileNotFoundError,ValueError) as exc:
         plan['regenerate_reference']=True
         plan['warnings'].append(str(exc))

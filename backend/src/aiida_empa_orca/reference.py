@@ -209,9 +209,8 @@ class ReferenceWorkChain(ElectronicStorageMixin, WorkChain):
             self.validate_storage_inputs()
             self.ctx.settings = reference_settings(self.inputs.settings.get_dict())
             validate_molecule(self.inputs.structure, self.ctx.settings)
-            if (self.inputs.code.computer.scheduler_type != "core.direct"
-                    or self.inputs.code.computer.transport_type != "core.local"):
-                raise ValueError("This milestone supports the local direct scheduler only")
+            from .execution import validate_computer
+            validate_computer(self.inputs.code.computer)
             if self.inputs.force_recompute.value and self.ctx.reusing:
                 raise ValueError("Cannot force recomputation and reuse simultaneously")
         except ValueError as exc:

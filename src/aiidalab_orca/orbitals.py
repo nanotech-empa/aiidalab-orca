@@ -115,6 +115,7 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
 
     def _check_wavefunction(self,_=None,*,inherit=False):
         status=service.wavefunction_status(self.source_uuid)
+        self.remote_wavefunctions=status['policy'].get('mode')=='remote'
         if inherit:
             self.threshold.value=status['policy']['threshold_mb']
             self.wfn_stash.value=status['policy']['stash_directory']
@@ -126,7 +127,7 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
         self.wfn_info.value='<p><b>Wavefunction:</b> '+label+'.</p>'
         if status.get('path'):
             self.wfn_info.value+='<p><code>'+html.escape(status['path'])+'</code></p>'
-        self.wfn_policy.layout.display='' if state in ('remote','missing') else 'none'
+        self.wfn_policy.layout.display='' if state in ('remote','missing') and not self.remote_wavefunctions else 'none'
         if state in ('remote','missing'):
             self.wfn_info.value+='<p>'+('Uses the preservation policy recorded with the reference.' if status['inherited'] else 'This older reference has no preservation policy; review the defaults below.')+'</p>'
         if status.get('message'):
@@ -148,7 +149,8 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
             self.plan=service.prepare_property(self.source_uuid,
                 {'orbitals':[list(pair) for pair in self.orbitals.value],'spin_density':self.spin.value,
                  'grid_points':self.grid.value,'retention':self.retention.value,'stash_directory':self.stash.value.strip()},
-                {'threshold_mb':self.threshold.value,'stash_directory':self.wfn_stash.value.strip()},
+                ({'mode':'remote'} if self.remote_wavefunctions else
+                 {'threshold_mb':self.threshold.value,'stash_directory':self.wfn_stash.value.strip()}),
                 {key:w.value for key,w in self.codes.items()})
             action='Reuse available cube results' if self.plan['action']=='reuse' else 'Generate cubes and reduce them with cubehandler'
             text=f'<p><b>{action}</b></p>'

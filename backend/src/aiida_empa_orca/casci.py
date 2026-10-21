@@ -136,10 +136,14 @@ def parse_states(text, reference, space, settings):
 
 
 def validate_reference(reference_node, source_remote):
+    from .fixed_orbitals_data import CALCULATION, PREPARATION
     producer = reference_node.creator
-    if (producer is None or producer.process_type != 'aiida.calculations:empa_orca.common_orbitals'
+    if (producer is None or not producer.is_finished_ok or producer.process_type not in (
+            'aiida.calculations:empa_orca.common_orbitals', CALCULATION)
             or producer.outputs.remote_folder.uuid != source_remote.uuid):
         raise ValueError('The common-orbital metadata and folder must share their preparation CalcJob')
+    if producer.process_type == CALCULATION and reference_node.get_dict().get('preparation') != PREPARATION:
+        raise ValueError('External orbitals require a verified frozen-CASCI import')
     return reference_node.get_dict()
 
 

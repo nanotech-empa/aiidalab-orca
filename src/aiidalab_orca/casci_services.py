@@ -7,9 +7,17 @@ from aiida_empa_orca import casci, common_orbitals
 from aiida_empa_orca.artifacts import resolve_electronic, storage_policy
 from aiida_empa_orca.reference import reference_settings
 from .property_services import helper_code, source_node, source_remote, wavefunction_status
+from aiida_empa_orca.fixed_orbitals_data import PROCESS as IMPORT_PROCESS
 
 
 def reference_runs(source_uuid):
+    imported = orm.load_node(source_uuid)
+    if imported.process_type == IMPORT_PROCESS:
+        if not imported.is_finished_ok:
+            return []
+        data = imported.outputs.orbital_reference.get_dict()
+        return [{'uuid':str(imported.uuid), 'reference_uuid':str(imported.outputs.orbital_reference.uuid),
+                 'kind':'Imported fixed orbitals', 'n_orbitals':data['n_orbitals'], 'charge':data['charge']}]
     source = source_node(source_uuid)
     choices, seen = [], set()
     for uuid in common_orbitals.matching_references(source.outputs.retrieved.uuid, source.inputs.code.uuid):
@@ -25,6 +33,12 @@ def reference_runs(source_uuid):
 
 
 def prepare_common(source_uuid, force=False):
+    imported = orm.load_node(source_uuid)
+    if imported.process_type == IMPORT_PROCESS:
+        if force:
+            raise ValueError('Re-import the original fixed orbitals to create a new reference; this source has no native SCF to regenerate')
+        common_orbitals.reference_location(imported)
+        return {'source_uuid':source_uuid, 'action':'reuse', 'reference_uuid':source_uuid, 'unavailable':[]}
     source = source_node(source_uuid)
     unavailable = []
     for row in ([] if force else reference_runs(source_uuid)):
@@ -61,7 +75,7 @@ def submit_common(plan):
 
 def reference_data(uuid):
     node = orm.load_node(uuid)
-    if node.process_type != common_orbitals.PROCESS_TYPE or not node.is_finished_ok:
+    if node.process_type not in (common_orbitals.PROCESS_TYPE, IMPORT_PROCESS) or not node.is_finished_ok:
         raise ValueError('Select completed common-orbital preparation')
     return node.outputs.orbital_reference.get_dict()
 

@@ -19,7 +19,7 @@ def tool_codes(computer_uuid=None):
     result = {'python':[], 'plot':[], 'cubehandler':[]}
     for (uuid,) in orm.QueryBuilder().append(orm.InstalledCode,project=['uuid']).all():
         code=orm.load_code(uuid)
-        if computer_uuid and code.computer.uuid!=computer_uuid:
+        if code.is_hidden or (computer_uuid and code.computer.uuid!=computer_uuid):
             continue
         name=Path(code.filepath_executable).name
         role=code.base.extras.get('aiidalab_orca_role', None)

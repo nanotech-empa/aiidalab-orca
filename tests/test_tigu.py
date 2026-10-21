@@ -109,6 +109,20 @@ def test_code_selector_omits_hidden_codes(aiida_profile_clean, aiida_localhost):
     assert codes() == sorted(expected)
 
 
+def test_retired_helpers_do_not_block_remote_runtime_replacement(aiida_profile_clean, aiida_localhost):
+    from aiidalab_orca.property_services import helper_code, tool_codes
+
+    old = orm.InstalledCode(computer=aiida_localhost, filepath_executable='/opt/old/orca-tools',
+        default_calc_job_plugin='empa_orca.electronic_storage', is_hidden=True).store()
+    current = orm.InstalledCode(computer=aiida_localhost, filepath_executable='/opt/new/orca-tools',
+        default_calc_job_plugin='empa_orca.electronic_storage').store()
+    orm.InstalledCode(computer=aiida_localhost, filepath_executable='/opt/retired/orca_plot', is_hidden=True).store()
+    orm.InstalledCode(computer=aiida_localhost, filepath_executable='/opt/retired/cubehandler', is_hidden=True).store()
+    assert helper_code(aiida_localhost.uuid) == str(current.uuid)
+    assert tool_codes(aiida_localhost.uuid) == {'python':[(current.full_label,str(current.uuid))], 'plot':[], 'cubehandler':[]}
+    assert str(orm.load_code(old.uuid).filepath_executable) == '/opt/old/orca-tools'
+
+
 def test_remote_storage_controls_and_invalid_modes(aiida_profile_clean, aiida_localhost):
     from aiidalab_orca.storage import WavefunctionStorage
     code = orm.InstalledCode(computer=aiida_localhost, filepath_executable='/bin/true', default_calc_job_plugin='empa_orca.electronic_storage').store()

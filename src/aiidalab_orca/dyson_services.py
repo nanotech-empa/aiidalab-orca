@@ -17,6 +17,7 @@ def codes(common_uuid):
     common = common_node(common_uuid)
     computer_uuid = common.inputs.code.computer.uuid
     result['storage_policy'] = common.inputs.storage_policy.get_dict()
+    result['runtime'] = backend.runtime_settings({'workers':min(6,common.inputs.settings.get_dict()['nprocs'])})
     result['dyson'] = []
     for uuid in orm.QueryBuilder().append(orm.InstalledCode,project=['uuid']).all(flat=True):
         node = orm.load_code(uuid)
@@ -44,12 +45,13 @@ def builder(plan):
     b.selection = orm.Dict(dict=plan['selection'])
     b.code,b.export_code = orm.load_code(plan['codes']['dyson']),orm.load_code(plan['codes']['export'])
     b.storage_policy = common.inputs.storage_policy
+    b.runtime = orm.Dict(dict=backend.runtime_settings(plan.get('runtime',{})))
     b.force_recompute = orm.Bool(plan.get('force',False))
     b.metadata.label = 'CASCI Dyson transitions and spectral weights'
     return b
 
 
-def review(common_uuid,initial,finals,selected_codes,loss=1e-5,force=False):
+def review(common_uuid,initial,finals,selected_codes,loss=1e-5,force=False,runtime=None):
     if not initial or not finals:
         raise ValueError('Choose an initial state and at least one compatible final state')
     if any(not selected_codes.get(key) for key in ('dyson','export')):
@@ -63,7 +65,8 @@ def review(common_uuid,initial,finals,selected_codes,loss=1e-5,force=False):
                           'max_missing_ci_norm':loss},initial_node.get_dict(),
                          {key:orm.load_node(uuid).get_dict() for key,uuid in mapping.items()})
     plan = {'common_uuid':common_uuid,'initial_uuid':initial[0],'finals':mapping,'selection':selected,
-            'codes':selected_codes,'force':force,'action':'compute','exports':[]}
+            'codes':selected_codes,'force':force,'action':'compute','exports':[],
+            'runtime':backend.runtime_settings({} if runtime is None else runtime)}
     b = builder(plan)
     if not force:
         for uuid in backend.previous(initial_node.uuid,'initial',backend.DYSON_PROCESS):

@@ -6,7 +6,8 @@ import subprocess
 from contextlib import nullcontext
 
 import numpy as np
-from dyson_orca_tools.io.cube import write_cube, pyscf_molecule, orca_label_to_pyscf
+from dyson_orca_tools.io.cube import pyscf_molecule, orca_label_to_pyscf
+from pyscf.tools import cubegen
 
 from aiida_empa_orca.scripts.compute_dyson import load_export
 from aiida_empa_orca.scripts.plot_cubes import inspect_cube
@@ -29,6 +30,27 @@ def cube_comments(path,first=None,second=None):
                 handle.write(text.ljust(len(original)-1,b' ')+b'\n')
 
 
+def pyscf_frame(wf):
+    """Map real ORCA AOs to PySCF, verifying their complete overlap matrix.
+
+    ORCA's real f(±3) functions have the opposite phase. The same signs must
+    transform both the overlap and the orbital coefficients; no tolerance is
+    relaxed and unsupported conventions still fail the overlap check.
+    """
+    mol = pyscf_molecule(wf)
+    labels = [orca_label_to_pyscf(label) for label in wf['Molecule']['MolecularOrbitals']['OrbitalLabels']]
+    pyscf_labels = [''.join(label.split()) for label in mol.ao_labels()]
+    if len(set(labels)) != len(labels) or set(labels) != set(pyscf_labels):
+        raise ValueError('Unsupported ORCA/PySCF AO label mapping')
+    order = np.asarray([labels.index(label) for label in pyscf_labels])
+    signs = np.asarray([-1. if label.endswith(('f-3','f+3')) else 1. for label in pyscf_labels])
+    overlap = np.asarray(wf['Molecule']['S-Matrix'])[np.ix_(order,order)] * signs[:,None] * signs[None,:]
+    expected = mol.intor('int1e_ovlp')
+    if not np.allclose(overlap,expected,atol=1e-7,rtol=0):
+        raise ValueError('ORCA/PySCF basis overlap differs; cube generation would use inconsistent AO functions')
+    return mol,order,signs,float(np.max(np.abs(overlap-expected)))
+
+
 def main():
     request = json.loads(Path('request.json').read_text())
     p = request['parameters']
@@ -36,21 +58,14 @@ def main():
     table = request['channels'] if kondo else request['table']
     initial = load_export('initial.json.gz',request['artifact'])
     wf = initial['wavefunction']
-    mol = pyscf_molecule(wf)
-    labels = [orca_label_to_pyscf(label) for label in wf['Molecule']['MolecularOrbitals']['OrbitalLabels']]
-    pyscf_labels = [''.join(label.split()) for label in mol.ao_labels()]
-    if len(set(labels)) != len(labels) or set(labels) != set(pyscf_labels):
-        raise ValueError('Unsupported ORCA/PySCF AO label mapping')
-    order = [labels.index(label) for label in pyscf_labels]
-    overlap = np.asarray(wf['Molecule']['S-Matrix'])[np.ix_(order,order)]
-    if not np.allclose(overlap,mol.intor('int1e_ovlp'),atol=1e-7,rtol=0):
-        raise ValueError('ORCA/PySCF basis overlap differs; cube generation would use inconsistent AO functions')
+    mol,order,signs,overlap_error = pyscf_frame(wf)
     estimate = (len(p['orbitals'])+int(bool(request.get('blend'))))*p['grid_points']**3*30*(2 if p['retention']=='stash' else 1)+256*1024**2
     if shutil.disk_usage('.').free < estimate:
         raise ValueError('Insufficient free disk for the requested Dyson cubes')
     full = Path('full_cubes')
     full.mkdir()
     manifest = {'retention':p['retention'],'grid_points':p['grid_points'],'cubes':[],
+                'ao_frame':{'orca_f_abs_m_3_phase':-1,'maximum_overlap_residual':overlap_error},
                 'reduction':{'program':'cubehandler','method':'slicing','low_precision':False},
                 'orbital_source':{'kind':'Kondo' if kondo else 'Dyson','initial_state_uuid':table['initial_state_uuid']},
                 'strength_convention':'unit_normalized_eigenchannel' if kondo else 'highest_ms_component'}
@@ -67,8 +82,11 @@ def main():
         for _,index in p['orbitals']:
             row = table['channels' if kondo else 'transitions'][index]
             filename = ('kondo_' if kondo else 'dyson_')+row['id']+'.cube'
-            # Use upstream orbital evaluation, leaving amplitudes unnormalized.
-            write_cube(wf,arrays[row['id']],str(full/filename),nx=p['grid_points'],ny=p['grid_points'],nz=p['grid_points'],margin=8.)
+            # The overlap-validated transformation also applies to amplitudes.
+            # Keep PySCF's grid/evaluator and the existing unnormalized values.
+            coefficients = np.asarray(arrays[row['id']])[order]*signs
+            cubegen.orbital(mol,str(full/filename),coefficients,nx=p['grid_points'],
+                           ny=p['grid_points'],nz=p['grid_points'],margin=8.)
             cube_comments(full/filename,first=('Kondo' if kondo else 'Dyson')+' orbital amplitude (atomic units)')
             record = inspect_cube(full/filename)
             if kondo:

@@ -122,6 +122,10 @@ def recent_runs():
 
 def result(uuid):
     node = orm.load_node(uuid)
+    from aiida_empa_orca.fixed_orbitals_data import PROCESS as IMPORT_PROCESS
+    if node.process_type == IMPORT_PROCESS:
+        from .fixed_orbital_services import result as imported_result
+        return imported_result(uuid)
     if node.process_type not in (PROCESS_TYPE, REFERENCE_PROCESS):
         raise ValueError("Select an ORCA geometry or SCF workflow")
     scf = node.process_type == REFERENCE_PROCESS

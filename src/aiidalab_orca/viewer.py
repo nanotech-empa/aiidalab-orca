@@ -85,6 +85,7 @@ class ResultsView(ipw.VBox):
         self.scf = data.get('single_point', False)
         geometry = ('Geometry optimized with constraints' if data['optimized'] and s.get('constraints') else
                     'Optimized geometry' if data['optimized'] else
+                    'Imported fixed-orbital reference' if data.get('imported_reference') else
                     'Single-point SCF · fixed geometry' if self.scf else 'Supplied geometry')
         formula = Atoms(data.get('symbols', [])).get_chemical_formula()
         basis = s['basis'] + (' + element overrides' if s.get('element_settings') else '')
@@ -148,13 +149,16 @@ class ResultsView(ipw.VBox):
         return ipw.VBox(items)
 
     def _orbitals(self):
+        if self.data.get('imported_reference'):
+            from .orbital_workspace import FixedOrbitalWorkspace
+            return FixedOrbitalWorkspace(self.data['uuid'], self._use_window)
         if not self.data.get('levels'):
             return ipw.HTML('<p class="orca-notice">Orbital analysis requires a completed SCF reference.</p>')
         from .orbital_workspace import OrbitalWorkspace
         return OrbitalWorkspace(self.data, self._prepare_common, self._use_window)
 
     def _states(self):
-        if not self.data.get('levels'):
+        if not self.data.get('levels') and not self.data.get('imported_reference'):
             return ipw.HTML('<p class="orca-notice">CASCI requires a completed SCF reference. '
                            'It is optional and is independent of vibrational spectroscopy.</p>')
         from .casci import CasciStates

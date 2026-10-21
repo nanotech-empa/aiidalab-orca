@@ -10,6 +10,7 @@ from aiida.parsers import Parser
 from .artifacts import resolve_electronic, storage_builder, storage_policy
 from .orbitals import OrbitalCubesCalculation, attach_source, cube_parameters, validate_cube_outputs
 from .rendering import calcjob_options
+from .fixed_orbitals_data import CALCULATION as IMPORT_CALCULATION, PREPARATION as IMPORT_PREPARATION
 
 CATALOG_PROCESS = 'aiida.workflows:empa_orca.orbital_catalog'
 CUBES_PROCESS = 'aiida.workflows:empa_orca.common_orbital_cubes'
@@ -18,16 +19,20 @@ HARTREE_TO_EV = 27.211386245988
 
 def validate_reference(reference, remote):
     producer = reference.creator
-    if (producer is None or producer.process_type != 'aiida.calculations:empa_orca.common_orbitals' or
+    if (producer is None or not producer.is_finished_ok or producer.process_type not in (
+            'aiida.calculations:empa_orca.common_orbitals', IMPORT_CALCULATION) or
             producer.outputs.remote_folder.uuid != remote.uuid):
         raise ValueError('The orbital reference and folder must have the same preparation producer')
     data = reference.get_dict()
-    if data.get('preparation') != 'moread_noiter_v1':
+    expected = IMPORT_PREPARATION if producer.process_type == IMPORT_CALCULATION else 'moread_noiter_v1'
+    if data.get('preparation') != expected:
         raise ValueError('Select a verified fixed-orbital preparation')
     return data
 
 
 def variants(reference):
+    if reference.get('preparation') == IMPORT_PREPARATION:
+        return {'fixed':'aiida.gbw'}
     if reference['filename'] == 'aiida.qro':
         return {'QRO':'aiida.qro', 'UNO':'aiida.uno'}
     return {'restricted':'aiida.gbw'}
@@ -61,7 +66,7 @@ def parse_catalog(raw, reference, structure):
             if not math.isfinite(occupation) or not -1e-7 <= occupation <= 2+1e-7:
                 raise ValueError('Invalid spatial-orbital occupation')
             level = {'index':index, 'occupation':occupation}
-            if kind != 'UNO':
+            if kind not in ('UNO','fixed'):
                 energy = float(row['OrbitalEnergy'])
                 if not math.isfinite(energy) or abs(occupation-round(occupation)) > 1e-6:
                     raise ValueError('Invalid reference occupation or orbital energy')
@@ -71,7 +76,8 @@ def parse_catalog(raw, reference, structure):
             raise ValueError('Orbital occupations do not sum to the reference electron count')
         result[kind] = {'filename':value['source_filename'], 'sha256':value['sha256'],
                         'size_bytes':value['size_bytes'], 'levels':levels,
-                        'occupation_kind':'fractional_natural' if kind == 'UNO' else 'integer_reference'}
+                        'occupation_kind':('fractional_natural' if kind == 'UNO' else
+                                           'source_casci_diagonal' if kind == 'fixed' else 'integer_reference')}
     if not result:
         raise ValueError('No orbital information was exported')
     return result

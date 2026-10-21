@@ -8,11 +8,12 @@ from aiida_empa_orca import orbital_inspection as backend
 from aiida_empa_orca.artifacts import resolve_electronic
 from aiida_empa_orca.orbitals import cube_parameters, validate_cube_outputs
 from .property_services import helper_code, tool_codes
+from aiida_empa_orca.fixed_orbitals_data import PROCESS as IMPORT_PROCESS
 
 
 def common_node(uuid):
     node = orm.load_node(uuid)
-    if node.process_type != 'aiida.workflows:empa_orca.common_orbitals' or not node.is_finished_ok:
+    if node.process_type not in ('aiida.workflows:empa_orca.common_orbitals', IMPORT_PROCESS) or not node.is_finished_ok:
         raise ValueError('Select a completed common-orbital preparation')
     return node
 

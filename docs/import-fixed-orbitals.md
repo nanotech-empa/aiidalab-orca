@@ -46,6 +46,14 @@ space, and remote working-directory storage. Re-import the original source
 if the imported working files disappear; this reference has no native SCF
 step that can be silently regenerated.
 
+GBW compatibility must be tested with the actual binary. A2n's ORCA 6.1.0
+GBWs were rejected by the 6.1.1 exporter despite the small version difference.
+That import stopped, preserving the original source. The parser reports a
+specific format/version error and orbital-inspection defaults prefer the
+utilities from the selected ORCA installation. Keep the matching ORCA,
+exporter and plot utility together; do not accept a corrupt-file warning or
+silently fall back to unverified metadata.
+
 Andrés Ortega-Guerrero's A2n dataset is the intended larger test. Neutral and
 anion orbital families remain separate references. The benchmark first
 validates the ETRI recipe; no A2n spectrum is accepted solely because the

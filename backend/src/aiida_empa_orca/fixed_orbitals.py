@@ -24,6 +24,7 @@ class FixedOrbitalsImportCalculation(engine.CalcJob):
         spec.input('metadata.options.withmpi', default=False)
         spec.output('orbital_reference', valid_type=orm.Dict)
         spec.exit_code(310, 'ERROR_IMPORT', message='External frozen-orbital validation failed; inspect import.log.')
+        spec.exit_code(311, 'ERROR_GBW_FORMAT', message='ORCA could not read this GBW format. Check file integrity and select the matching ORCA exporter/version.')
 
     def prepare_for_submission(self, folder):
         manifest = checked_manifest(self.inputs.source_manifest.get_dict())
@@ -51,6 +52,10 @@ class FixedOrbitalsImportParser(Parser):
     def parse(self, **kwargs):
         from .casci import active_space, casci_settings, parse_states
         try:
+            export_log = self.retrieved.base.repository.get_object_content('export.log')
+            if 'Your GBWFile is either corrupt or from a different ORCA version' in export_log:
+                self.logger.error(self.exit_codes.ERROR_GBW_FORMAT.message)
+                return self.exit_codes.ERROR_GBW_FORMAT
             manifest = checked_manifest(self.node.inputs.source_manifest.get_dict())
             report = json.loads(self.retrieved.base.repository.get_object_content('import_manifest.json'))
             if report['source_manifest'] != manifest:
@@ -127,6 +132,7 @@ class FixedOrbitalsImportWorkChain(engine.WorkChain):
 
     def inspect(self):
         if not self.ctx.imported.is_finished_ok:
+            self.report(self.ctx.imported.exit_message or 'Import validation failed; inspect the child calculation logs.')
             return self.exit_codes.ERROR_IMPORT
 
     def preserve(self):

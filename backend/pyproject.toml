@@ -25,6 +25,7 @@ orca-tools = "aiida_empa_orca.tools:main"
 [project.entry-points."aiida.calculations"]
 "empa_orca.kondo" = "aiida_empa_orca.kondo:KondoCalculation"
 "empa_orca.kondo_cubes" = "aiida_empa_orca.kondo:KondoCubesCalculation"
+"empa_orca.kondo_reference_cubes" = "aiida_empa_orca.kondo:KondoReferenceCubesCalculation"
 "empa_orca.kondo_maps" = "aiida_empa_orca.maps:KondoMapsCalculation"
 "empa_orca.vibrations" = "aiida_empa_orca.vibrations:VibrationsCalculation"
 "empa_orca.dyson_maps" = "aiida_empa_orca.maps:DysonMapsCalculation"

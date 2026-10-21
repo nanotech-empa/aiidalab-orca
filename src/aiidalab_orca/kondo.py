@@ -49,6 +49,8 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
         self.view.observe(lambda _: self.set_active(self.view.selected_index == 0), names='selected_index')
         from .presentation import ComputePanel
         self.cube_controls = ComputePanel('Generate Kondo orbital previews…', [self.channels, self.grid,
+            ipw.HTML('<p>Use signed native ORCA orbital grids from the exact initial CASCI wavefunction. '
+                     'Reference grids are retained for reuse across chemical potentials; cubehandler reduces the previews.</p>'),
             self.retention, self.stash, self.generate])
         self.result_box = ipw.VBox([self.summary, self.cube_previous, self.cube_controls, self.map_box, self.view])
         self.result_box.layout.display = 'none'

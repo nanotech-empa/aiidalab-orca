@@ -4,8 +4,11 @@ The **States & Dyson → Kondo orbitals & maps** view starts from a completed
 fixed-orbital CASCI Dyson calculation. It runs three independent stages:
 
 1. `empa_orca.kondo`: exchange matrix, eigenvalues and active-orbital eigenvectors.
-2. `empa_orca.kondo_cubes`: normalized channel amplitudes evaluated in the
-   original exported AO basis, with cubehandler-reduced previews retrieved.
+2. `empa_orca.kondo_cubes`: signed linear combinations of native ORCA orbital
+   grids, with cubehandler-reduced previews retrieved. Reference grids come
+   from the exact initial CASCI checkpoint, checked against the preserved GBW
+   checksum, and are reused across chemical potentials. The original AO
+   evaluator remains available for previously submitted workflows.
 3. `empa_orca.kondo_maps`: individual constant-height intensity maps from full
    amplitude cubes. The existing separate figure CalcJob stores PNG/PDF nodes.
 
@@ -17,6 +20,10 @@ cubes or exports give a recovery error; electronic calculations are never
 silently repeated. Full cubes can remain in place (the initial UI default), be
 stashed, or be deleted after reduced-preview validation. Deletion means later
 full-resolution maps require cube regeneration, not new CASCI calculations.
+Native reference orbital grids are retained separately for reuse. The channel
+cube retention control applies to the resulting channel cubes. Native grids
+must share their origin, spacing, dimensions and atom geometry; no interpolation,
+phase fitting or numerical grid renormalization is performed during combination.
 
 ## Scientific definition
 
@@ -107,10 +114,23 @@ CalcJobs. No new electronic calculation was submitted for this test.
 
 The reference exchange test yields one AFM and two FM eigenchannels at μ=0;
 this is internal execution evidence, not a prediction of an experimental
-Kondo resonance in NO. The ETRI molecular benchmark is reserved for **tigu**,
-initially **6 processes** per submission, with no stashing. Twelve is the
-authorized upper limit, not a benchmarked optimum. Scaling must be measured
-before increasing the request. It has not been run.
+Kondo resonance in NO.
+
+The ETRI ORCA comparison completed the geometry, restricted-PBE reference,
+frozen CAS(12,12), four 24-root charged sectors and 96 Dyson transitions on
+**tigu**, using six processes for electronic work and no stashing. At μ=4 eV,
+the leading exchange eigenvalues are 1.743 and 1.140 eV⁻¹, compared with the
+paper's Figure 10 values 1.824 and 1.178 eV⁻¹. Their 16→24-root changes are
+below 0.25%; the full exchange matrix changes 6.74%. This supports a qualitative
+leading-channel comparison; weak channels remain unconverged. The ORCA
+PBE0/def2-TZVP geometry/basis approximation to the paper's FHI-aims preparation
+is explicit. Optional 48-root refinement was stopped to prioritize A2n maps.
+Twelve processes remain the authorized limit, without a claim of optimal scaling.
+
+The AO evaluator's real f(±3) phase correction passes the unchanged 1e-7 overlap
+guard (native ORCA fixture residual 5.73×10⁻⁹). A 9,661-point native ORCA orbital
+cube comparison agrees to 0.0021% in amplitude without fitted normalization.
+The app's preferred Kondo cube route uses native ORCA grids directly.
 
 Prepared with the assistance of Codex. Scientific attribution remains with
 the cited authors; existing Dyson, cubehandler and map-engine credits apply.

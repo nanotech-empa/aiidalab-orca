@@ -42,8 +42,9 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         runtime = choices.get('runtime',{'workers':1,'max_wallclock_seconds':3600})
         self.workers = ipw.BoundedIntText(value=runtime['workers'],min=1,max=128,description='Processes',style=style)
         self.walltime = ipw.IntText(value=runtime['max_wallclock_seconds']//60,description='Wall time (minutes)',style=style)
+        self.memory = ipw.IntText(value=runtime.get('memory_mb',4096*runtime['workers']),description='Total memory (MiB)',style=style)
         self.storage_policy = dict(choices.get('storage_policy',{}))
-        advanced = ipw.Accordion(children=[ipw.VBox([self.loss,self.force,self.workers,self.walltime,
+        advanced = ipw.Accordion(children=[ipw.VBox([self.loss,self.force,self.workers,self.memory,self.walltime,
             self.export_code,self.dyson_code,self.cubehandler_code])],selected_index=None)
         advanced.set_title(0,'Dyson validation, resources and codes')
         self.review = ipw.Button(description='Review Dyson calculation',icon='list',button_style='primary',layout=ipw.Layout(width='auto'))
@@ -93,7 +94,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
                           self.spectrum_box,self.cube_controls])
         self.initial.observe(self._initial_changed,names='value')
         self.side.observe(self._initial_changed,names='value')
-        for w in (self.finals,self.loss,self.force,self.workers,self.walltime,self.export_code,self.dyson_code):
+        for w in (self.finals,self.loss,self.force,self.workers,self.memory,self.walltime,self.export_code,self.dyson_code):
             w.observe(self._invalidate,names='value')
         for w in (self.cube_states,self.blend,self.grid,self.retention,self.stash,self.cubehandler_code,self.dyson_code):
             w.observe(self._invalidate_cubes,names='value')
@@ -161,11 +162,12 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         try:
             self.plan = service.review(self.common_uuid,self.initial.value,self.finals.value,
                 {'export':self.export_code.value,'dyson':self.dyson_code.value},self.loss.value,self.force.value,
-                runtime={'workers':self.workers.value,'max_wallclock_seconds':self.walltime.value*60})
+                runtime={'workers':self.workers.value,'max_wallclock_seconds':self.walltime.value*60,
+                         'memory_mb':self.memory.value})
             text = '<p><b>'+('Reuse stored Dyson coefficients and transition energies.' if self.plan['action'] == 'reuse' else 'Compute selected Dyson transitions from existing CASCI wavefunctions.')+'</b></p>'
             text += ''.join('<p>'+html.escape(r['label']+' · '+r['action'])+'</p>' for r in self.plan['exports'])
             if self.plan['action'] != 'reuse':
-                text += f'<p>Processes: {self.workers.value}; wall time: {self.walltime.value} minutes.</p>'
+                text += f'<p>Processes: {self.workers.value}; total memory: {self.memory.value} MiB; wall time: {self.walltime.value} minutes.</p>'
             text += ('<p>Wavefunction exports remain in their export calculation directories.'
                      if self.storage_policy.get('mode') == 'remote' else
                      '<p>Exports follow the reference preservation policy: a size-limited retrieved copy and a native stash.')

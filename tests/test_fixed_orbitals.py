@@ -73,7 +73,7 @@ def external_reference(electronic_source, registered_import):
             calc.base.links.add_incoming(value,link_type=LinkType.INPUT_CALC,link_label=name)
         calc.store()
         folder = orm.FolderData()
-        for name,content in {'source.out':text,'source.inp':'! def2-SVP MOREAD NoIter',
+        for name,content in {'source.out':text,'source.inp':'! def2-SVP MOREAD NoIter','export.log':'ORCA_2JSON\n',
                              'import_manifest.json':json.dumps(report)}.items():
             folder.base.repository.put_object_from_filelike(io.StringIO(content),name)
         folder.base.links.add_incoming(calc,link_type=LinkType.CREATE,link_label='retrieved');folder.store()
@@ -194,3 +194,23 @@ def test_missing_external_files_do_not_launch_scf_or_an_import(external_referenc
     b.code = b.export_code = b.storage_code = orm.load_code(code_uuid)
     _,run = run_get_node(b)
     assert run.exit_status == 400 and not run.called_descendants
+
+
+def test_incompatible_gbw_reports_matching_version_action(aiida_profile_clean):
+    calc = orm.CalcJobNode(process_type=CALCULATION).store()
+    retrieved = orm.FolderData()
+    retrieved.base.repository.put_object_from_filelike(io.StringIO(
+        'Your GBWFile is either corrupt or from a different ORCA version!\nUnknown HFTYP'), 'export.log')
+    retrieved.base.links.add_incoming(calc,link_type=LinkType.CREATE,link_label='retrieved');retrieved.store()
+    error = backend.FixedOrbitalsImportParser(calc).parse()
+    assert error.status == 311 and 'matching ORCA' in error.message
+
+
+def test_inspection_prefers_source_installation_utilities(external_reference):
+    _,uuid,_,_,code_uuid = external_reference()
+    from aiidalab_orca.inspection_services import codes
+    code = orm.load_code(code_uuid)
+    for binary,kind in [('orca_2json','export'),('orca_plot','plot')]:
+        orm.InstalledCode(label='other-version',computer=code.computer,filepath_executable='/opt/other/'+binary).store()
+        correct = orm.InstalledCode(label='matching-version',computer=code.computer,filepath_executable='/bin/'+binary).store()
+        assert codes(uuid)[kind][0][1] == str(correct.uuid)

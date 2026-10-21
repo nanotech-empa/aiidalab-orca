@@ -21,6 +21,7 @@ def common_node(uuid):
 def codes(common_uuid):
     node = common_node(common_uuid)
     result = tool_codes(node.inputs.code.computer.uuid)
+    installation = PurePosixPath(node.inputs.code.filepath_executable).parent
     # This utility must be registered on the same computer, just like orca_plot.
     result['export'] = []
     for uuid in orm.QueryBuilder().append(orm.InstalledCode,project=['uuid']).all(flat=True):
@@ -29,6 +30,11 @@ def codes(common_uuid):
                 PurePosixPath(code.filepath_executable).name == 'orca_2json' or
                 code.default_calc_job_plugin == 'empa_orca.orbital_catalog'):
             result['export'].append((f'{code.label}@{code.computer.label}',str(uuid)))
+    # Prefer the utility shipped with the source ORCA, rather than an arbitrary
+    # first registration on hosts that carry incompatible GBW versions.
+    for kind in ('export','plot'):
+        result[kind].sort(key=lambda row: (
+            PurePosixPath(orm.load_code(row[1]).filepath_executable).parent != installation, row[0]))
     return result
 
 

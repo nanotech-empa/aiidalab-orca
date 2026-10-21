@@ -250,6 +250,16 @@ def validate_transitions(node):
     return data
 
 
+def runtime_settings(values):
+    """Execution controls are independent of the physical state selection."""
+    if not isinstance(values,dict) or set(values)-{'workers','max_wallclock_seconds'}:
+        raise ValueError('Unknown Dyson execution option')
+    result = {'workers':1,'max_wallclock_seconds':3600} | values
+    if any(type(value) is not int or value < 1 for value in result.values()):
+        raise ValueError('Dyson workers and wall time must be positive integers')
+    return result
+
+
 class DysonCalculation(engine.CalcJob):
     @classmethod
     def define(cls,spec):
@@ -260,6 +270,7 @@ class DysonCalculation(engine.CalcJob):
         spec.input_namespace('sources',dynamic=True,valid_type=orm.Data)
         spec.input('locations',valid_type=orm.Dict)
         spec.input('selection',valid_type=orm.Dict)
+        spec.input('runtime',valid_type=orm.Dict,default=lambda:orm.Dict(dict=runtime_settings({})))
         spec.input('metadata.options.parser_name',default='empa_orca.dyson')
         spec.input('metadata.options.withmpi',default=False)
         spec.output('transitions',valid_type=orm.Dict)
@@ -267,6 +278,10 @@ class DysonCalculation(engine.CalcJob):
 
     def prepare_for_submission(self,folder):
         selected = checked_request(self.inputs)
+        runtime = runtime_settings(self.inputs.runtime.get_dict())
+        resources = self.inputs.metadata.options.resources
+        if resources.get('num_mpiprocs_per_machine',1) != runtime['workers'] or self.inputs.metadata.options.withmpi:
+            raise ValueError('Allocate the requested Dyson workers inside one non-MPI CalcJob')
         locations = self.inputs.locations.get_dict()
         info = common.CalcInfo()
         info.local_copy_list,info.remote_copy_list = [],[]
@@ -280,7 +295,7 @@ class DysonCalculation(engine.CalcJob):
                 raise ValueError('Export source differs from its checked location')
             stage(info,source,locations[key],key+'.json.gz')
             artifacts[key] = artifact.get_dict()
-        script(folder,'compute_dyson.py',{'selection':selected,'artifacts':artifacts})
+        script(folder,'compute_dyson.py',{'selection':selected,'artifacts':artifacts,'workers':runtime['workers']})
         info.codes_info = [run_code(self.inputs.code.uuid,['compute_dyson.py'],'driver.log')]
         info.retrieve_list = ['transitions.json','coefficients.npz','driver.log']
         return info
@@ -316,6 +331,7 @@ class DysonWorkChain(engine.WorkChain):
                         'storage_policy':orm.Dict}.items():
             spec.input(key,valid_type=typ)
         spec.input('force_recompute',valid_type=orm.Bool,default=lambda:orm.Bool(False))
+        spec.input('runtime',valid_type=orm.Dict,default=lambda:orm.Dict(dict=runtime_settings({})))
         for key,typ in {'transitions':orm.Dict,'retrieved':orm.FolderData,'remote_folder':orm.RemoteData}.items():
             spec.output(key,valid_type=typ)
         spec.outline(cls.setup,engine.if_(cls.needs_execution)(cls.export_states,cls.compute,cls.inspect),cls.results)
@@ -327,6 +343,7 @@ class DysonWorkChain(engine.WorkChain):
         self.ctx.reuse_uuid = None
         try:
             self.ctx.selected = checked_request(self.inputs)
+            self.ctx.runtime = runtime_settings(self.inputs.runtime.get_dict())
             if self.inputs.export_code.computer.uuid != self.inputs.code.computer.uuid:
                 raise ValueError('ORCA export and Dyson tools must use the same computer')
             storage_policy(self.inputs.storage_policy.get_dict())
@@ -360,6 +377,7 @@ class DysonWorkChain(engine.WorkChain):
     def compute(self):
         b = DysonCalculation.get_builder()
         b.code,b.initial,b.selection = self.inputs.code,self.inputs.initial,orm.Dict(dict=self.ctx.selected)
+        b.runtime = orm.Dict(dict=self.ctx.runtime)
         for key,state in self.inputs.finals.items():
             b.finals[key] = state
         locations = {}
@@ -372,7 +390,9 @@ class DysonWorkChain(engine.WorkChain):
             b.artifacts[key],b.sources[key] = artifact,orm.load_node(location['uuid'])
             locations[key] = location
         b.locations = orm.Dict(dict=locations)
-        b.metadata.options = calcjob_options(state_source(self.inputs.initial).outputs.remote_folder,seconds=3600)
+        b.metadata.options = calcjob_options(state_source(self.inputs.initial).outputs.remote_folder,
+                                            seconds=self.ctx.runtime['max_wallclock_seconds'])
+        b.metadata.options.resources = {'num_machines':1,'num_mpiprocs_per_machine':self.ctx.runtime['workers']}
         b.metadata.disable_cache = True
         return engine.ToContext(dyson=self.submit(b))
 

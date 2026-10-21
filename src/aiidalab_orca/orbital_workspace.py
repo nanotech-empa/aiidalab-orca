@@ -5,6 +5,24 @@ import ipywidgets as ipw
 from .presentation import LazyTabs
 
 
+class FixedOrbitalWorkspace(ipw.VBox):
+    """Inspect an imported basis without inventing a DFT orbital spectrum."""
+    def __init__(self, common_uuid, use_window):
+        from .inspection import OrbitalInspection
+        self.common_uuid = str(common_uuid)
+        self.inspection = OrbitalInspection(self.common_uuid,
+            apply_window=lambda indices: use_window(self.common_uuid, indices))
+        super().__init__([ipw.HTML('<h3>Imported fixed spatial orbitals</h3>'), self.inspection])
+
+    def inspect_reference(self, common_uuid, indices):
+        if str(common_uuid) != self.common_uuid:
+            raise ValueError('Select the imported orbital reference')
+        self.inspection.set_active_indices(indices)
+
+    def set_active(self, active):
+        self.inspection.set_active(active)
+
+
 class OrbitalWorkspace(ipw.VBox):
     def __init__(self, data, prepare_common, use_window):
         self.data, self.prepare_common, self.use_window = data, prepare_common, use_window

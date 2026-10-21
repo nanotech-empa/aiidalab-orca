@@ -202,6 +202,11 @@ def result(uuid):
         try:
             location = resolve_electronic(source_remote(node))
             data["artifact_status"] = {"repository": "Preserved in the AiiDA repository", "stash": "Preserved in the stash", "remote": "Available in the calculation directory; not yet preserved"}[location["kind"]]
-        except (OSError, ValueError, RuntimeError, KeyError) as exc:
+        except (FileNotFoundError, ValueError, KeyError) as exc:
             data["artifact_status"] = f"Electronic files unavailable: {exc}"
+        except Exception as exc:
+            # Results are stored in AiiDA independently of an SSH connection.
+            # An unsuccessful probe says nothing about remote file deletion.
+            data["artifact_status"] = ("Electronic-file availability could not be checked; stored results remain accessible. "
+                                       f"{type(exc).__name__}: {exc}")
     return data

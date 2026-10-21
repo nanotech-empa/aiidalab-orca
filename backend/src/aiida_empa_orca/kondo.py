@@ -285,6 +285,11 @@ class KondoCubesWorkChain(engine.WorkChain):
         try:
             calc = channel_source(self.inputs.channels)
             p = cube_parameters(self.inputs.parameters.get_dict())
+            if 'plot_code' in self.inputs:
+                state=calc.inputs.artifacts.initial.creator.inputs.state_energies
+                if any(self.inputs[key].computer.uuid != state.creator.computer.uuid
+                       for key in ('code','plot_code','cubehandler_code')):
+                    raise ValueError('Native ORCA cube tools must run on the initial CASCI computer')
             for uuid in previous(self.inputs.channels.uuid, 'channels', CUBES_PROCESS):
                 old = orm.load_node(uuid)
                 if (old.is_finished_ok and old.inputs.parameters.get_dict() == p and

@@ -80,6 +80,18 @@ def test_parser_reads_roots_not_state_average_and_requires_fixed_orbitals():
             casci.parse_states(bad,ref,space,settings)
 
 
+def test_parser_rejects_ci_warning_despite_solved_marker_and_normal_termination():
+    # ORCA 6.1 can print both lines after exhausting its CI iteration budget.
+    text = output().replace('CI-PROBLEM SOLVED',
+        'WARNING: CI-ITERATIONS NOT CONVERGED!\nCI-PROBLEM SOLVED')
+    ref = reference_data()
+    space = {'electrons':3,'orbitals':[6,7]}
+    settings = casci.casci_settings({'nroots':2},ref,space)
+    assert 'ORCA TERMINATED NORMALLY' in text and 'CI-PROBLEM SOLVED' in text
+    with pytest.raises(ValueError,match='CI iterations did not converge'):
+        casci.parse_states(text,ref,space,settings)
+
+
 def dataset(charge, mult, energies):
     return {'orbital_reference_uuid':'reference', 'structure_uuid':'geometry',
             'active_space':{'electrons':2,'orbitals':[5,6]}, 'method':'CASCI','geometry_mode':'fixed',

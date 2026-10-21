@@ -41,7 +41,8 @@ ORCA TERMINATED NORMALLY
 def registered_import(entry_points):
     for group, cls in [('calculations',backend.FixedOrbitalsImportCalculation),
                        ('workflows',backend.FixedOrbitalsImportWorkChain), ('parsers',backend.FixedOrbitalsImportParser)]:
-        entry_points.add(cls, f'aiida.{group}:empa_orca.import_fixed_orbitals')
+        if not entry_points.eps_select(f'aiida.{group}', name='empa_orca.import_fixed_orbitals'):
+            entry_points.add(cls, f'aiida.{group}:empa_orca.import_fixed_orbitals')
 
 
 @pytest.fixture

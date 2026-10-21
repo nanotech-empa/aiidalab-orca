@@ -3,16 +3,96 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import hashlib
 from contextlib import nullcontext
 
 import numpy as np
-from dyson_orca_tools.io.cube import pyscf_molecule, orca_label_to_pyscf
-from pyscf.tools import cubegen
 
 from aiida_empa_orca.scripts.compute_dyson import load_export
 from aiida_empa_orca.scripts.plot_cubes import inspect_cube
 from aiida_empa_orca.dyson_data import blend_weight
 from ase.io.cube import read_cube,write_cube as ase_write_cube
+
+
+def native_channels(request):
+    """Combine signed native ORCA amplitudes on their unchanged common grid."""
+    table, p = request['channels'], request['parameters']
+    indices = table['active_space']['orbitals']
+    sources = request['native_cubes']
+    if [row['index'] for row in sources] != indices:
+        raise ValueError('Native cubes must contain the exact ordered active-orbital set')
+    rows = [table['channels'][i] for _,i in p['orbitals']]
+    coefficients = np.asarray([row['active_coefficients'] for row in rows],dtype=float)
+    if coefficients.shape != (len(rows),len(indices)) or not np.isfinite(coefficients).all():
+        raise ValueError('Invalid native channel coefficients')
+    template, sums, fingerprints = None,None,[]
+    for j,source in enumerate(sources):
+        path = Path(source['staged'])
+        if path.stat().st_size != source['size_bytes']:
+            raise ValueError('Native orbital cube size changed: '+str(path))
+        with path.open('rb') as handle:
+            digest = hashlib.file_digest(handle,'sha256').hexdigest()
+        with path.open() as handle:
+            cube = read_cube(handle)
+        if not np.isfinite(cube['data']).all():
+            raise ValueError('Nonfinite native orbital amplitudes')
+        if template is None:
+            template = cube
+            if cube['data'].shape != (p['grid_points'],)*3:
+                raise ValueError('Native cube resolution differs from the requested grid')
+            sums = np.zeros((len(rows),*cube['data'].shape))
+        elif (cube['data'].shape != template['data'].shape or
+              not np.allclose(cube['origin'],template['origin'],atol=1e-10,rtol=0) or
+              not np.allclose(cube['spacing'],template['spacing'],atol=1e-10,rtol=0) or
+              not np.array_equal(cube['atoms'].numbers,template['atoms'].numbers) or
+              not np.allclose(cube['atoms'].positions,template['atoms'].positions,atol=1e-7,rtol=0)):
+            raise ValueError('Native orbital cubes have different grids or atomic geometries')
+        sums += coefficients[:,j,None,None,None]*cube['data']
+        fingerprints.append(dict(index=source['index'],sha256=digest,size_bytes=path.stat().st_size))
+    return template,rows,sums,fingerprints
+
+
+def native_main(request):
+    p,table = request['parameters'],request['channels']
+    estimate = len(p['orbitals'])*p['grid_points']**3*30+256*1024**2
+    if shutil.disk_usage('.').free < estimate:
+        raise ValueError('Insufficient free disk for the requested native channel cubes')
+    template,rows,arrays,fingerprints = native_channels(request)
+    full = Path('full_cubes');full.mkdir()
+    manifest = dict(retention=p['retention'],grid_points=p['grid_points'],cubes=[],
+        evaluation_method='native_orca_linear_combination_v1',
+        native_manifest_uuid=request['native_manifest_uuid'],native_sources=fingerprints,
+        orbital_source=dict(kind='Kondo',initial_state_uuid=table['initial_state_uuid']),
+        channels_uuid=request['channels_uuid'],strength_convention='unit_normalized_eigenchannel',
+        reduction=dict(program='cubehandler',method='slicing',low_precision=False))
+    for row,data in zip(rows,arrays):
+        filename='kondo_'+row['id']+'.cube'
+        with (full/filename).open('w') as handle:
+            ase_write_cube(handle,template['atoms'],data=data,origin=template['origin'],
+                           comment='Signed native ORCA Kondo orbital amplitude; no grid renormalization')
+        cube_comments(full/filename,second='XYZ data order; Kondo channel amplitude')
+        manifest['cubes'].append(dict(filename=filename,kind='kondo',channel_id=row['id'],index=row['index'],
+            exchange_over_v2_inv_ev=row['exchange_over_v2_inv_ev'],coupling=row['coupling'],full=inspect_cube(full/filename)))
+    reduce_cubes(request,manifest)
+    for source in request['native_cubes']:
+        Path(source['staged']).unlink()  # Only this CalcJob's staging copies.
+
+
+def reduce_cubes(request,manifest):
+    p=request['parameters'];full=Path('full_cubes')
+    with Path('plot.log').open('w') as log:
+        subprocess.run([request['cubehandler_executable'],'shrink',*[str(full/c['filename']) for c in manifest['cubes']],
+                        '--output-dir','previews','--prefix','','--method','slicing','--no-low-precision'],
+                        stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1800)
+    for cube in manifest['cubes']:
+        cube['preview'] = inspect_cube(Path('previews')/cube['filename'])
+        if cube['preview']['size_bytes'] >= cube['full']['size_bytes']:
+            raise ValueError('Cubehandler did not reduce the channel cube')
+    if p['retention'] == 'delete':
+        for cube in manifest['cubes']:
+            (full/cube['filename']).unlink()
+        full.rmdir()
+    Path('manifest.json').write_text(json.dumps(manifest,indent=2,allow_nan=False))
 
 
 def cube_comments(path,first=None,second=None):
@@ -37,6 +117,7 @@ def pyscf_frame(wf):
     transform both the overlap and the orbital coefficients; no tolerance is
     relaxed and unsupported conventions still fail the overlap check.
     """
+    from dyson_orca_tools.io.cube import pyscf_molecule, orca_label_to_pyscf
     mol = pyscf_molecule(wf)
     labels = [orca_label_to_pyscf(label) for label in wf['Molecule']['MolecularOrbitals']['OrbitalLabels']]
     pyscf_labels = [''.join(label.split()) for label in mol.ao_labels()]
@@ -53,6 +134,12 @@ def pyscf_frame(wf):
 
 def main():
     request = json.loads(Path('request.json').read_text())
+    if request.get('native_reference'):
+        import runpy
+        return runpy.run_path('plot_cubes.py',run_name='__main__')
+    if 'native_cubes' in request:
+        return native_main(request)
+    from pyscf.tools import cubegen
     p = request['parameters']
     kondo = 'channels' in request
     table = request['channels'] if kondo else request['table']
@@ -116,19 +203,7 @@ def main():
         cube_comments(full/filename,second='XYZ data order; spectral intensity')
         manifest['blend'] = request['blend']
         manifest['cubes'].append({'filename':filename,'kind':'dyson_blend','full':inspect_cube(full/filename)})
-    with Path('plot.log').open('w') as log:
-        subprocess.run([request['cubehandler_executable'],'shrink',*[str(full/c['filename']) for c in manifest['cubes']],
-                        '--output-dir','previews','--prefix','','--method','slicing','--no-low-precision'],
-                        stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1800)
-    for cube in manifest['cubes']:
-        cube['preview'] = inspect_cube(Path('previews')/cube['filename'])
-        if cube['preview']['size_bytes'] >= cube['full']['size_bytes']:
-            raise ValueError('Cubehandler did not reduce the Dyson cube')
-    if p['retention'] == 'delete':
-        for cube in manifest['cubes']:
-            (full/cube['filename']).unlink()
-        full.rmdir()
-    Path('manifest.json').write_text(json.dumps(manifest,indent=2,allow_nan=False))
+    reduce_cubes(request,manifest)
     Path('initial.json.gz').unlink()
 
 

@@ -1,4 +1,5 @@
 """Operation-local access to Kondo calculations; widgets retain UUIDs only."""
+from pathlib import PurePosixPath
 from aiida import orm
 from aiida.engine import submit
 
@@ -49,10 +50,27 @@ def cube_history(channels_uuid):
     return [(str(uuid)[:8], str(uuid)) for uuid in kondo.previous(channels_uuid, 'channels', kondo.CUBES_PROCESS)]
 
 
-def submit_cubes(channels_uuid, values, code_uuid, cubehandler_uuid):
+def native_plot_code(channels_uuid):
+    """Match the initial CASCI's ORCA installation, without guessing versions."""
+    dyson = kondo.channel_source(orm.load_node(channels_uuid))
+    state = dyson.inputs.artifacts.initial.creator.inputs.state_energies
+    source = state.creator.inputs.code
+    expected = PurePosixPath(source.filepath_executable).with_name('orca_plot')
+    matches = []
+    for uuid in orm.QueryBuilder().append(orm.InstalledCode,project=['uuid']).all(flat=True):
+        code = orm.load_code(uuid)
+        if code.computer.uuid == source.computer.uuid and PurePosixPath(code.filepath_executable) == expected:
+            matches.append(str(uuid))
+    if len(matches) != 1:
+        raise ValueError('Configure one ORCA plot code from the same installation as the initial CASCI code.')
+    return matches[0]
+
+
+def submit_cubes(channels_uuid, values, code_uuid, cubehandler_uuid, *, plot_uuid=None):
     b = kondo.KondoCubesWorkChain.get_builder()
     b.channels = orm.load_node(channels_uuid)
     b.parameters = orm.Dict(dict=cube_parameters(values))
     b.code, b.cubehandler_code = orm.load_code(code_uuid), orm.load_code(cubehandler_uuid)
+    b.plot_code = orm.load_code(plot_uuid or native_plot_code(channels_uuid))
     b.metadata.label = 'Kondo orbital cubes'
     return str(submit(b).uuid)

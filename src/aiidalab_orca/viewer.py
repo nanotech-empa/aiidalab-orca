@@ -91,9 +91,13 @@ class ResultsView(ipw.VBox):
         basis = s['basis'] + (' + element overrides' if s.get('element_settings') else '')
         summary = data.get('summary', {})
         energy = f" · E = {summary['energy_hartree']:.9f} Hartree" if 'energy_hartree' in summary else ''
+        description = (f"<b>Frozen CASCI source:</b> {html.escape(basis)} · charge {s['charge']:+d} · "
+                       f"multiplicity {s['multiplicity']} · reported orbital generator {html.escape(s['method'])}"
+                       if data.get('imported_reference') else
+                       f"<b>Reference:</b> {html.escape(s['method'])}/{html.escape(basis)} · "
+                       f"charge {s['charge']:+d} · multiplicity {s['multiplicity']}{energy}")
         context = (f"<div class='orca-result-context'><h3>{html.escape(formula)} · {geometry}</h3>"
-                   f"<p><b>Reference:</b> {html.escape(s['method'])}/{html.escape(basis)} · "
-                   f"charge {s['charge']:+d} · multiplicity {s['multiplicity']}{energy}</p></div>")
+                   f"<p>{description}</p></div>")
         warnings = ''.join('<p class="orca-notice">'+html.escape(w)+'</p>' for w in data.get('warnings', []))
         self.tabs = LazyTabs([
             ('overview', 'Overview', self._overview),

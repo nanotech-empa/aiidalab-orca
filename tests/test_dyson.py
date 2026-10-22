@@ -163,7 +163,9 @@ def casci_state(common_reference,charge=0,mult=2):
     data['orbital_reference_uuid'] = ref_uuid
     state = orm.Dict(dict=data)
     state.base.links.add_incoming(calc,link_type=LinkType.CREATE,link_label='state_energies');state.store()
-    folder = orm.FolderData().store()
+    folder = orm.FolderData()
+    folder.base.repository.put_object_from_filelike(io.BytesIO(b'Fixed CASCI output for staging tests\n'),'aiida.out')
+    folder.store()
     folder.base.links.add_incoming(calc,link_type=LinkType.CREATE,link_label='retrieved')
     out = orm.RemoteData(computer=remote.computer,remote_path='/lost/casci')
     out.base.links.add_incoming(calc,link_type=LinkType.CREATE,link_label='remote_folder');out.store()

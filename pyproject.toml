@@ -24,6 +24,9 @@ dependencies = [
   "aiidalab-widgets-empa[cube] @ git+https://github.com/nanotech-empa/aiidalab-widgets-empa.git@8fe3b96577170efe2710ae58798bc97b9d4c39ae",
 ]
 
+[project.entry-points."aiidalab_assistant.workflow_guides"]
+orca = "aiidalab_orca.guidance:workflow_guides"
+
 [project.urls]
 Home = "https://github.com/nanotech-empa/aiidalab-orca"
 
@@ -31,7 +34,7 @@ Home = "https://github.com/nanotech-empa/aiidalab-orca"
 where = ["src"]
 
 [tool.setuptools.package-data]
-aiidalab_orca = ["static/*.js"]
+aiidalab_orca = ["static/*.js", "knowledge/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

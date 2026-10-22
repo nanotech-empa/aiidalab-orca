@@ -23,3 +23,16 @@ def kondo_preparation_guide():
         'Adaptive CI retries and a single validation dashboard are still planned.</p>')], selected_index=None)
     guide.set_title(0, 'Quick guide · preparation, checks and recovery')
     return guide
+
+
+def workflow_guides():
+    """Return fresh, packaged operating guidance for the shared AiiDAlab chat."""
+    from importlib.resources import files
+
+    return [{
+        'id': 'orca.casci-kondo',
+        'title': 'ORCA CASCI, Dyson and Kondo validation',
+        'topics': ['orca', 'casci', 'casscf', 'dyson', 'kondo', 'qro', 'uno'],
+        'source': 'aiidalab_orca/knowledge/casci-kondo.md',
+        'text': files('aiidalab_orca').joinpath('knowledge/casci-kondo.md').read_text(),
+    }]

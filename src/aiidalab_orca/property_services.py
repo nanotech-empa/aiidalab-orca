@@ -170,7 +170,8 @@ def property_result(uuid):
     node=orm.load_node(uuid)
     from aiida_empa_orca.orbital_inspection import CUBES_PROCESS
     from aiida_empa_orca.dyson import CUBES_PROCESS as DYSON_CUBES_PROCESS
-    if node.process_type not in (PROCESS_TYPE,CUBES_PROCESS,DYSON_CUBES_PROCESS):
+    from aiida_empa_orca.kondo import CUBES_PROCESS as KONDO_CUBES_PROCESS
+    if node.process_type not in (PROCESS_TYPE,CUBES_PROCESS,DYSON_CUBES_PROCESS,KONDO_CUBES_PROCESS):
         raise ValueError('Select an orbital property workflow')
     data={'uuid':str(uuid),'state':node.process_state.value,'finished':node.is_terminated,
           'successful':node.is_finished_ok,'message':node.exit_message or '',

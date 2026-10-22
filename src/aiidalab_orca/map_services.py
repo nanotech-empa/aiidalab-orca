@@ -3,7 +3,8 @@ from aiida import orm
 from aiida.engine import submit
 from aiida.common.constants import AIIDA_FLOAT_PRECISION
 
-from aiida_empa_orca.maps import DysonMapsCalculation, MapFigureCalculation, MAP_PROCESS, FIGURE_PROCESS, selected_cubes
+from aiida_empa_orca.maps import (DysonMapsCalculation, KondoMapsCalculation, MapFigureCalculation,
+                                  MAP_PROCESS, KONDO_MAP_PROCESS, FIGURE_PROCESS, selected_cubes)
 from aiida_empa_orca.maps_data import map_parameters, figure_style
 from aiida_empa_orca.rendering import calcjob_options
 from .render_services import render_source
@@ -29,17 +30,20 @@ def history(source_uuid, label, process_type):
 
 def map_history(cube_uuid):
     manifest = orm.load_node(cube_uuid).outputs.manifest
-    return history(manifest.uuid, 'source_manifest', MAP_PROCESS)
+    kondo = manifest.creator.process_type == 'aiida.calculations:empa_orca.kondo_cubes'
+    return history(manifest.uuid, 'source_manifest', KONDO_MAP_PROCESS if kondo else MAP_PROCESS)
 
 
 def source_data(cube_uuid):
     node = orm.load_node(cube_uuid)
     manifest = node.outputs.manifest
     producer = manifest.creator
-    if producer is None or producer.process_type != 'aiida.calculations:empa_orca.dyson_cubes' or not producer.is_finished_ok:
+    if producer is None or producer.process_type not in ('aiida.calculations:empa_orca.dyson_cubes', 'aiida.calculations:empa_orca.kondo_cubes') or not producer.is_finished_ok:
         raise ValueError('Select completed Dyson amplitude cubes')
+    key = 'channels' if producer.process_type.endswith('kondo_cubes') else 'transitions'
     return dict(manifest_uuid=str(manifest.uuid), manifest=manifest.get_dict(),
-                transitions_uuid=str(producer.inputs.transitions.uuid), table=producer.inputs.transitions.get_dict())
+                table_input=key, table_uuid=str(producer.inputs[key].uuid),
+                transitions_uuid=str(producer.inputs[key].uuid), table=producer.inputs[key].get_dict())
 
 
 def prepare_maps(cube_uuid, parameters, code_uuid):
@@ -68,21 +72,21 @@ def submit_maps(plan):
     if checked['action'] == 'reuse':
         return checked['reuse_uuid']
     data = source_data(plan['cube_uuid'])
-    b = DysonMapsCalculation.get_builder()
+    b = (KondoMapsCalculation if data['table_input'] == 'channels' else DysonMapsCalculation).get_builder()
     b.code = orm.load_code(plan['code_uuid'])
     b.source_manifest = orm.load_node(data['manifest_uuid'])
-    b.transitions = orm.load_node(data['transitions_uuid'])
+    b[data['table_input']] = orm.load_node(data['table_uuid'])
     b.parameters = orm.Dict(dict=checked['parameters'])
     b['source_'+checked['location']['kind']] = orm.load_node(checked['location']['uuid'])
     b.metadata.options = calcjob_options(b.source_manifest.creator.outputs.remote_folder, seconds=3600)
     b.metadata.disable_cache = True
-    b.metadata.label = 'Constant-height Dyson '+checked['parameters']['kind']+' maps'
+    b.metadata.label = 'Constant-height '+('Kondo channel' if data['table_input'] == 'channels' else 'Dyson')+' maps'
     return str(submit(b).uuid)
 
 
 def map_result(uuid):
     node = orm.load_node(uuid)
-    if not node.is_finished_ok or node.process_type != MAP_PROCESS:
+    if not node.is_finished_ok or node.process_type not in (MAP_PROCESS, KONDO_MAP_PROCESS):
         raise ValueError('Select successful numerical maps')
     return dict(metadata=node.outputs.map_metadata.get_dict(), maps_uuid=str(node.outputs.maps.uuid),
                 figures=history(node.outputs.maps.uuid, 'maps', FIGURE_PROCESS))
@@ -90,7 +94,7 @@ def map_result(uuid):
 
 def submit_figure(map_uuid, settings, code_uuid):
     node = orm.load_node(map_uuid)
-    if not node.is_finished_ok or node.process_type != MAP_PROCESS:
+    if not node.is_finished_ok or node.process_type not in (MAP_PROCESS, KONDO_MAP_PROCESS):
         raise ValueError('Compute numerical maps before rendering')
     p = stored_values(figure_style(settings))
     for _, uuid in history(node.outputs.maps.uuid, 'maps', FIGURE_PROCESS):
@@ -107,7 +111,7 @@ def submit_figure(map_uuid, settings, code_uuid):
     b.settings = orm.Dict(dict=p)
     b.metadata.options = calcjob_options(node.outputs.remote_folder)
     b.metadata.disable_cache = True
-    b.metadata.label = 'Dyson maps · shared intensity scale'
+    b.metadata.label = 'Molecular maps · shared intensity scale'
     return str(submit(b).uuid)
 
 

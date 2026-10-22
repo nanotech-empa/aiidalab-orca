@@ -26,11 +26,16 @@ def plane_basis(normal):
 
 
 def map_parameters(values):
-    keys = {'plane', 'heights_angstrom', 'kappa_inv_angstrom', 'padding', 'transition_ids',
+    keys = {'plane', 'heights_angstrom', 'kappa_inv_angstrom', 'padding', 'transition_ids', 'channel_ids',
             'kind', 'spin_convention', 'blend'}
     if set(values) - keys:
         raise ValueError('Unknown map settings')
     p = dict(values)
+    kondo = 'channel_ids' in p
+    if kondo:
+        if 'transition_ids' in p or 'spin_convention' in p or 'blend' in p or p.get('kind', 'individual') != 'individual':
+            raise ValueError('Kondo channel maps are individual unit-normalized orbitals; no spectral blend or extra spin factor')
+        p['kind'] = 'individual'
     plane = dict(p['plane'])
     if set(plane) != {'center', 'normal', 'offset', 'width', 'height', 'resolution'}:
         raise ValueError('Incomplete map plane')
@@ -55,11 +60,11 @@ def map_parameters(values):
         raise ValueError('Use a positive finite vacuum decay constant, at most 10 Å⁻¹')
     if type(p['padding']) is not int or not 0 <= p['padding'] <= 512:
         raise ValueError('FFT padding must be 0–512 pixels per edge')
-    ids = p['transition_ids']
+    ids = p['channel_ids' if kondo else 'transition_ids']
     if (not isinstance(ids, list) or not 1 <= len(ids) <= 32 or
             any(not isinstance(i, str) for i in ids) or len(set(ids)) != len(ids)):
         raise ValueError('Select 1–32 unique transitions')
-    if p['kind'] not in ('individual', 'blend') or p['spin_convention'] not in ('unpolarized', 'highest_ms_component'):
+    if p['kind'] not in ('individual', 'blend') or (not kondo and p['spin_convention'] not in ('unpolarized', 'highest_ms_component')):
         raise ValueError('Select individual maps or a blend and an explicit spin convention')
     if p['kind'] == 'blend':
         p['blend'] = blend_options(p['blend'])
@@ -121,23 +126,29 @@ def propagate(source, x, y, distances, kappa, padding=0):
 def compute_maps(cubes, table, parameters):
     """Read one amplitude cube at a time; never extrapolate an intensity blend."""
     p = map_parameters(parameters)
-    rows = {r['id']: r for r in table['transitions']}
-    if not set(p['transition_ids']) <= rows.keys():
+    kondo = 'channel_ids' in p
+    ids = p['channel_ids' if kondo else 'transition_ids']
+    rows = {r['id']: r for r in table['channels' if kondo else 'transitions']}
+    if not set(ids) <= rows.keys():
         raise ValueError('A selected transition is absent from the source Dyson result')
-    count = len(p['transition_ids']) if p['kind'] == 'individual' else 1
+    count = len(ids) if p['kind'] == 'individual' else 1
     result = np.zeros((len(p['heights_angstrom']), count, p['plane']['resolution'], p['plane']['resolution']))
     distances = np.asarray(p['heights_angstrom']) - p['plane']['offset']
     sources = []
     from ase.io.cube import read_cube
-    for j, identifier in enumerate(p['transition_ids']):
+    for j, identifier in enumerate(ids):
         with open(cubes[identifier]) as handle:
             cube = read_cube(handle)
         source, x, y = sample_source(cube, p['plane'])
         row = rows[identifier]
-        weight = (blend_weight(row, table['initial_state']['multiplicity'], p['blend']) if p['kind'] == 'blend'
+        weight = (1. if kondo else blend_weight(row, table['initial_state']['multiplicity'], p['blend']) if p['kind'] == 'blend'
                   else spin_factor(table['initial_state']['multiplicity'], row['final_multiplicity'], p['spin_convention']))
         for h, wave in enumerate(propagate(source, x, y, distances, p['kappa_inv_angstrom'], p['padding'])):
             result[h, j if p['kind'] == 'individual' else 0] += weight * wave**2
+        if kondo:
+            sources.append(dict(channel_id=identifier, intensity_multiplier=1., coupling=row['coupling'],
+                exchange_over_v2_inv_ev=row['exchange_over_v2_inv_ev'], degenerate_channels=row['degenerate_channels']))
+            continue
         sources.append(dict(transition_id=identifier, intensity_multiplier=weight,
                             energy_ev=row.get('energy_ev'), final_charge=row.get('final_charge'),
                             final_multiplicity=row['final_multiplicity'], final_root=row.get('final_root'),
@@ -150,11 +161,16 @@ def compute_maps(cubes, table, parameters):
     metadata = dict(schema_version=1, parameters=p, units=units, sources=sources,
                     plane_frame=dict(reference_point=p['plane']['center'], normal=n.tolist(), u=u.tolist(), v=v.tolist()),
                     minimum=float(result.min()), maximum=float(result.max()),
-                    panels=p['transition_ids'] if p['kind'] == 'individual' else ['spectral_blend'],
+                    panels=ids if p['kind'] == 'individual' else ['spectral_blend'],
                     model='meqpy Fourier vacuum propagation; spin-free s-tip intensity; no absolute current calibration')
-    metadata['panel_labels'] = ([f"{r.get('side') or r['transition_id']} r{r.get('final_root')} · M={r['final_multiplicity']}\n"
+    metadata['panel_labels'] = ([] if kondo else [f"{r.get('side') or r['transition_id']} r{r.get('final_root')} · M={r['final_multiplicity']}\n"
                                  f"W={r['selected_strength']:.3f}" for r in sources]
                                 if p['kind'] == 'individual' else ['Spectral blend'])
+    if kondo:
+        metadata.update(observable='kondo_channel_intensity',
+            model='individual normalized Kondo eigenchannel; s-tip Fourier vacuum propagation; no NRG spectral weight',
+            parameters=p, warnings=table['warnings'], chemical_potential_ev=table['parameters']['chemical_potential_ev'])
+        metadata['panel_labels'] = [f"{r['channel_id']} · {r['coupling']}\nj/V²={r['exchange_over_v2_inv_ev']:.3f} eV⁻¹" for r in sources]
     return dict(intensity=result, u_angstrom=x, v_angstrom=y,
                 heights_angstrom=np.asarray(p['heights_angstrom'])), metadata
 

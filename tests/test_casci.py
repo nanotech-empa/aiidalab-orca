@@ -65,6 +65,25 @@ def test_noiter_is_not_overridden_by_inherited_scf_controls():
     assert 'NoIter' in params['input_keywords'] and 'UNO' in params['input_keywords']
 
 
+def test_optional_ci_solver_and_limits_preserve_frozen_input_and_legacy_defaults():
+    ref = reference_data()
+    space = {'electrons':3,'orbitals':[6,7]}
+    legacy = casci.casci_input(ref,space,{})
+    assert 'CIStep' not in legacy and 'MaxIter' not in legacy and 'MaxDim' not in legacy
+    for solver in ('CSFCI','ACCCI'):
+        text = casci.casci_input(ref,space,{
+            'ci_solver':solver.lower(),'ci_maxiter':256,'ci_maxdim':10})
+        assert f' CIStep {solver}\n' in text
+        assert ' ci\n  TPrintWF 1e-06\n  MaxIter 256\n  MaxDim 10\n end' in text
+        assert 'maxiter 1\n' in text and 'NoIter' in text
+        assert all(f'{kind}Orbs unchanged' in text for kind in ('Act','Int','Ext'))
+        assert 'ETol' not in text and 'RTol' not in text
+    for values in ({'ci_solver':'ICE'},{'ci_solver':True},{'ci_solver':'ACCCI\nmaxiter 2'},
+                   {'ci_maxiter':0},{'ci_maxiter':True},{'ci_maxdim':1.5},{'ci_maxdim':'20'}):
+        with pytest.raises(ValueError):
+            casci.casci_settings(values,ref,space)
+
+
 def test_parser_reads_roots_not_state_average_and_requires_fixed_orbitals():
     ref = reference_data()
     space = {'electrons':3,'orbitals':[6,7]}

@@ -148,3 +148,32 @@ prepared common orbitals and submitted CASCI(2,2) with three singlet roots
 through the app and daemon. It displayed the results and then offered explicit
 reuse of the same request. These tests establish pipeline behavior; neither
 small active space is presented as a converged molecular spectrum.
+
+### Numerical CI controls
+
+The backend and submission service accept optional `ci_solver` (`CSFCI` or
+`ACCCI`), `ci_maxiter` and `ci_maxdim` settings. Omitting them preserves the
+existing ORCA defaults and input text. Explicit values are saved in the AiiDA
+settings and rendered in `%casscf` / its `ci` block. The outer CASCI macro-step
+remains fixed at one, every orbital subspace stays unchanged, and CI energy and
+residual convergence tolerances are not relaxed. These controls do not change
+the active space or the Hamiltonian and do not enable automatic retries.
+
+The app exposes these settings under **CASCI resources and advanced settings**.
+Leave either limit blank to use the ORCA default, or enter a positive integer
+such as 256 for the CI iteration ceiling. Opening a saved calculation restores
+its explicit solver and limits, so reviewing it preserves its request and reuse
+identity. Changing a control invalidates the earlier review before submission.
+ACCCI is shown as validation pending and cannot be submitted from the GUI until
+its native wavefunction export has been validated; the backend remains available
+for explicit solver-validation calculations.
+
+`MaxDim` multiplies the number of roots to set the Davidson expansion space;
+increasing it can increase memory. Validate a solver change before applying it
+to a large calculation, and keep the resource budget explicit. See the
+[ORCA CI solver documentation](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/CASSCF.html#ci-solvers-csfci-accci-ice).
+
+The optional CI comparison CalcJob checks two preserved native exports in the
+same orbital basis. It compares raw CI norms, energies and projectors of
+degenerate-state groups without renormalizing coefficients or fitting orbital
+phases. The report is stored as an AiiDA output linked to both exports.

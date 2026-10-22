@@ -137,6 +137,24 @@ def parse_states(text, reference, space, settings):
                        'energy_hartree':found[(mult, root)]} for mult, root in sorted(expected)]}
 
 
+def read_state_summary(handle):
+    """Stream the lines used by ``parse_states`` without retaining CI vectors.
+
+    Determinant printing can produce gigabytes of output. Keep every matching
+    line throughout the file, including late warnings and repeated blocks, so
+    the existing validation still sees contradictory or unconverged results.
+    This does not modify the full retrieved output or its CI coefficients.
+    """
+    markers = re.compile(
+        r'ORCA TERMINATED NORMALLY|Number of active (?:electrons|orbitals)|'
+        r'Total number of electrons|^\s*Active\s+\d+\s*-\s*\d+|'
+        r'CI-PROBLEM SOLVED|>>>\s*CAS-CI\.|'
+        r'^\s*(?:Active|Internal|External)\s+Orbitals|'
+        r'CAS-SCF STATES FOR BLOCK|^\s*ROOT\s+\d+\s*:|'
+        r'Spin-Determinant CI Printing|DENSITY MATRIX|^\s*WARNING:', re.I)
+    return ''.join(line for line in handle if markers.search(line))
+
+
 def validate_reference(reference_node, source_remote):
     from .fixed_orbitals_data import CALCULATION, PREPARATION
     producer = reference_node.creator
@@ -202,7 +220,8 @@ class CasciParser(Parser):
             reference = self.node.inputs.orbital_reference.get_dict()
             space = active_space(self.node.inputs.active_space.get_dict(), reference)
             settings = casci_settings(self.node.inputs.settings.get_dict(), reference, space)
-            text = self.retrieved.base.repository.get_object_content('aiida.out')
+            with self.retrieved.base.repository.open('aiida.out', mode='r') as handle:
+                text = read_state_summary(handle)
             data = parse_states(text, reference, space, settings)
             data['orbital_reference_uuid'] = str(self.node.inputs.orbital_reference.uuid)
             data['structure_uuid'] = str(self.node.inputs.structure.uuid)
@@ -263,7 +282,8 @@ class CasciWorkChain(engine.WorkChain):
                         continue
                     # Energies and CI printout survive scratch deletion. Later
                     # Dyson consumers must separately check their required GBW.
-                    text = node.outputs.retrieved.base.repository.get_object_content('aiida.out')
+                    with node.outputs.retrieved.base.repository.open('aiida.out', mode='r') as handle:
+                        text = read_state_summary(handle)
                     parsed = parse_states(text, ref, self.ctx.space, self.ctx.settings)
                     if parsed['model'] != node.outputs.state_energies.get_dict().get('model'):
                         continue

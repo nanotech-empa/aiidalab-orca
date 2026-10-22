@@ -20,8 +20,20 @@ def write_export(path, payload):
                 json.dump(payload,text,allow_nan=False,separators=(',',':'))
 
 
+def checked_source_output(path, expected):
+    """Validate a staged native log before interpreting any printed CI vector."""
+    if expected is None:  # Previously submitted requests used repository uploads.
+        return None
+    with path.open('rb') as handle:
+        digest = hashlib.file_digest(handle, 'sha256').hexdigest()
+    if digest != expected:
+        raise ValueError('CASCI output checksum differs from its retrieved provenance')
+    return digest
+
+
 def main():
     request = json.loads(Path('request.json').read_text())
+    output_sha256 = checked_source_output(Path('aiida.out'), request.get('source_output_sha256'))
     source = Path('aiida.gbw')
     item = request['file']
     if source.stat().st_size != item['size_bytes']:
@@ -82,6 +94,8 @@ def main():
                 'sha256':sha,'size_bytes':size,'source_gbw_sha256':digest,
                 'ci_norms':{key:r['norm'] for key,r in roots.items()},'retrieved_copy':retrieved,
                 'basis_available':True,'format':'orca_json_and_printed_ci_gzip_v1'}
+    if output_sha256 is not None:
+        artifact['source_output_sha256'] = output_sha256
     Path('artifact.json').write_text(json.dumps(artifact,indent=2,allow_nan=False))
     # Delete staging copies, never files in the source calculation.
     source.unlink()

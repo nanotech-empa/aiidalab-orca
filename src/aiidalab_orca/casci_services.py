@@ -83,7 +83,8 @@ def prepare_casci(reference_uuid, electrons, norb, values, force=False):
                 continue
             old_settings = casci.casci_settings(old.inputs.settings.get_dict(), ref, old.inputs.active_space.get_dict())
             if casci.signature(node.outputs.orbital_reference.uuid, old.inputs.active_space.get_dict(), old_settings, old.inputs.code.uuid) == expected:
-                parsed = casci.parse_states(old.outputs.retrieved.base.repository.get_object_content('aiida.out'), ref, space, s)
+                with old.outputs.retrieved.base.repository.open('aiida.out', mode='r') as handle:
+                    parsed = casci.parse_states(casci.read_state_summary(handle), ref, space, s)
                 if (parsed['states'] == old.outputs.state_energies.get_dict()['states'] and
                         parsed['model'] == old.outputs.state_energies.get_dict().get('model')):
                     reuse_uuid = str(uuid)

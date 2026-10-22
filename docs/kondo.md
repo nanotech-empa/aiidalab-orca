@@ -78,10 +78,16 @@ acceptance tolerance, physical initial state or charge-alignment assumption is
 a review decision. Current advanced CI controls are documented in
 [CASCI](casci.md); their presence does not enable automatic retries.
 
-The detailed operating procedure for agents is maintained in the shared
-`nanotech-empa/aiida-aiidalab-dev` repository, under
-`aiida-aiidalab-dev/references/orca-kondo-validation.md`. It separates current
-enforcement, benchmark-specific checks and the proposed coordinator contract.
+The detailed [operating guide for agents in the AiiDAlab chat](
+../src/aiidalab_orca/knowledge/casci-kondo.md) is maintained and packaged inside
+this app. The shared chat loads it through the `aiidalab_assistant.workflow_guides`
+entry point for ORCA and relevant CASCI/Dyson/Kondo questions, records its content
+hash, and exposes `read_workflow_guide` for explicit consultation. This requires
+the companion shared-assistant guide loader; an older chat does not consult it
+automatically. Reopen the app after updating the installed chat package/metadata.
+The guide distinguishes current enforcement, benchmark-specific checks and the
+proposed coordinator contract. It does not grant submission permissions or add
+CASCI/Dyson/Kondo editing tools to the chat.
 
 ## Scientific definition
 

@@ -27,8 +27,9 @@ phase fitting or numerical grid renormalization is performed during combination.
 
 ## Validation and guided recovery
 
-The collapsed **Quick guide** in the Kondo panel describes preparation and
-recovery. A successful process is a necessary check; it does not establish that
+The collapsed **Quick guide** is available at the start of **States & Dyson**
+and in the Kondo panel, before expensive steps are submitted. It describes
+preparation and recovery. A successful process is a necessary check; it does not establish that
 the selected orbitals, molecular charge or number of roots describe the experiment.
 
 The reusable stages already enforce several checks:

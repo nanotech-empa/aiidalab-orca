@@ -85,8 +85,11 @@ def stage(info, source, location, target):
 def stage_native_output(info, calc):
     """Copy the original log remotely when present; verify its repository hash."""
     retrieved = calc.outputs.retrieved
+    digest = hashlib.sha256()
     with retrieved.base.repository.open('aiida.out', mode='rb') as handle:
-        digest = hashlib.file_digest(handle, 'sha256').hexdigest()
+        for chunk in iter(lambda: handle.read(1024*1024), b''):
+            digest.update(chunk)
+    checksum = digest.hexdigest()
     if 'remote_folder' in calc.outputs:
         remote = calc.outputs.remote_folder
         base = remote.get_remote_path()
@@ -97,9 +100,9 @@ def stage_native_output(info, calc):
         else:
             info.remote_copy_list.append((remote.computer.uuid,
                 str(PurePosixPath(base)/'aiida.out'), 'aiida.out'))
-            return digest
+            return checksum
     info.local_copy_list.append((retrieved.uuid, 'aiida.out', 'aiida.out'))
-    return digest
+    return checksum
 
 
 def script(folder, name, request):

@@ -96,3 +96,23 @@ def test_staged_log_checksum_checked_before_any_wavefunction_or_ci_interpretatio
     (tmp_path/'aiida.out').write_bytes(b'correct output')
     assert export_dyson.checked_source_output(tmp_path/'aiida.out', expected) == expected
     assert export_dyson.checked_source_output(tmp_path/'missing', None) is None
+
+
+def test_repository_hash_accepts_compressed_backend_read_stream():
+    from types import SimpleNamespace
+    class ReadStream:
+        def __enter__(self):
+            self.buffer = io.BytesIO(b'compressed repository content')
+            return self
+        def __exit__(self, *args):
+            self.buffer.close()
+        def read(self, count):
+            return self.buffer.read(count)
+    retrieved = SimpleNamespace(uuid='retrieved-uuid', base=SimpleNamespace(
+        repository=SimpleNamespace(open=lambda *a,**k:ReadStream())))
+    class Outputs(dict):
+        __getattr__ = dict.__getitem__
+    calc = SimpleNamespace(outputs=Outputs(retrieved=retrieved))
+    info = SimpleNamespace(local_copy_list=[], remote_copy_list=[])
+    assert dyson.stage_native_output(info, calc) == hashlib.sha256(b'compressed repository content').hexdigest()
+    assert info.local_copy_list == [('retrieved-uuid','aiida.out','aiida.out')]

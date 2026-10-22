@@ -148,6 +148,7 @@ prepared common orbitals and submitted CASCI(2,2) with three singlet roots
 through the app and daemon. It displayed the results and then offered explicit
 reuse of the same request. These tests establish pipeline behavior; neither
 small active space is presented as a converged molecular spectrum.
+
 ### Numerical CI controls
 
 The backend and submission service accept optional `ci_solver` (`CSFCI` or
@@ -162,3 +163,8 @@ the active space or the Hamiltonian and do not enable automatic retries.
 increasing it can increase memory. Validate a solver change before applying it
 to a large calculation, and keep the resource budget explicit. See the
 [ORCA CI solver documentation](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/CASSCF.html#ci-solvers-csfci-accci-ice).
+
+The optional CI comparison CalcJob checks two preserved native exports in the
+same orbital basis. It compares raw CI norms, energies and projectors of
+degenerate-state groups without renormalizing coefficients or fitting orbital
+phases. The report is stored as an AiiDA output linked to both exports.

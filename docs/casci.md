@@ -159,6 +159,15 @@ remains fixed at one, every orbital subspace stays unchanged, and CI energy and
 residual convergence tolerances are not relaxed. These controls do not change
 the active space or the Hamiltonian and do not enable automatic retries.
 
+The app exposes these settings under **CASCI resources and advanced settings**.
+Leave either limit blank to use the ORCA default, or enter a positive integer
+such as 256 for the CI iteration ceiling. Opening a saved calculation restores
+its explicit solver and limits, so reviewing it preserves its request and reuse
+identity. Changing a control invalidates the earlier review before submission.
+ACCCI is shown as validation pending and cannot be submitted from the GUI until
+its native wavefunction export has been validated; the backend remains available
+for explicit solver-validation calculations.
+
 `MaxDim` multiplies the number of roots to set the Davidson expansion space;
 increasing it can increase memory. Validate a solver change before applying it
 to a large calculation, and keep the resource budget explicit. See the

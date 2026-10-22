@@ -9,6 +9,19 @@ from . import casci_services as service
 from .state_levels import StateEnergyLevels
 
 
+def _optional_ci_integer(value, label):
+    value = value.strip()
+    if not value:
+        return None
+    try:
+        result = int(value)
+    except ValueError:
+        raise ValueError(f'{label} must be a positive integer, or blank for the ORCA default') from None
+    if result < 1:
+        raise ValueError(f'{label} must be a positive integer, or blank for the ORCA default')
+    return result
+
+
 class CasciStates(ipw.VBox):
     def __init__(self, data, on_inspect=None):
         self.source_uuid = str(data['uuid'])
@@ -62,9 +75,20 @@ class CasciStates(ipw.VBox):
         self.walltime = ipw.BoundedIntText(value=s['wallclock_seconds']//60,min=1,max=10080,description='Wall time (minutes)',style=style)
         self.threshold = ipw.FloatText(value=1e-9 if data.get('imported_reference') else 1e-6,
                                        description='CI print threshold',style=style)
+        self.ci_solver = ipw.Dropdown(options=[('ORCA default',None),('CSFCI','CSFCI'),
+            ('ACCCI (validation pending)','ACCCI')],description='CI solver',style=style,layout=wide)
+        self.ci_maxiter = ipw.Combobox(value='',options=['64','128','256','512','1024'],ensure_option=False,
+            placeholder='ORCA default (64)',description='Max. CI iterations',style=style)
+        self.ci_maxdim = ipw.Combobox(value='',options=['5','10','20'],ensure_option=False,
+            placeholder='ORCA default (10)',description='Davidson MaxDim',style=style)
         self.force = ipw.Checkbox(value=False,description='Recompute this CASCI sector',layout=ipw.Layout(width='auto'))
         self.space_info = ipw.HTML()
-        advanced = ipw.Accordion(children=[ipw.VBox([self.aux,self.threshold,self.nprocs,self.memory,self.walltime,self.force])],selected_index=None)
+        advanced = ipw.Accordion(children=[ipw.VBox([self.aux,self.threshold,
+            self.ci_solver,self.ci_maxiter,self.ci_maxdim,ipw.HTML(
+                '<p>Blank CI limits use ORCA defaults. More iterations keep the same convergence tolerances. '
+                'Larger MaxDim increases the Davidson space and memory use. '
+                'ACCCI remains available for backend validation; its native wavefunction export is not yet validated for app submission.</p>'),
+            self.nprocs,self.memory,self.walltime,self.force])],selected_index=None)
         advanced.set_title(0,'CASCI resources and advanced settings')
         self.review = ipw.Button(description='Review CASCI calculation',icon='list',button_style='primary',layout=ipw.Layout(width='auto'))
         self.review.on_click(self._review_casci)
@@ -101,6 +125,7 @@ class CasciStates(ipw.VBox):
             ipw.HBox([self.reference,self.refresh],layout=ipw.Layout(flex_flow='row wrap')), self.space_info,
             self.analysis,self.states_view,self.dyson_box])
         for control in (self.electrons,self.norb,self.charge,self.mult,self.roots,self.aux,self.threshold,
+                        self.ci_solver,self.ci_maxiter,self.ci_maxdim,
                         self.nprocs,self.memory,self.walltime,self.force,self.common_force):
             control.observe(self._invalidate,names='value')
         self.electrons.observe(self._refresh_diagram,names='value')
@@ -238,6 +263,9 @@ class CasciStates(ipw.VBox):
         self.roots.value = s['nroots']
         self.aux.value = s['auxiliary_basis']
         self.threshold.value = s['tprintwf']
+        self.ci_solver.value = s.get('ci_solver')
+        self.ci_maxiter.value = '' if s.get('ci_maxiter') is None else str(s['ci_maxiter'])
+        self.ci_maxdim.value = '' if s.get('ci_maxdim') is None else str(s['ci_maxdim'])
         self.nprocs.value = s['nprocs']
         self.memory.value = s['memory_mb']
         self.walltime.value = s['wallclock_seconds']//60
@@ -273,8 +301,13 @@ class CasciStates(ipw.VBox):
         try:
             if not self.reference.value:
                 raise ValueError('Prepare or select common orbitals first')
+            if self.ci_solver.value == 'ACCCI':
+                raise ValueError('ACCCI wavefunction export is not yet validated in this draft. Select CSFCI for app submission.')
             values = {'charge':self.charge.value,'multiplicity':self.mult.value,'nroots':self.roots.value,
                 'auxiliary_basis':self.aux.value.strip(),'tprintwf':self.threshold.value,
+                'ci_solver':self.ci_solver.value,
+                'ci_maxiter':_optional_ci_integer(self.ci_maxiter.value,'Max. CI iterations'),
+                'ci_maxdim':_optional_ci_integer(self.ci_maxdim.value,'Davidson MaxDim'),
                 'nprocs':self.nprocs.value,'memory_mb':self.memory.value,'wallclock_seconds':self.walltime.value*60}
             self.plan = service.prepare_casci(self.reference.value,self.electrons.value,self.norb.value,values,self.force.value)
             text = 'Reuse the available CASCI states.' if self.plan['action']=='reuse' else 'Run one fixed-geometry, fixed-orbital CASCI calculation.'

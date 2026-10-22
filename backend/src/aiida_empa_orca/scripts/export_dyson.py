@@ -1,6 +1,7 @@
 """Preserve a self-contained CASCI wavefunction export inside its CalcJob."""
 import gzip
 import hashlib
+import io
 import json
 from pathlib import Path
 import shutil
@@ -11,8 +12,28 @@ from dyson_orca_tools.io.orca_output import parse_orca_output
 from aiida_empa_orca.dyson_data import checked_ci
 
 
+def write_export(path, payload):
+    """Stream the existing JSON format without allocating a second full export."""
+    with path.open('wb') as raw:
+        with gzip.GzipFile(fileobj=raw,mode='wb',mtime=0) as zipped:
+            with io.TextIOWrapper(zipped,encoding='utf-8',newline='') as text:
+                json.dump(payload,text,allow_nan=False,separators=(',',':'))
+
+
+def checked_source_output(path, expected):
+    """Validate a staged native log before interpreting any printed CI vector."""
+    if expected is None:  # Previously submitted requests used repository uploads.
+        return None
+    with path.open('rb') as handle:
+        digest = hashlib.file_digest(handle, 'sha256').hexdigest()
+    if digest != expected:
+        raise ValueError('CASCI output checksum differs from its retrieved provenance')
+    return digest
+
+
 def main():
     request = json.loads(Path('request.json').read_text())
+    output_sha256 = checked_source_output(Path('aiida.out'), request.get('source_output_sha256'))
     source = Path('aiida.gbw')
     item = request['file']
     if source.stat().st_size != item['size_bytes']:
@@ -62,9 +83,7 @@ def main():
     path = Path('exports/state.json.gz')
     payload = {'schema_version':1,'state_uuid':request['state_uuid'],'identity':identity,
                'wavefunction':state,'ci_roots':roots,'source_gbw_sha256':digest}
-    with path.open('wb') as raw:
-        with gzip.GzipFile(fileobj=raw,mode='wb',mtime=0) as zipped:
-            zipped.write(json.dumps(payload,allow_nan=False,separators=(',',':')).encode())
+    write_export(path,payload)
     with path.open('rb') as handle:
         sha = hashlib.file_digest(handle,'sha256').hexdigest()
     size = path.stat().st_size
@@ -75,6 +94,8 @@ def main():
                 'sha256':sha,'size_bytes':size,'source_gbw_sha256':digest,
                 'ci_norms':{key:r['norm'] for key,r in roots.items()},'retrieved_copy':retrieved,
                 'basis_available':True,'format':'orca_json_and_printed_ci_gzip_v1'}
+    if output_sha256 is not None:
+        artifact['source_output_sha256'] = output_sha256
     Path('artifact.json').write_text(json.dumps(artifact,indent=2,allow_nan=False))
     # Delete staging copies, never files in the source calculation.
     source.unlink()

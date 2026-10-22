@@ -82,6 +82,29 @@ def stage(info, source, location, target):
         info.remote_copy_list.append((source.computer.uuid,location['path'],target))
 
 
+def stage_native_output(info, calc):
+    """Copy the original log remotely when present; verify its repository hash."""
+    retrieved = calc.outputs.retrieved
+    digest = hashlib.sha256()
+    with retrieved.base.repository.open('aiida.out', mode='rb') as handle:
+        for chunk in iter(lambda: handle.read(1024*1024), b''):
+            digest.update(chunk)
+    checksum = digest.hexdigest()
+    if 'remote_folder' in calc.outputs:
+        remote = calc.outputs.remote_folder
+        base = remote.get_remote_path()
+        try:
+            remote_files(remote.computer, base, names=['aiida.out'])
+        except (FileNotFoundError, ValueError):
+            pass
+        else:
+            info.remote_copy_list.append((remote.computer.uuid,
+                str(PurePosixPath(base)/'aiida.out'), 'aiida.out'))
+            return checksum
+    info.local_copy_list.append((retrieved.uuid, 'aiida.out', 'aiida.out'))
+    return checksum
+
+
 def script(folder, name, request):
     with folder.open('request.json','w') as handle:
         json.dump(request,handle,allow_nan=False)
@@ -113,7 +136,8 @@ class StateExportCalculation(engine.CalcJob):
             raise ValueError('Export the CASCI wavefunction on its original computer')
         location = self.inputs.location.get_dict()
         info = common.CalcInfo()
-        info.local_copy_list,info.remote_copy_list = [(calc.outputs.retrieved.uuid,'aiida.out','aiida.out')],[]
+        info.local_copy_list,info.remote_copy_list = [],[]
+        output_sha256 = stage_native_output(info, calc)
         item = next(row for row in location['files'] if row['name'] == 'aiida.gbw')
         source = self.inputs.source
         if location['uuid'] != str(source.uuid):
@@ -134,6 +158,7 @@ class StateExportCalculation(engine.CalcJob):
             json.dump({'MOCoefficients':True,'Basisset':True,'1elIntegrals':['S'],'JSONFormats':['json']},handle)
         request = {'identity':self.inputs.state_energies.get_dict(),'state_uuid':str(self.inputs.state_energies.uuid),
                    'file':item,'threshold_mb':policy['threshold_mb'],
+                   'source_output_sha256':output_sha256,
                    'positions':calc.inputs.structure.get_ase().positions.tolist(),
                    'atomic_numbers':calc.inputs.structure.get_ase().numbers.tolist()}
         script(folder,'export_dyson.py',request)
@@ -150,6 +175,11 @@ class StateExportParser(Parser):
             data = json.loads(self.retrieved.base.repository.get_object_content('artifact.json'))
             if data['state_uuid'] != str(self.node.inputs.state_energies.uuid):
                 raise ValueError('Export identity differs from the requested CASCI states')
+            if 'request.json' in self.node.base.repository.list_object_names():
+                request = json.loads(self.node.base.repository.get_object_content('request.json'))
+                expected = request.get('source_output_sha256')
+                if expected and data.get('source_output_sha256') != expected:
+                    raise ValueError('Exported CI output checksum differs from the staged request')
             if data['size_bytes'] < 1 or len(data['sha256']) != 64 or not data['ci_norms']:
                 raise ValueError('Incomplete export metadata')
             if 'remote_stash' not in self.node.outputs:

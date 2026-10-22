@@ -45,7 +45,8 @@ def casci_settings(values, reference, space):
                 'nprocs':reference['settings']['nprocs'], 'memory_mb':reference['settings']['memory_mb'],
                 'wallclock_seconds':reference['settings']['wallclock_seconds'],
                 'auxiliary_basis': (reference['settings']['basis']+'/C' if reference['settings']['basis'] in
-                                    ('def2-SVP','def2-TZVP','def2-TZVPP') else 'AutoAux'), 'tprintwf':1e-6}
+                                    ('def2-SVP','def2-TZVP','def2-TZVPP') else 'AutoAux'), 'tprintwf':1e-6,
+                'ci_solver':None, 'ci_maxiter':None, 'ci_maxdim':None}
     if set(values)-set(defaults):
         raise ValueError('Unknown CASCI setting')
     s = defaults | values
@@ -54,6 +55,13 @@ def casci_settings(values, reference, space):
             raise ValueError(f'{key} must be an integer'+('' if key == 'charge' else ' greater than zero'))
     if s['memory_mb'] < 256*s['nprocs']:
         raise ValueError('Provide at least 256 MiB per process')
+    if s['ci_solver'] is not None:
+        if not isinstance(s['ci_solver'], str) or s['ci_solver'].upper() not in ('CSFCI', 'ACCCI'):
+            raise ValueError('Choose the full-CAS CI solver CSFCI or ACCCI')
+        s['ci_solver'] = s['ci_solver'].upper()
+    for key in ('ci_maxiter', 'ci_maxdim'):
+        if s[key] is not None and (type(s[key]) is not int or s[key] < 1):
+            raise ValueError(f'{key} must be a positive integer')
     if abs(s['charge']-reference['charge']) > 1:
         raise ValueError('This step supports the reference charge and its N±1 neighbours')
     from .protocols import _token
@@ -85,11 +93,14 @@ def casci_input(reference, space, settings):
     if 'basis' in source['input_blocks']:
         params['input_blocks']['basis'] = source['input_blocks']['basis']
     nel = space['electrons']-s['charge']+reference['charge']
+    solver = f' CIStep {s["ci_solver"]}\n' if s['ci_solver'] is not None else ''
+    limits = ''.join(f'  {keyword} {s[key]}\n' for key, keyword in
+                     (('ci_maxiter', 'MaxIter'), ('ci_maxdim', 'MaxDim')) if s[key] is not None)
     text = ('%moinp "reference.gbw"\n'
             f'%casscf\n nel {nel}\n norb {len(space["orbitals"])}\n mult {s["multiplicity"]}\n'
-            f' nroots {s["nroots"]}\n maxiter 1\n TrafoStep RI\n'
+            f' nroots {s["nroots"]}\n maxiter 1\n TrafoStep RI\n{solver}'
             ' ActOrbs unchanged\n IntOrbs unchanged\n ExtOrbs unchanged\n printwf det\n'
-            f' ci\n  TPrintWF {s["tprintwf"]:.12g}\n end\nend\n'
+            f' ci\n  TPrintWF {s["tprintwf"]:.12g}\n{limits} end\nend\n'
             '%output\n Print[P_Basis] 2\n Print[P_MOs] 1\nend\n')
     return text + render_input(params, int(.75*s['memory_mb']/s['nprocs']), 'aiida.coords.xyz')
 

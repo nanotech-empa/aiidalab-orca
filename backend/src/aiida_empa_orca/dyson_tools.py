@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def main():
-    names = ('export_dyson.py','compute_dyson.py','dyson_cubes.py','dyson_maps.py','render_maps.py')
+    names = ('export_dyson.py','compute_dyson.py','compute_kondo.py','dyson_cubes.py','dyson_maps.py','render_maps.py')
     if len(sys.argv) != 2 or sys.argv[1] not in names or not Path(sys.argv[1]).is_file():
         raise SystemExit('Usage: orca-dyson {'+'|'.join(names)+'}')
     os.environ.setdefault('OMP_NUM_THREADS','1')

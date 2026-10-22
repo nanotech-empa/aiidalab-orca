@@ -1,0 +1,15 @@
+{
+  "reference": "https://doi.org/10.1103/PhysRevB.110.165113",
+  "source": "https://arxiv.org/html/2405.15958v2#A5.T7",
+  "credit": "Calvo-Fernández et al., PRB 110, 165113 (2024), Tables 3 and 7; CC BY 4.0",
+  "scope": "Six printed frontier components and two doublets per charging direction only; rounded reduced amplitudes. This is a truncated algebra check, not reproduction of Figure 7 or all CAS(12,12) states.",
+  "spin": 1,
+  "reported_chemical_potential_ev": 4,
+  "energy_convention": "Use Table 3 costs as printed; its caption says mu is already included. Do not apply mu=4 again. Full raw energies are required for a Figure 7 chemical-potential scan.",
+  "multiplets": [
+    {"id": "M0minus", "side": "removal", "spin": 0.5, "printed_cost_ev": 8.7642, "reduced_amplitudes": [0.16, 0, 0, -0.93, 0, 0]},
+    {"id": "M1minus", "side": "removal", "spin": 0.5, "printed_cost_ev": 8.9630, "reduced_amplitudes": [0, 0.19, -0.89, 0, -0.21, -0.03]},
+    {"id": "M0plus", "side": "addition", "spin": 0.5, "printed_cost_ev": 3.8533, "reduced_amplitudes": [0, -0.11, 1.14, 0, 0.22, 0.01]},
+    {"id": "M1plus", "side": "addition", "spin": 0.5, "printed_cost_ev": 4.0815, "reduced_amplitudes": [-0.21, 0, 0, 1.11, 0, 0]}
+  ]
+}

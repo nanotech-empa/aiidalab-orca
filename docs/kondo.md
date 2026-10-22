@@ -25,6 +25,63 @@ cube retention control applies to the resulting channel cubes. Native grids
 must share their origin, spacing, dimensions and atom geometry; no interpolation,
 phase fitting or numerical grid renormalization is performed during combination.
 
+## Validation and guided recovery
+
+The collapsed **Quick guide** in the Kondo panel describes preparation and
+recovery. A successful process is a necessary check; it does not establish that
+the selected orbitals, molecular charge or number of roots describe the experiment.
+
+The reusable stages already enforce several checks:
+
+| Stage | Enforced check | Response when it fails |
+| --- | --- | --- |
+| CASCI / Dyson source | Common orbital identity, geometry, active indices, charge/electron count and allowed spin changes | Stop and identify the incompatible inputs |
+| Native CI output | The convergence guard in companion [PR 25](https://github.com/nanotech-empa/aiidalab-orca/pull/25) rejects explicit CI nonconvergence; [PR 26](https://github.com/nanotech-empa/aiidalab-orca/pull/26) streams large state summaries | Preserve the failed attempt; do not export its states as accepted results |
+| Export / Dyson | Preserved wavefunction identity, file checksums and raw printed CI norms | Restore the exact source or explicitly repeat the affected sector with reviewed settings; never renormalize a failed CI vector |
+| Exchange | Spin-pure initial S > 0, compatible signed Dyson amplitudes, positive charging costs and valid eigenpairs | Reject invalid inputs; report missing sectors, small gaps and degenerate channels |
+| Cubes / maps | Exact initial checkpoint, matching native grids, validated previews and explicit map settings | Recover the missing artifact at the earliest affected stage |
+
+These safeguards are distributed across native WorkChains, parsers and result
+records. **A single validation dashboard and adaptive CI recovery are not yet
+implemented.** The A2n benchmark additionally uses operational scripts for
+convergence trends, export audits, root-count comparisons and reopening results
+through the app. Those scripts are not a general app workflow.
+
+The intended automation preserves the separate stages and adds a coordinator:
+
+1. Save a reviewed calculation plan: geometry/common orbitals, active space,
+   charge/spin sectors, roots, numerical controls, codes, resource limits and
+   retention policy. An agent proposes choices; the user reviews scientific ones.
+2. Resolve compatible results through provenance and check the artifacts needed
+   by the next stage. An unreachable computer is **unavailable**, not proof of
+   deletion. Resume known process UUIDs after reconnection; do not resubmit them.
+3. Run deterministic checks automatically and save their evidence with the
+   producing AiiDA processes. Present **passed**, **running/waiting**, **review
+   needed** and **failed** separately, with a reason and a concrete next action.
+4. For a CI iteration limit, inspect root-resolved energy changes and residuals.
+   An explicitly approved, bounded policy may create a new attempt with a larger
+   iteration limit while retaining the same scientific inputs. Stagnation,
+   increasing residuals, crashes or exhausted limits require review. A larger
+   limit does not itself improve convergence, and rounded diagnostics do not
+   replace native convergence checks.
+5. Recheck the exported vectors and downstream observable. Compare exchange
+   matrices, leading eigenvalues and channel subspaces for increasing root
+   prefixes. Report finite-manifold changes without calling them an omitted-tail
+   error bound. Degenerate channels require a subspace comparison.
+6. Store the numerical maps and PNG/PDF figures as independent CalcJob outputs,
+   then reopen the exact results through Search. Keep plane, height, propagation
+   model and shared colour limits with the figure inputs.
+
+Changing the active space, orbital family, solver, integral approximation,
+acceptance tolerance, physical initial state or charge-alignment assumption is
+a review decision. Current advanced CI controls are documented in
+[CASCI](casci.md); their presence does not enable automatic retries.
+
+The detailed operating procedure for agents is maintained in the shared
+`nanotech-empa/aiida-aiidalab-dev` repository, under
+`aiida-aiidalab-dev/references/orca-kondo-validation.md`. It separates current
+enforcement, benchmark-specific checks and the proposed coordinator contract.
+
 ## Scientific definition
 
 The model follows Calvo-Fernández et al., [Phys. Rev. B 110, 165113 (2024)](

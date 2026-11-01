@@ -126,6 +126,7 @@ def test_finalizer_stops_before_orca_when_preparation_failed(tmp_path):
     from importlib.resources import files
     for script in ('core_orbitals.py', 'xps_validation.py', 'xps_finalize.py'):
         (tmp_path/script).write_text(files('aiida_empa_orca').joinpath('scripts', script).read_text())
+    (tmp_path/'tools.py').write_text(files('aiida_empa_orca').joinpath('tools.py').read_text())
     (tmp_path/'xps_request.json').write_text(json.dumps({'orca_executable':'/must-not-run'}))
     (tmp_path/'preparation.out').write_text('ORCA finished by error termination in SCF\n')
     # Supply the request fields used before native termination is inspected.
@@ -133,7 +134,8 @@ def test_finalizer_stops_before_orca_when_preparation_failed(tmp_path):
                'ground_energy_hartree':REFERENCE['ground_energy_hartree'],
                'spin_channel':'alpha','orca_executable':'/must-not-run'}
     (tmp_path/'xps_request.json').write_text(json.dumps(request))
-    result = subprocess.run([sys.executable, '-I', '-S', 'xps_finalize.py'], cwd=tmp_path,
+    result = subprocess.run([sys.executable, '-I', '-S', '-c',
+        "import runpy,sys; sys.argv=['orca-tools','xps_finalize.py']; runpy.run_path('tools.py')['main']()"], cwd=tmp_path,
                              capture_output=True, text=True)
     assert result.returncode != 0 and 'did not terminate normally' in result.stderr
     assert not (tmp_path/'aiida.out').exists()

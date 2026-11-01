@@ -10,10 +10,11 @@ from aiida_empa_orca.reuse import PROCESS_TYPE, validate_outputs
 from aiida_empa_orca.choices import METHODS
 from aiida_empa_orca.reference import PROCESS_TYPE as REFERENCE_PROCESS, ArtifactUnavailable, validate_outputs as validate_reference
 from .structure_io import formula_from_attributes
+from aiida_empa_orca.fixed_orbitals_data import PROCESS as IMPORT_PROCESS
 
 
 def search_runs(text="", state="", method="", since=None, until=None, offset=0, limit=15, kind=""):
-    filters = {"process_type": {"in": [PROCESS_TYPE, REFERENCE_PROCESS]}}
+    filters = {"process_type": {"in": [PROCESS_TYPE, REFERENCE_PROCESS, IMPORT_PROCESS]}}
     query = orm.QueryBuilder().append(
         orm.WorkChainNode, filters=filters, tag="run",
         project=["uuid", "label", "ctime", "attributes.process_state", "attributes.exit_status", "process_type"],
@@ -26,15 +27,16 @@ def search_runs(text="", state="", method="", since=None, until=None, offset=0, 
     skipped = 0
     for uuid, label, created, process_state, exit_status, process_type, structure, settings in query.iterall(batch_size=100):
         scf = process_type == REFERENCE_PROCESS
+        imported = process_type == IMPORT_PROCESS
         # The reference workflow has no optimize input. An outer join filtered
         # by that input link would still exclude it in the SQL WHERE clause.
-        optimized = False if scf else orm.load_node(uuid).inputs.optimize.value
-        operation = "scf" if scf else "optimization" if optimized else "structure"
+        optimized = False if scf or imported else orm.load_node(uuid).inputs.optimize.value
+        operation = "imported" if imported else "scf" if scf else "optimization" if optimized else "structure"
         status = ("succeeded" if exit_status == 0 else "failed") if process_state == "finished" else process_state
         date = created.astimezone(ZoneInfo("Europe/Zurich")).date()
         formula = formula_from_attributes(structure)
         if ((state and state != status) or (kind and kind != operation)
-                or (method and ((not optimized and not scf) or method != settings["method"]))
+                or (method and ((not optimized and not scf and not imported) or method != settings["method"]))
                 or (since and date < since) or (until and date > until)
                 or text.casefold() not in f"{uuid} {label} {formula}".casefold()):
             continue
@@ -53,11 +55,12 @@ def search_runs(text="", state="", method="", since=None, until=None, offset=0, 
 
 def inspect_run(uuid):
     node = orm.load_node(uuid)
-    if not isinstance(node, orm.WorkChainNode) or node.process_type not in (PROCESS_TYPE, REFERENCE_PROCESS):
-        raise ValueError("Select an ORCA geometry or SCF workflow.")
+    if not isinstance(node, orm.WorkChainNode) or node.process_type not in (PROCESS_TYPE, REFERENCE_PROCESS, IMPORT_PROCESS):
+        raise ValueError("Select an ORCA geometry, SCF or fixed-orbital import workflow.")
     scf = node.process_type == REFERENCE_PROCESS
+    imported = node.process_type == IMPORT_PROCESS
     data = {"uuid": str(node.uuid), "label": node.label, "settings": node.inputs.settings.get_dict(),
-            "input_uuid": str(node.inputs.structure.uuid), "optimize": not scf and node.inputs.optimize.value,
+            "input_uuid": str(node.inputs.structure.uuid), "optimize": not scf and not imported and node.inputs.optimize.value,
             "single_point": scf,
             "code_uuid": str(node.inputs.code.uuid) if "code" in node.inputs else None,
             "structure_uuid": None, "geometry_status": "No final geometry yet.",
@@ -69,7 +72,17 @@ def inspect_run(uuid):
             data["geometry_status"] = "Final geometry is available."
         except (KeyError, ValueError, OSError) as exc:
             data["geometry_status"] = f"Final geometry cannot be read: {exc}"
-    if node.is_finished_ok and (data["optimize"] or scf):
+    if node.is_finished_ok and imported:
+        from aiida_empa_orca.common_orbitals import reference_location
+        try:
+            reference_location(node)
+            data['reuse_status'] = 'Imported fixed orbitals are available for native CASCI calculations.'
+        except (FileNotFoundError, ValueError, KeyError) as exc:
+            data['reuse_status'] = 'Imported orbitals are unavailable; re-import the original source before computing: '+str(exc)
+        except Exception as exc:
+            data['reuse_status'] = ('Imported-orbital availability could not be checked; stored results remain accessible. '
+                                   f'Check remote access before reusing the orbitals: {type(exc).__name__}: {exc}')
+    elif node.is_finished_ok and (data["optimize"] or scf):
         try:
             if scf:
                 validate_reference(node.outputs)
@@ -95,7 +108,8 @@ class HistoryWidget(ipw.VBox):
         self.state = ipw.Dropdown(options=[("All states", "")] + [(s.capitalize(), s) for s in ["succeeded", "failed", "running", "waiting", "created", "excepted", "killed"]])
         self.method = ipw.Combobox(options=METHODS, placeholder="All methods", ensure_option=False)
         self.kind = ipw.Dropdown(options=[("All calculation types", ""), ("Geometry optimization", "optimization"),
-                                         ("Single-point SCF", "scf"), ("Structure only (legacy)", "structure")])
+                                         ("Single-point SCF", "scf"), ("Imported fixed orbitals", "imported"),
+                                         ("Structure only (legacy)", "structure")])
         self.since = ipw.DatePicker(description="From")
         self.until = ipw.DatePicker(description="To")
         self.search = ipw.Button(description="Search", icon="search", button_style="primary")
@@ -119,7 +133,7 @@ class HistoryWidget(ipw.VBox):
         load.on_click(lambda _: self._view_run(self.lookup_uuid.value.strip()))
         self.lookup_uuid.observe(lambda change: setattr(load, "disabled", not change["new"].strip()), names="value")
         self.advanced = ipw.Accordion(children=[ipw.VBox([
-            ipw.HTML("<p>Open a geometry or SCF workflow from this AiiDA database using its UUID.</p>"),
+            ipw.HTML("<p>Open a geometry, SCF or fixed-orbital import workflow from this AiiDA database using its UUID.</p>"),
             self.lookup_uuid, load,
         ])], selected_index=None)
         self.advanced.set_title(0, "Advanced search · open by UUID")
@@ -152,6 +166,8 @@ class HistoryWidget(ipw.VBox):
                 operation = f"{row['method']}/{row['basis']} optimization" if row["optimized"] else "Kept supplied geometry"
                 if row["single_point"]:
                     operation = f"{row['method']}/{row['basis']} single-point SCF"
+                elif row['operation'] == 'imported':
+                    operation = f"Imported fixed orbitals · {row['basis']} · reported generator {row['method']}"
                 info = (f"<b>{title}</b> · {row['formula']} · {row['state']}<br>"
                         f"{row['created']} · {operation} · "
                         f"charge {row['charge']}, multiplicity {row['multiplicity']} · {row['uuid'][:8]}")

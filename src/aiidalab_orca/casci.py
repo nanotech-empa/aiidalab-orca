@@ -35,15 +35,18 @@ class CasciStates(ipw.VBox):
         common_options = ipw.Accordion(children=[ipw.VBox([self.common_force,ipw.HTML(
             '<p>Regenerate from the saved SCF wavefunction without SCF iterations. Existing CASCI states remain linked to their original reference.</p>')])],selected_index=None)
         common_options.set_title(0,'Common-orbital regeneration')
+        if data.get('imported_reference'):
+            common_options.layout.display = 'none'
         self.reference = ipw.Dropdown(description='Common orbitals',style=style,layout=wide)
         self.reference.layout = ipw.Layout(width='auto', flex='1 1 auto', min_width='280px')
         self.reference.observe(self._reference_changed,names='value')
         self.refresh = ipw.Button(description='Refresh states',icon='refresh',layout=ipw.Layout(width='auto'))
         self.refresh.on_click(self._refresh)
         # An explicit small starting space, clearly requiring scientific review.
-        self.electrons = ipw.BoundedIntText(value=3 if s['multiplicity']%2==0 else 2,min=0,max=100,
+        space = data.get('active_space', {})
+        self.electrons = ipw.BoundedIntText(value=space.get('electrons',3 if s['multiplicity']%2==0 else 2),min=0,max=100,
                                            description='Active electrons (N)',style=style)
-        self.norb = ipw.BoundedIntText(value=2,min=1,max=50,description='Active orbitals',style=style)
+        self.norb = ipw.BoundedIntText(value=len(space.get('orbitals',[0,1])),min=1,max=50,description='Active orbitals',style=style)
         self.charge = ipw.Dropdown(options=[(f"N−1 electrons · charge {s['charge']+1:+d}",s['charge']+1),
                 (f"N electrons · charge {s['charge']:+d}",s['charge']),
                 (f"N+1 electrons · charge {s['charge']-1:+d}",s['charge']-1)],value=s['charge'],
@@ -57,7 +60,8 @@ class CasciStates(ipw.VBox):
         self.nprocs = ipw.BoundedIntText(value=s['nprocs'],min=1,max=128,description='Processes',style=style)
         self.memory = ipw.BoundedIntText(value=s['memory_mb'],min=256,max=1048576,description='Total memory (MiB)',style=style)
         self.walltime = ipw.BoundedIntText(value=s['wallclock_seconds']//60,min=1,max=10080,description='Wall time (minutes)',style=style)
-        self.threshold = ipw.FloatText(value=1e-6,description='CI print threshold',style=style)
+        self.threshold = ipw.FloatText(value=1e-9 if data.get('imported_reference') else 1e-6,
+                                       description='CI print threshold',style=style)
         self.force = ipw.Checkbox(value=False,description='Recompute this CASCI sector',layout=ipw.Layout(width='auto'))
         self.space_info = ipw.HTML()
         advanced = ipw.Accordion(children=[ipw.VBox([self.aux,self.threshold,self.nprocs,self.memory,self.walltime,self.force])],selected_index=None)

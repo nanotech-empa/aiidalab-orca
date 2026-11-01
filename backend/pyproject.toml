@@ -23,6 +23,7 @@ orca-dyson = "aiida_empa_orca.dyson_tools:main"
 orca-tools = "aiida_empa_orca.tools:main"
 
 [project.entry-points."aiida.calculations"]
+"empa_orca.import_fixed_orbitals" = "aiida_empa_orca.fixed_orbitals:FixedOrbitalsImportCalculation"
 "empa_orca.cobalt_core" = "aiida_empa_orca.cobalt_core:CobaltCoreCalculation"
 "empa_orca.cobalt_states" = "aiida_empa_orca.cobalt_xps:CobaltStatesCalculation"
 "empa_orca.xps_core" = "aiida_empa_orca.xps:CoreOrbitalsCalculation"
@@ -43,6 +44,7 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.calculation:SinglePointCalculation"
 
 [project.entry-points."aiida.parsers"]
+"empa_orca.import_fixed_orbitals" = "aiida_empa_orca.fixed_orbitals:FixedOrbitalsImportParser"
 "empa_orca.cobalt_core" = "aiida_empa_orca.cobalt_core:CobaltCoreParser"
 "empa_orca.cobalt_states" = "aiida_empa_orca.cobalt_xps:CobaltStatesParser"
 "empa_orca.xps_core" = "aiida_empa_orca.xps:CoreOrbitalsParser"
@@ -63,6 +65,7 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.parser:SinglePointParser"
 
 [project.entry-points."aiida.workflows"]
+"empa_orca.import_fixed_orbitals" = "aiida_empa_orca.fixed_orbitals:FixedOrbitalsImportWorkChain"
 "empa_orca.cobalt_valence" = "aiida_empa_orca.cobalt_workchains:CobaltValenceWorkChain"
 "empa_orca.cobalt_xps" = "aiida_empa_orca.cobalt_workchains:CobaltXpsWorkChain"
 "empa_orca.xps_multiplets" = "aiida_empa_orca.xps_multiplets:XpsMultipletsWorkChain"

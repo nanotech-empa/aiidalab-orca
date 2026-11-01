@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 def main():
-    names = ('store_electronic.py', 'plot_cubes.py', 'compact_orbitals.py', 'core_orbitals.py', 'xps_finalize.py')
+    names = ('store_electronic.py', 'plot_cubes.py', 'compact_orbitals.py', 'core_orbitals.py', 'import_fixed_orbitals.py', 'xps_finalize.py')
     if len(sys.argv) != 2 or sys.argv[1] not in names:
         raise SystemExit('Usage: orca-tools {'+'|'.join(names)+'}')
     path = Path(sys.argv[1])

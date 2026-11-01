@@ -8,11 +8,12 @@ from aiida_empa_orca import orbital_inspection as backend
 from aiida_empa_orca.artifacts import resolve_electronic
 from aiida_empa_orca.orbitals import cube_parameters, validate_cube_outputs
 from .property_services import helper_code, tool_codes
+from aiida_empa_orca.fixed_orbitals_data import PROCESS as IMPORT_PROCESS
 
 
 def common_node(uuid):
     node = orm.load_node(uuid)
-    if node.process_type != 'aiida.workflows:empa_orca.common_orbitals' or not node.is_finished_ok:
+    if node.process_type not in ('aiida.workflows:empa_orca.common_orbitals', IMPORT_PROCESS) or not node.is_finished_ok:
         raise ValueError('Select a completed common-orbital preparation')
     return node
 
@@ -20,6 +21,7 @@ def common_node(uuid):
 def codes(common_uuid):
     node = common_node(common_uuid)
     result = tool_codes(node.inputs.code.computer.uuid)
+    installation = PurePosixPath(node.inputs.code.filepath_executable).parent
     # This utility must be registered on the same computer, just like orca_plot.
     result['export'] = []
     for uuid in orm.QueryBuilder().append(orm.InstalledCode,project=['uuid']).all(flat=True):
@@ -28,6 +30,11 @@ def codes(common_uuid):
                 PurePosixPath(code.filepath_executable).name == 'orca_2json' or
                 code.default_calc_job_plugin == 'empa_orca.orbital_catalog'):
             result['export'].append((f'{code.label}@{code.computer.label}',str(uuid)))
+    # Prefer the utility shipped with the source ORCA, rather than an arbitrary
+    # first registration on hosts that carry incompatible GBW versions.
+    for kind in ('export','plot'):
+        result[kind].sort(key=lambda row: (
+            PurePosixPath(orm.load_code(row[1]).filepath_executable).parent != installation, row[0]))
     return result
 
 

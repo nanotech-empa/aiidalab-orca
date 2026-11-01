@@ -133,6 +133,10 @@ and parsed results are retrieved by the scientific CalcJob itself.
 The plot retains unshifted energies, native relative weights and node UUIDs.
 Display alignment is a separate saved energy shift. Gaussian/Lorentzian widths
 are adjustable; CSV and view JSON retain the scientific and display values.
+The viewer explicitly marks this as a frozen-orbital model with unvalidated
+absolute binding energies. Passing numerical checks does not supply the missing
+ionized-state orbital relaxation, and a display shift is not a computed
+correction to the binding energies.
 
 ## Validation status
 

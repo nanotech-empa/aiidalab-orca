@@ -1,5 +1,6 @@
 """Regression checks for native core-hole convergence and saved-density audits."""
 import io
+import copy
 import json
 from pathlib import Path
 import re
@@ -120,6 +121,38 @@ def test_readback_requires_an_actual_energy_evaluation():
     with pytest.raises(ValueError, match='CalcGuessEnergy'):
         density_summary(text, require_scf=False)
     assert density_summary(text+'\n! NoIter CalcGuessEnergy', require_scf=False)['energy_hartree'] < 0
+
+
+@pytest.mark.parametrize('difference,spin_difference,valid', [
+    (1e-9, 0., True), (2e-7, 0., False), (0., .01, False),
+])
+def test_saved_density_must_reproduce_energy_and_spin(monkeypatch, difference, spin_difference, valid):
+    import aiida_empa_orca.scripts.xps_validation as validation
+    text = (FILES/'no-0-alpha.out').read_text()
+    native = parse_spin_density(text, CORE, 0, 15, REFERENCE['ground_energy_hartree'], 2, 'alpha', strict=True)
+    native['convergence'] = gradient_check(text, 1e-5)
+    # This unit test isolates comparison of already parsed stages. The
+    # separate stage tests verify native parsing and convergence criteria.
+    def stage(text, request, role):
+        data = copy.deepcopy(native)
+        if role == 'readback':
+            data['ionized_energy_hartree'] += difference
+            data['spin_squared'] += spin_difference
+        return data
+    monkeypatch.setattr(validation, 'validate_stage', stage)
+    if valid:
+        result = validation.validate_bundle('', '', '', {'solver':'freeze_release'})
+        assert result['validation']['readback_energy_difference_hartree'] == pytest.approx(difference, abs=1e-13)
+    else:
+        with pytest.raises(ValueError, match='Stored wavefunction changed'):
+            validation.validate_bundle('', '', '', {'solver':'freeze_release'})
+
+
+def test_results_distinguish_a_recorded_readback_from_older_data():
+    from aiidalab_orca.xps import readback_notice
+    assert 'not recorded' in readback_notice({})
+    assert 'passed' in readback_notice({'validation':{'contract':'uks_1s_wavefunction_v1',
+                                         'readback_energy_difference_hartree':1e-9}})
 
 
 def test_finalizer_stops_before_orca_when_preparation_failed(tmp_path):

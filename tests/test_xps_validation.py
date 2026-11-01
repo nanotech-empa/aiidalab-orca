@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tomllib
 
 import pytest
 from aiida import common, orm
@@ -20,6 +21,19 @@ from aiida_empa_orca.scripts.xps_validation import (
 FILES = Path(__file__).parent/'fixtures'/'xps_spin'
 REFERENCE = json.loads((FILES/'reference.json').read_text())
 CORE = json.loads((FILES/'no-core.json').read_text())
+
+
+def test_xps_operating_guide_is_packaged_for_shared_chat_agents():
+    from importlib.resources import files
+    from aiidalab_orca.xps_guidance import workflow_guides
+    guide, = workflow_guides()
+    assert guide['id'] == 'orca.xps'
+    assert guide['text'] == files('aiidalab_orca').joinpath('knowledge/xps.md').read_text()
+    assert 'Contract for agents in the AiiDAlab chat' in guide['text']
+    assert 'not permission' in guide['text']
+    metadata = tomllib.loads((Path(__file__).parents[1]/'pyproject.toml').read_text())
+    assert metadata['project']['entry-points']['aiidalab_assistant.workflow_guides']['orca_xps'] == 'aiidalab_orca.xps_guidance:workflow_guides'
+    assert 'knowledge/*.md' in metadata['tool']['setuptools']['package-data']['aiidalab_orca']
 
 
 @pytest.mark.parametrize('electrons,spin,frontier,multiplicity', [

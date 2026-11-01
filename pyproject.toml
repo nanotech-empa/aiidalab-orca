@@ -26,11 +26,14 @@ dependencies = [
 [project.urls]
 Home = "https://github.com/nanotech-empa/aiidalab-orca"
 
+[project.entry-points."aiidalab_assistant.workflow_guides"]
+orca_xps = "aiidalab_orca.xps_guidance:workflow_guides"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-aiidalab_orca = ["static/*.js"]
+aiidalab_orca = ["static/*.js", "knowledge/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

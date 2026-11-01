@@ -44,11 +44,12 @@ def prepare(source_uuid, atom_indices, *, force_recompute=False, solver='auto'):
         raise ValueError('Select one or more C/N/O/F/Co atoms for 1s ionization')
     source = source_node(source_uuid)
     if solver == 'auto':
-        solver = 'freeze_release' if 27 in source.outputs.structure.get_ase().numbers else 'standard'
+        solver = 'freeze_release' if info['settings']['multiplicity'] == 2 else 'standard'
     if solver not in ('standard', 'freeze_release'):
         raise ValueError('Choose a supported DeltaSCF convergence strategy')
     previous = {} if force_recompute else matching_sites(source.outputs.structure, info['settings'],
-                                                         source.inputs.code.uuid, source.outputs.retrieved.uuid)
+        source.inputs.code.uuid, source.outputs.retrieved.uuid,
+        require_readback=info['settings']['multiplicity'] == 2)
     plan = {'source_uuid': str(source_uuid), 'atom_indices': selected, 'force_recompute': bool(force_recompute), 'solver':solver,
             'signatures': [site_signature(source.outputs.structure, info['settings'], source.inputs.code.uuid,
                                          source.outputs.retrieved.uuid, i) for i in selected],
@@ -57,7 +58,7 @@ def prepare(source_uuid, atom_indices, *, force_recompute=False, solver='auto'):
     plan['open_shell'] = info['settings']['multiplicity'] == 2
     if plan['open_shell']:
         beta = {} if force_recompute else matching_sites(source.outputs.structure, info['settings'],
-            source.inputs.code.uuid, source.outputs.retrieved.uuid, 'beta')
+            source.inputs.code.uuid, source.outputs.retrieved.uuid, 'beta', require_readback=True)
         plan['beta_signatures'] = [site_signature(source.outputs.structure, info['settings'], source.inputs.code.uuid,
             source.outputs.retrieved.uuid, i, 'beta') for i in selected]
         plan['branch_reuse'] = {'alpha': {str(i): previous[i] for i in selected if i in previous},
@@ -65,11 +66,14 @@ def prepare(source_uuid, atom_indices, *, force_recompute=False, solver='auto'):
         plan['reuse'] = {str(i): previous[i] for i in selected if i in previous and i in beta}
         plan['missing'] = [i for i in selected if i not in previous or i not in beta]
         plan['warnings'].append('Two raw UKS branches per atom; the singlet energy is an approximate two-state spin-projection estimate. Intensities are schematic.')
+        plan['validation'] = ('Core-hole preserving optimization, precision refinement and a saved-wavefunction '
+                              'energy/core/spin check run automatically. Older unaudited branches are recomputed.')
     plan['helper_uuid'] = helper_code(source.inputs.code.computer.uuid)
     plan['storage_policy'] = wavefunction_status(source_uuid)['policy']
     if plan['missing']:
         prepared = False
-        for uuid in core_runs(source.outputs.retrieved.uuid, source.inputs.code.uuid):
+        for uuid in core_runs(source.outputs.retrieved.uuid, source.inputs.code.uuid,
+                              require_energy_audit=plan['open_shell']):
             try:
                 resolve_electronic(orm.load_node(uuid).outputs.remote_folder, names=['aiida.gbw'])
                 prepared = True
@@ -123,7 +127,7 @@ def result(uuid):
     for data in (node.outputs.sites.values() if 'sites' in node.outputs else []):
         site = validated_site(data.creator)
         i = site['atom_index']
-        component = {'triplet_ms1': 'triplet (HS)', 'broken_symmetry_ms0': 'spin-mixed (BS)'}.get(site.get('spin_assignment'))
+        component = {'triplet_ms1': 'MS=1 (HS)', 'broken_symmetry_ms0': 'MS=0 (BS)'}.get(site.get('spin_assignment'))
         label = f'{atoms[i].symbol}{i+1} · 1s' + (' · '+component if component else '')
         sites.append(site | {'symbol': atoms[i].symbol, 'label': label,
                              'data_uuid': str(data.uuid), 'calculation_uuid': str(data.creator.uuid)})
@@ -131,6 +135,8 @@ def result(uuid):
             'settings': node.inputs.settings.get_dict(), 'structure_uuid': str(node.inputs.structure.uuid),
             'source_uuid': node.base.extras.get('aiidalab_orca', {}).get('source_uuid'),
             'complete': node.is_finished_ok,
+            'diagnostics': [data.get_dict() for data in node.outputs.diagnostics.values()]
+                if 'diagnostics' in node.outputs else [],
             'multiplets': [data.get_dict() | {'data_uuid': str(data.uuid)} for data in node.outputs.multiplets.values()]
                 if 'multiplets' in node.outputs else []}
 

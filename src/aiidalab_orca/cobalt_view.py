@@ -19,14 +19,14 @@ from .presentation import ComputePanel
 class CobaltSpectrum(ipw.VBox):
     def __init__(self,record):
         self.record=record
-        self.shift=ipw.FloatText(value=0,description='Energy shift (eV)',step=.01,style={'description_width':'initial'})
+        self.shift=ipw.FloatText(value=0,description='Display shift (eV)',step=.01,style={'description_width':'initial'})
         self.gaussian=ipw.BoundedFloatText(value=1.5,min=.01,max=10,step=.01,description='Gaussian FWHM (eV)',style={'description_width':'initial'})
         self.lorentzian=ipw.BoundedFloatText(value=.54,min=.01,max=10,step=.01,description='Lorentzian FWHM (eV)',style={'description_width':'initial'})
         self.figure=go.FigureWidget()
         self.figure.update_layout(template='plotly_white',height=430,yaxis_title='Relative intensity · core-transition approximation',
             margin=dict(l=65,r=25,t=30,b=55))
         self.table,self.download=ipw.HTML(),ipw.HTML()
-        super().__init__([ipw.HTML('<p class="orca-notice"><b>RAS-CI + spin–orbit coupling.</b> Relative peak weights use a bound core-to-core transition approximation to XPS; no continuum photoelectron is calculated. Frozen optimized valence orbitals; the energy shift is a display alignment and is saved separately.</p>'),
+        super().__init__([ipw.HTML('<p class="orca-notice"><b>Frozen-orbital RAS-CI + spin–orbit coupling.</b> Ionized-state orbital relaxation is omitted, and the absolute binding energies are not validated. Relative peak weights use a bound core-to-core transition approximation to XPS; no continuum photoelectron is calculated. The display shift changes plot alignment and is saved separately.</p>'),
             ipw.HBox([self.shift,self.gaussian,self.lorentzian],layout=ipw.Layout(flex_flow='row wrap')),
             self.figure,self.table,self.download])
         for w in (self.shift,self.gaussian,self.lorentzian):w.observe(self._update,names='value')

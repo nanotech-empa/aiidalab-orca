@@ -97,6 +97,14 @@ elements and nonorthogonal Dyson approximations require scientific review.
 Do not silently combine these methods or reuse a common-orbital Dyson kernel
 for separately optimized orbital sets.
 
+The expandable **Scalar Co 2p energy checks** section shows previously validated
+energy-only diagnostics at the selected neutral-doublet geometry. Each record
+keeps its own DFT model and reference. Discovery requires a completed validation
+output; the reader checks the linked core identity, electron count, convergence,
+gradient and saved-wavefunction evidence before showing energies. Consult its
+downloaded provenance when using the relaxation lowering. This diagnostic does
+not supply a correction to the multireference spectrum.
+
 For QE comparisons match geometry and atom order, record pseudopotential
 corrections, scalar/SOC treatment, charge/spin and energy reference. A molecule
 on a metallic substrate is not an isolated molecule referenced to vacuum.

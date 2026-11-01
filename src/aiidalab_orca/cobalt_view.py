@@ -57,7 +57,9 @@ class CobaltSpectrum(ipw.VBox):
 
 class CobaltXpsPanel(ipw.VBox):
     def __init__(self,source_uuid):
+        from .core_benchmark_view import ScalarCoreBenchmarks
         self.source_uuid=str(source_uuid);self.plan=None;self.plan_kind=None;self._poll_task=None;self._running_uuid=None;self._running_kind=None;self._disposed=False
+        self.benchmarks=ScalarCoreBenchmarks(self.source_uuid)
         self.message,self.status,self.details=ipw.HTML(),ipw.HTML(),ipw.HTML()
         self.reference_notice=ipw.HTML()
         self.integration=ipw.HTML('<p><b>Integration protocol:</b> Consistent grid (recommended). Applied automatically to orbital preparation, neutral reconvergence and the Co 2p spectrum.</p><details><summary>Numerical settings</summary><p>COSX angular grids 3,3,3 with default radial accuracy. Generated grids are validated. The neutral-energy tolerance remains 10⁻⁷ Hartree.</p></details>')
@@ -80,7 +82,7 @@ class CobaltXpsPanel(ipw.VBox):
             ipw.HBox([self.review_reference,self.prepare],layout=ipw.Layout(flex_flow='row wrap')),
             ipw.HBox([self.review_spectrum,self.submit],layout=ipw.Layout(flex_flow='row wrap')),self.message])
         super().__init__([ipw.HTML('<h4>Co 2p multiplets · draft</h4><p>Published RAS-CI/SOC core-transition protocol. <a href="https://doi.org/10.26434/chemrxiv-2026-t0g71" target="_blank">Method and approximations (preprint)</a>.</p>'),
-            self.previous,self.refresh,self.status,self.compute,self.details,self.viewer])
+            self.benchmarks,self.previous,self.refresh,self.status,self.compute,self.details,self.viewer])
         self.review_reference.on_click(self._review_reference);self.prepare.on_click(self._prepare)
         self.review_recovery.on_click(self._review_recovery);self.reconverge.on_click(self._reconverge)
         self.review_spectrum.on_click(self._review_spectrum);self.submit.on_click(self._submit)

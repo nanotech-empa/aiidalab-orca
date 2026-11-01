@@ -138,6 +138,15 @@ absolute binding energies. Passing numerical checks does not supply the missing
 ionized-state orbital relaxation, and a display shift is not a computed
 correction to the binding energies.
 
+Previously validated scalar DFT diagnostics at the same geometry appear under
+**Scalar Co 2p energy checks**. This expandable section retains the diagnostic's
+own basis, Hamiltonian, neutral reference and spin projection. It shows frozen
+and relaxed energies, the saved-wavefunction check and the completed QE scalar
+value, with a provenance download. These single-determinant energy checks do
+not establish SOC multiplets or supply an energy correction to the RAS-CI plot.
+The reader checks the linked convergence/readback evidence before showing an
+energy; an invalid record shows its diagnostic instead.
+
 ## Validation status
 
 The original protocol v1 ORCA 6.1.1 ARM64 run completed CoPc SA-CASSCF on eight

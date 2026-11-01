@@ -116,6 +116,10 @@ class XpsSpectroscopy(ipw.VBox):
                      'The geometry, functional and basis remain those of the selected reference. A singlet reference gives a doublet core hole; '
                      'a doublet reference gives high-spin and spin-mixed branches, with an approximate singlet-energy estimate. '
                      'Core orbitals are assigned to atoms before ionization and localized within the occupied 1s subspace only when necessary.</p>'),
+            ipw.HTML('<details><summary>How validation works</summary><p>For a doublet reference, each branch is optimized, '
+                     'refined and checked by reading its saved wavefunction. Geometry, core-hole location, shell, electron count, '
+                     'spin and normalization are checked automatically. Failed checks show an explanation before any energy is accepted. '
+                     'Raw UKS branches can be spin mixed; the singlet energy estimate requires additional spin checks.</p></details>'),
             self.atoms, self.force, self.review, self.submit])
         super().__init__([ipw.HTML('<h3>X-ray photoelectron spectroscopy</h3><p>Site-resolved vertical ΔSCF binding energies at this geometry.</p>'),
                           self.previous, self.refresh, self.empty, self.status, self.calculation, self.message, self.details, self.viewer])
@@ -160,6 +164,8 @@ class XpsSpectroscopy(ipw.VBox):
                 reused_branches=sum(len(v) for v in self.plan['branch_reuse'].values())
                 self.message.value += f'<p>{2*len(self.plan["atom_indices"])-reused_branches} new spin-branch CalcJob(s); {reused_branches} branch result(s) reused.</p>'
             self.message.value += ''.join('<p>'+html.escape(w)+'</p>' for w in self.plan['warnings'])
+            if self.plan.get('validation'):
+                self.message.value += '<p class="orca-notice">'+html.escape(self.plan['validation'])+'</p>'
             self.message.value += '<p>Final core-hole location, electron count and spin are checked before a binding energy is accepted.</p>'
             policy = self.plan['storage_policy']
             self.message.value += f"<p>Wavefunctions follow the reference storage policy: retrieve bundles up to {policy['threshold_mb']:g} MiB; stash larger bundles in <code>{html.escape(policy['stash_directory'])}</code>.</p>"
@@ -236,6 +242,9 @@ class XpsSpectroscopy(ipw.VBox):
             self.details.value = '<p>'+('Complete' if record['complete'] else 'Partial results · inspect the failed site before interpretation') + '</p><details><summary>Provenance and validation</summary>'
             self.details.value += ''.join(f"<p>{s['label']} · initial multiplicity {s['initial_multiplicity']} · {s.get('spin_assignment', 'doublet')} · {s['localization']}<br>Site data: <code>{s['data_uuid']}</code><br>CalcJob: <code>{s['calculation_uuid']}</code></p>" for s in record['sites'])+'</details>'
             self.details.value += ''.join('<p style="color:#a02020">'+html.escape(w)+'</p>' for s in record['sites'] for w in s['warnings'])
+            self.details.value += ''.join('<p style="color:#a02020"><b>No energy accepted:</b> '
+                +html.escape(d['reason'])+'<br>'+html.escape(d['guidance'])+'</p>'
+                for d in record.get('diagnostics', []))
             if record.get('multiplets'):
                 self.details.value += '<p class="orca-notice">The estimated singlet energies use approximate two-state Yamaguchi spin projection. Raw UKS branches remain available in the spin-treatment selector. No spin-pure singlet wavefunction or physical relative intensities are implied.</p>'
         except Exception as exc:

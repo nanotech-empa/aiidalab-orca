@@ -29,6 +29,12 @@ core preparation, localization, precision refinement and readback. Use the
 configured ORCA executable and automatically resolved tools code on the same
 computer. Preserve the requested allocation and electronic-file policy.
 
+Updating the container backend does not update an older remote ORCA-tools
+installation. Its allowlist must include `xps_finalize.py`. Qualify the actual
+configured launcher as well as the staged script before a production campaign;
+a launcher "Usage" error is a software deployment failure, not SCF instability.
+Keep the historical code/executable intact when replacing that launcher.
+
 For every accepted doublet-reference 1s branch require:
 
 - Native normal termination and actual final gradient convergence, including

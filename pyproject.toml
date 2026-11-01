@@ -30,6 +30,9 @@ orca = "aiidalab_orca.guidance:workflow_guides"
 [project.urls]
 Home = "https://github.com/nanotech-empa/aiidalab-orca"
 
+[project.entry-points."aiidalab_assistant.workflow_guides"]
+orca_xps = "aiidalab_orca.xps_guidance:workflow_guides"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

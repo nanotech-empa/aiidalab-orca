@@ -26,11 +26,11 @@ scientific-block overrides and XAS remain outside this draft. Co 2p is a
 [separate multireference method](cobalt-xps.md), not a 1s ΔSCF extension.
 
 For a singlet reference, `IonizeAlpha` produces a UKS doublet. For a doublet
-reference both channels are computed: beta removal gives an MS=1 triplet
-representative; alpha removal gives an MS=0 **spin-mixed broken-symmetry
-determinant**, not a pure singlet. ORCA changes the electron count internally,
-so the XYZ declaration retains the original charge and multiplicity. The final
-occupations independently verify N−1 and the requested spin projection.
+reference both channels are computed: beta removal gives an MS=1 high-spin
+determinant; alpha removal gives an MS=0 **spin-mixed broken-symmetry
+determinant**, not a pure singlet. Neither branch is assumed spin-pure: inspect
+its reported S². The final occupations independently verify N−1 and the
+requested spin projection.
 
 The two-state Yamaguchi energy estimate is
 `E_S ≈ E_BS + S²_BS/(S²_HS − S²_BS) × (E_BS − E_HS)`.
@@ -42,14 +42,49 @@ It provides an **energy estimate**, with no spin-pure singlet wavefunction.
 Raw energies and S² remain available. No Clebsch–Gordan, multiplicity or
 photoionization intensity factors are inferred from ΔSCF energies.
 
-For Co-containing references the default convergence strategy is ORCA's
+For UKS doublet references the default convergence strategy is ORCA's
 [freeze-and-release](https://www.faccts.de/docs/orca/6.1/manual/contents/spectroscopyproperties/deltascf.html):
 constrain the target non-Aufbau orbitals initially, then release them for full
 orbital relaxation. MOM is disabled for this strategy. Final hole/electron/spin
 checks apply unchanged; a failed or collapsed solution is not accepted.
-The strategy is stored as a CalcJob input. Reuse requires the same physical
-state, reference and convergence criteria; it can reuse a validated result
-obtained with either supported convergence strategy.
+In ORCA 6.1.1, `IonizeAlpha`/`IonizeBeta` can leave this strategy inactive
+("No orbitals to constrain!"). The doublet protocol therefore uses an
+equivalent compact configuration: swap the target occupied MO with the last
+occupied MO of the ionized spin channel, declare the cation charge and spin,
+and set `AlphaConf 0,1` or `BetaConf 0,1`. Frozen-density controls must verify
+this equivalence when qualifying another ORCA version or reference type.
+The actual constraint activation and release are checked in the native output.
+The legacy singlet route retains the original XYZ declaration and lets ORCA
+perform `IonizeAlpha` internally.
+
+### Automatic checks for doublet references
+
+Each site CalcJob performs three native ORCA runs in one allocation:
+
+1. Core-hole preserving optimization, with the requested final gradient
+   tolerance. Both constrained and released phases must finish successfully.
+2. A numerical precision refinement of that same cation, without another
+   ionization or configuration reset. It rebuilds the Fock matrix each cycle
+   and requires an orbital gradient of 1e−6 or the stricter reference value.
+3. `NoIter CalcGuessEnergy` reads the final GBW and independently evaluates its
+   density. Energy must agree within 1e−7 Hartree, with unchanged electron
+   counts and S² within 1e−5. The hole and normalization checks apply again.
+
+All stages must terminate normally, preserve geometry/basis, and retain one
+localized hole on the selected atom and shell. A final "SCF CONVERGED" banner
+does not override a failed final gradient. Poor-normalization warnings stop
+acceptance. The final 1s check also rejects transfer into a higher shell of the
+same atom, which matters for cobalt. The parser independently recomputes the
+checks from the retrieved native outputs. Large electronic files stay under
+the selected storage policy; the checks themselves retrieve text and JSON.
+
+These steps are automatic: users do not need to configure a Python code or
+manually select validation switches. A failed site displays its reason and
+inspection guidance. Increase the SCF iteration limit only when its convergence
+trace is still improving; a collapsed hole, damaged GBW or incompatible spin
+requires inspection rather than another identical submission. Older unaudited
+branches remain viewable but are not reused by the new doublet protocol.
+See the [agent operating guide](agents/xps.md) for recovery and provenance rules.
 
 ## Core assignment and localization
 
@@ -66,6 +101,8 @@ the fully occupied 1s subspace**, with a fixed seed and 1e−8 localization
 tolerance. It never mixes occupied and virtual orbitals. For UKS, localization acts independently in each fully occupied spin subspace.
 These rotations preserve the reference determinant and its density.
 A second native population analysis verifies the resulting atom assignment.
+New core preparations also evaluate the neutral density before and after
+localization and require its energy to match the reference within 1e−7 Hartree.
 Localized orbital energies are not presented as canonical eigenvalues.
 Ambiguous assignments stop the workflow.
 

@@ -16,6 +16,14 @@ from .casci_services import progress
 from .presentation import ComputePanel
 
 
+def readback_notice(site):
+    audit = site.get('validation', {})
+    if audit.get('contract') == 'uks_1s_wavefunction_v1':
+        return ('Saved-wavefunction readback passed '
+                f'(energy difference {audit["readback_energy_difference_hartree"]:.2g} Hartree).')
+    return 'Saved-wavefunction readback was not recorded for this result.'
+
+
 class XpsSpectrum(ipw.VBox):
     def __init__(self, record, comparisons=()):
         self.record, self.comparisons = record, list(comparisons)
@@ -240,7 +248,7 @@ class XpsSpectroscopy(ipw.VBox):
             self.viewer.children = (XpsSpectrum(record, service.qe_comparisons(self.source_uuid)),) if record['sites'] else ()
             self._shown_uuid = uuid
             self.details.value = '<p>'+('Complete' if record['complete'] else 'Partial results · inspect the failed site before interpretation') + '</p><details><summary>Provenance and validation</summary>'
-            self.details.value += ''.join(f"<p>{s['label']} · initial multiplicity {s['initial_multiplicity']} · {s.get('spin_assignment', 'doublet')} · {s['localization']}<br>Site data: <code>{s['data_uuid']}</code><br>CalcJob: <code>{s['calculation_uuid']}</code></p>" for s in record['sites'])+'</details>'
+            self.details.value += ''.join(f"<p>{s['label']} · initial multiplicity {s['initial_multiplicity']} · {s.get('spin_assignment', 'doublet')} · {s['localization']}<br>{readback_notice(s)}<br>Site data: <code>{s['data_uuid']}</code><br>CalcJob: <code>{s['calculation_uuid']}</code></p>" for s in record['sites'])+'</details>'
             self.details.value += ''.join('<p style="color:#a02020">'+html.escape(w)+'</p>' for s in record['sites'] for w in s['warnings'])
             self.details.value += ''.join('<p style="color:#a02020"><b>No energy accepted:</b> '
                 +html.escape(d['reason'])+'<br>'+html.escape(d['guidance'])+'</p>'

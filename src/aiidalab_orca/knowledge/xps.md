@@ -76,6 +76,13 @@ not reionize it, repeat the neutral configuration swap, or reintroduce
 constraints. Fresh Fock builds and a tighter gradient can resolve small
 checkpoint-energy drift; weakening the readback threshold cannot validate it.
 
+Select a restart's physical source and execution configuration separately.
+A historical frozen control can use the same ORCA executable with different
+MPI/scratch settings. Retain the reviewed launcher explicitly and verify its
+computer, executable and resource limits; inheriting the source's code can lose
+the job-local shared-memory configuration. Check the first native energy
+against the qualified source before trusting further optimization.
+
 Keep every failed attempt and its native output. A corrected parser or
 post-hoc analysis creates new provenance, rather than rewriting an old node.
 When reporting progress, distinguish tested facts, hypotheses and the next
@@ -96,6 +103,15 @@ orbitals, altered active spaces, empirical/composite shifts, continuum matrix
 elements and nonorthogonal Dyson approximations require scientific review.
 Do not silently combine these methods or reuse a common-orbital Dyson kernel
 for separately optimized orbital sets.
+
+During core-hole orbital relaxation, individual valence MOs can mix within a
+full valence-CAS block. A fixed-index character failure alone does not prove
+that the intended subspace was lost. Diagnose it with native coefficient and
+AO-overlap exports, normalization checks and projector eigenvalues; summed
+populations alone cannot establish the required directions. Rotations across
+occupation-restricted groups can change the model. Preserve the reviewed
+criteria, and use an earlier qualified source or seek scientific review when
+the invariant diagnostic still fails them. Never retune a cutoff just to pass.
 
 The expandable **Scalar Co 2p energy checks** section shows previously validated
 energy-only diagnostics at the selected neutral-doublet geometry. Each record

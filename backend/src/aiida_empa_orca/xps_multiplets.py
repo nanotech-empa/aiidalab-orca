@@ -1,5 +1,4 @@
 """Doublet-reference K-edge spin branches and approximate spin projection."""
-import math
 from aiida import engine, orm
 
 PROCESS_TYPE = 'aiida.workflows:empa_orca.xps_multiplets'
@@ -8,44 +7,9 @@ HARTREE_TO_EV = 27.211386245988
 
 def parse_spin_site(text, core_reference, atom_index, electron_count, ground_energy,
                     initial_multiplicity, spin_channel):
-    from .parser import reference_summary
-    from .scripts.core_orbitals import levels, populations
-    summary = reference_summary(text)
-    channels = levels(text)
-    if len(channels) != 2:
-        raise ValueError('Core ionization requires both spin channels')
-    counts = [sum(r['occupation'] for r in c) for c in channels]
-    difference = initial_multiplicity-1 + (-1 if spin_channel == 'alpha' else 1)
-    if abs(sum(counts)-electron_count+1) > 1e-6 or abs(counts[0]-counts[1]-difference) > 1e-6:
-        raise ValueError('The final electron counts do not match the requested spin ionization')
-    holes = [(spin, r) for spin, channel in enumerate(channels) for r in channel
-             if r['energy_hartree'] < -5 and r['occupation'] < .01]
-    if len(holes) != 1:
-        raise ValueError('Exactly one deep-core hole must survive orbital relaxation')
-    spin, hole = holes[0]
-    if spin != (0 if spin_channel == 'alpha' else 1):
-        raise ValueError('The core hole moved to another spin channel')
-    tables = populations(text, len(core_reference['assignments'][0]['atomic_populations']), method='MULLIKEN')
-    if len(tables) != 2:
-        raise ValueError('Both native spin-resolved MO population tables are required')
-    values = tables[spin][hole['index']]
-    if max(range(len(values)), key=values.__getitem__) != atom_index or values[atom_index] < .95:
-        raise ValueError('The final core hole is not localized on the selected atom')
-    s2 = summary.get('spin_squared')
-    binding = (summary['energy_hartree']-ground_energy)*HARTREE_TO_EV
-    if s2 is None or not math.isfinite(s2) or not math.isfinite(binding) or binding <= 0:
-        raise ValueError('Invalid energy or missing spin diagnostic')
-    branch = ('broken_symmetry_ms0' if spin_channel == 'alpha' else 'triplet_ms1') if initial_multiplicity == 2 else 'doublet'
-    ideal = 2 if branch == 'triplet_ms1' else .75 if branch == 'doublet' else None
-    return {'schema_version': 2, 'atom_index': atom_index, 'shell': '1s', 'spin_channel': spin_channel,
-        'ground_energy_hartree': ground_energy, 'ionized_energy_hartree': summary['energy_hartree'],
-        'binding_energy_ev': binding, 'initial_multiplicity': initial_multiplicity,
-        'final_multiplicity': abs(difference)+1, 'spin_projection': difference/2, 'spin_assignment': branch,
-        'electron_counts': counts, 'spin_squared': s2, 'hole_spin_channel': spin,
-        'hole_orbital_index': hole['index'], 'hole_population': values[atom_index],
-        'hole_population_method': 'ORCA Mulliken atomic population per MO', 'localization': core_reference['method'],
-        'energy_reference': 'isolated molecule, vertical removal to vacuum',
-        'warnings': ['High-spin UKS diagnostic differs appreciably from its target.'] if ideal is not None and abs(s2-ideal)>.1 else []}
+    from .scripts.xps_validation import parse_spin_density
+    return parse_spin_density(text, core_reference, atom_index, electron_count,
+                              ground_energy, initial_multiplicity, spin_channel)
 
 
 def projected_pair(high_spin, broken_symmetry):
@@ -83,6 +47,7 @@ class XpsMultipletsWorkChain(engine.WorkChain):
         from .xps import XpsWorkChain
         spec.expose_inputs(XpsWorkChain, exclude=('spin_channel',))
         spec.output_namespace('sites', dynamic=True, valid_type=orm.Dict)
+        spec.output_namespace('diagnostics', dynamic=True, valid_type=orm.Dict)
         spec.output_namespace('multiplets', dynamic=True, valid_type=orm.Dict)
         spec.outline(cls.run_alpha, cls.inspect_alpha, cls.run_beta, cls.collect)
         spec.exit_code(400, 'ERROR_BRANCH', message='A spin branch failed; completed atom calculations remain reusable.')
@@ -101,6 +66,9 @@ class XpsMultipletsWorkChain(engine.WorkChain):
         return engine.ToContext(alpha=self.submit(self.branch('alpha')))
 
     def inspect_alpha(self):
+        if 'diagnostics' in self.ctx.alpha.outputs:
+            for key,node in self.ctx.alpha.outputs.diagnostics.items():
+                self.out('diagnostics.alpha_'+key,node)
         if 'sites' in self.ctx.alpha.outputs:
             for key,node in self.ctx.alpha.outputs.sites.items():
                 self.out('sites.alpha_'+key,node)
@@ -111,6 +79,9 @@ class XpsMultipletsWorkChain(engine.WorkChain):
         return engine.ToContext(beta=self.submit(self.branch('beta')))
 
     def collect(self):
+        if 'diagnostics' in self.ctx.beta.outputs:
+            for key,node in self.ctx.beta.outputs.diagnostics.items():
+                self.out('diagnostics.beta_'+key,node)
         if 'sites' in self.ctx.beta.outputs:
             for key,node in self.ctx.beta.outputs.sites.items():
                 self.out('sites.beta_'+key,node)

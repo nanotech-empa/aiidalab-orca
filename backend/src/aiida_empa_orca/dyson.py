@@ -523,14 +523,14 @@ class DysonCubesCalculation(engine.CalcJob):
         spec.output('manifest',valid_type=orm.Dict)
 
     def prepare_for_submission(self,folder):
-        calc = self.inputs.transitions.creator
-        if (calc is None or calc.process_type != 'aiida.calculations:empa_orca.dyson' or not calc.is_finished_ok or
-                calc.outputs.retrieved.uuid != self.inputs.coefficients.uuid or
-                calc.inputs.artifacts.initial.uuid != self.inputs.artifact.uuid):
+        from .dyson_mixture import cube_source
+        source = cube_source(self.inputs.transitions)
+        if (source['coefficients_uuid'] != str(self.inputs.coefficients.uuid) or
+                source['artifact_uuid'] != str(self.inputs.artifact.uuid)):
             raise ValueError('Dyson coefficients, transition table and basis export must share their producer')
         if self.inputs.location.get_dict()['uuid'] != str(self.inputs.source.uuid):
             raise ValueError('Basis export source differs from the checked location')
-        p = cube_parameters(self.inputs.parameters.get_dict())
+        p = cube_parameters(self.inputs.parameters.get_dict(), max_orbitals=None)
         if p['spin_density'] or any(spin != 0 or i >= len(self.inputs.transitions.get_dict()['transitions']) for spin,i in p['orbitals']):
             raise ValueError('Select Dyson transition indices; spin density is a separate property')
         if self.inputs.cubehandler_code.computer.uuid != self.inputs.code.computer.uuid:
@@ -587,10 +587,9 @@ class DysonCubesWorkChain(engine.WorkChain):
         self.ctx.reuse_uuid = None
         try:
             helper_resources(self.inputs.cube_resources.get_dict() if 'cube_resources' in self.inputs else None,default_seconds=3600)
-            calc = self.inputs.transitions.creator
-            if calc is None or calc.process_type != 'aiida.calculations:empa_orca.dyson' or not calc.is_finished_ok:
-                raise ValueError('Select successful Dyson transitions')
-            p = cube_parameters(self.inputs.parameters.get_dict())
+            from .dyson_mixture import cube_source
+            self.ctx.source = cube_source(self.inputs.transitions)
+            p = cube_parameters(self.inputs.parameters.get_dict(), max_orbitals=None)
             blend = blend_options(self.inputs.blend.get_dict()) if 'blend' in self.inputs else None
             for uuid in previous(self.inputs.transitions.uuid,'transitions',CUBES_PROCESS):
                 old = orm.load_node(uuid)
@@ -603,7 +602,7 @@ class DysonCubesWorkChain(engine.WorkChain):
                         return
                     except FileNotFoundError:
                         continue
-            self.ctx.location = export_location(calc.inputs.artifacts.initial)
+            self.ctx.location = export_location(orm.load_node(self.ctx.source['artifact_uuid']))
         except (ValueError,KeyError,OSError,RuntimeError) as exc:
             self.report(str(exc))
             return self.exit_codes.ERROR_SOURCE
@@ -612,16 +611,18 @@ class DysonCubesWorkChain(engine.WorkChain):
         return self.ctx.reuse_uuid is None
 
     def generate(self):
-        calc = self.inputs.transitions.creator
+        calc = orm.load_node(self.ctx.source['native_uuid'])
         b = DysonCubesCalculation.get_builder()
         b.code,b.cubehandler_code,b.parameters = self.inputs.code,self.inputs.cubehandler_code,self.inputs.parameters
-        b.transitions,b.coefficients,b.artifact = self.inputs.transitions,calc.outputs.retrieved,calc.inputs.artifacts.initial
+        b.transitions = self.inputs.transitions
+        b.coefficients = orm.load_node(self.ctx.source['coefficients_uuid'])
+        b.artifact = orm.load_node(self.ctx.source['artifact_uuid'])
         if 'blend' in self.inputs:
             b.blend = orm.Dict(dict=blend_options(self.inputs.blend.get_dict()))
         b.source,b.location = orm.load_node(self.ctx.location['uuid']),orm.Dict(dict=self.ctx.location)
         budget=helper_resources(self.inputs.cube_resources.get_dict() if 'cube_resources' in self.inputs else None,default_seconds=3600)
         b.metadata.options = calcjob_options(calc.outputs.remote_folder,seconds=budget['wallclock_seconds'],memory_mb=budget['memory_mb'])
-        p = cube_parameters(self.inputs.parameters.get_dict())
+        p = cube_parameters(self.inputs.parameters.get_dict(), max_orbitals=None)
         if p['retention'] == 'stash':
             b.metadata.options.stash = stash_options(p['stash_directory'],'full_cubes')
         b.metadata.disable_cache = True

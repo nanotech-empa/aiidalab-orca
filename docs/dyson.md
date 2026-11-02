@@ -58,7 +58,7 @@ apply that coefficient twice or simply multiply by the final multiplicity.
 The transition table and JSON export show the component strength, conversion
 factor and selected weight separately, with explicit normalization conventions.
 
-This is not a model of spin-polarized tunnelling, non-equilibrium spin
+This does not infer spin-polarized tunnelling, non-equilibrium spin-projection
 populations, spin–orbit mixing, or higher-order/inelastic tunnelling processes.
 No general STM cross section is inferred solely from a Dyson norm.
 
@@ -70,10 +70,41 @@ No substrate Fermi energy is inferred from an isolated molecule.
 
 The interactive Lorentzian uses the upstream convention
 `eta / ((omega − pole)^2 + eta^2)`: eta is **HWHM** in eV and the integrated area
-is **pi times the selected weight**. The default HWHM is 0.04 eV. Spectrum CSV and
+is **pi times the selected weight**. The default HWHM is 0.1 eV, matching
+Gonçalo's reference notebooks. Spectrum CSV and
 JSON downloads retain the spin convention, energy offset, range, broadening and
 raw transition table. The spectrum contains only the computed selected states;
 missing sectors/roots are not a complete spectral sum.
+
+## Initial-state populations
+
+The default remains **Single initial state**. **Initial-state population mixture**
+combines already saved Dyson results, with one result per initial state/root.
+Specify nonnegative populations summing to one, review, then explicitly save
+the mixture. **Set equal populations** gives 0.5/0.5 for two selected states;
+the app does not infer thermal occupations or silently normalize invalid input.
+Populations refer to whole multiplets, separately from the spin-projection average.
+
+Each source must share charge, geometry, fixed spatial orbitals, active space
+and integral model. The saved mixture is a new calcfunction result linked to
+the original transition tables. Raw coefficients and strengths remain unchanged,
+and each transition retains its own initial state's actual energy difference.
+Equal populations do not imply degenerate initial energies; no degeneracy
+approximation is offered in this version.
+
+For initial state `i` and transition `j`, the unpolarized spectrum uses
+`p_i * F_ij * Z_ij * eta / ((omega - pole_ij)^2 + eta^2)`.
+The map uses `p_i * F_ij * eta / ((omega - pole_ij)^2 + eta^2) * |D_ij(r)|^2`
+after propagating each amplitude. The raw `|D|²` already contains `Z`.
+Both spectra and maps sum incoherently over the selected states and finals.
+Highest-M_S-component mode sets `F=1` while retaining populations.
+The transition readouts and JSON expose populations, spin factors and component
+strengths separately. Kondo exchange still requires a single initial spin multiplet.
+
+Complete cube blends and maps include every computed transition, without the
+old 64-cube/32-map blend caps. Individual multi-panel maps retain their size
+limits. Missing final states must still be computed explicitly; a mixture or
+complete-sum checkbox cannot create them.
 
 ## Separate components and storage
 

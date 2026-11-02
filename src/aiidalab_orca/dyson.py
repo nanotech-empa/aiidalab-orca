@@ -21,6 +21,10 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.process_uuid,self._cube_view,self.render_panel = None,None,None
         self._job_uuid,self._job_kind,self._poll_task = None,None,None
         self.spectrum = None
+        self.mixture_panel = None
+        self.mixture_box = ipw.VBox(layout=ipw.Layout(display='none'))
+        self.source_mode = ipw.ToggleButtons(options=[('Single initial state','single'),('Initial-state population mixture','mixture')])
+        self.result_identity = ipw.HTML()
         self.map_panel = None
         self.kondo_panel = None
         self.kondo_box = ipw.VBox()
@@ -61,7 +65,8 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.previous.observe(self._open_previous,names='value')
         self.spectrum_box = ipw.VBox()
         self.cube_states = ipw.SelectMultiple(description='Cubes / blend states',style=style,layout=ipw.Layout(width='95%',height='150px'))
-        self.blend = ipw.Checkbox(value=False,description='Include spectral intensity blend of selected transitions',layout=ipw.Layout(width='auto'))
+        self.blend = ipw.Checkbox(value=False,description='Include spectral intensity blend',layout=ipw.Layout(width='auto'))
+        self.full_blend = ipw.Checkbox(value=True,description='Complete blend: include all computed transitions, including weak tails',layout=ipw.Layout(width='auto'))
         self.grid = ipw.BoundedIntText(value=80,min=40,max=256,description='Grid points/axis',style=style)
         self.retention = ipw.Dropdown(options=[('Stash full-resolution cubes','stash'),('Leave full cubes in calculation directory','leave'),
             ('Delete full cubes after preview validation','delete')],value='stash',description='Full cubes',style=style,layout=wide)
@@ -82,7 +87,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.download,self.cube_box = ipw.HTML(),ipw.VBox()
         from .presentation import ComputePanel
         self.cube_calculation = ComputePanel('Generate Dyson cubes / intensity blends…', [ipw.HTML('<p>Generate only the requested Dyson amplitudes and optional incoherent intensity blend. Full cubes pass through cubehandler before previews are retrieved. Blends are spectral intensities, without an STM tip or vacuum-decay model.</p>'),
-            self.cube_states,self.blend,self.grid,self.retention,self.stash,self.cube_resources,self.cube_review,self.cube_message,self.cube_submit,
+            self.cube_states,self.blend,self.full_blend,self.grid,self.retention,self.stash,self.cube_resources,self.cube_review,self.cube_message,self.cube_submit,
             ])
         self.orbital_view = ipw.Accordion(children=[ipw.VBox([self.cube,self.download,self.cube_box])], selected_index=None)
         self.orbital_view.set_title(0, '3D orbitals and slicing plane')
@@ -96,8 +101,10 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             self.side,self.finals,self.refresh,self.full_files,advanced,self.review,self.submit])
         self.empty = ipw.HTML()
         self._view = 'spectrum'
-        super().__init__([self.initial,self.previous,self.status,self.empty,self.calculation,self.message,
-                          self.spectrum_box,self.cube_controls,self.kondo_box])
+        self.single_controls = ipw.VBox([self.initial,self.previous,self.calculation])
+        super().__init__([self.source_mode,self.single_controls,self.mixture_box,self.result_identity,
+                          self.status,self.empty,self.message,self.spectrum_box,self.cube_controls,self.kondo_box])
+        self.source_mode.observe(self._source_changed,names='value')
         self.initial.observe(self._initial_changed,names='value')
         self.side.observe(self._initial_changed,names='value')
         for budget in (self.compute_budget,self.export_budget):budget.observe(self._invalidate,names='revision')
@@ -106,7 +113,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         for w in (self.finals,self.loss,self.force,self.export_code,self.dyson_code):
             w.observe(self._invalidate,names='value')
         self.full_files.observe(self._invalidate, names='revision')
-        for w in (self.cube_states,self.blend,self.grid,self.retention,self.stash,self.cubehandler_code,self.dyson_code):
+        for w in (self.cube_states,self.blend,self.full_blend,self.grid,self.retention,self.stash,self.cubehandler_code,self.dyson_code):
             w.observe(self._invalidate_cubes,names='value')
         self._initial_changed()
         self.set_view(self._view)
@@ -116,7 +123,11 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.spectrum_box.layout.display = '' if view == 'spectrum' else 'none'
         self.cube_controls.layout.display = '' if view == 'maps' and self.record else 'none'
         self.kondo_box.layout.display = '' if view == 'kondo' else 'none'
-        if view == 'kondo' and self.record and self.kondo_panel is None:
+        mixture = self.record and self.record['data'].get('initial_states')
+        if view == 'kondo' and mixture:
+            self.kondo_box.children = (ipw.HTML('<p>Kondo exchange requires one initial spin multiplet. '
+                'Choose a single initial state; population mixtures apply to the Dyson spectrum and maps.</p>'),)
+        elif view == 'kondo' and self.record and self.kondo_panel is None:
             from .kondo import KondoChannels
             self.kondo_panel = KondoChannels(self.record['transitions_uuid'], self.dyson_code.value, self.cubehandler_code.value)
             self.kondo_box.children = (self.kondo_panel,)
@@ -133,14 +144,13 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
     def _label(row):
         return f"q={row['charge']:+d} · multiplicity {row['multiplicity']} · root {row['root']} · {row['energy_hartree']:.8f} Ha"
 
-    def _initial_changed(self,_=None):
-        self._invalidate()
-        self._invalidate_cubes()
+    def _clear_result(self):
         if self.spectrum:
             from .widget_lifecycle import close_widget_tree
             close_widget_tree(self.spectrum)
             self.spectrum = None
         self.record = None
+        self.result_identity.value = ''
         if self.kondo_panel:
             self.kondo_panel.close()
             self.kondo_panel = None
@@ -149,8 +159,45 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             self.map_panel.close()
             self.map_panel = None
         self.map_box.children = ()
+        self.process_uuid = None
+        self.cube.options = []
+        self.download.value = ''
+        for name in ('render_panel','_cube_view'):
+            panel = getattr(self,name)
+            if panel:
+                panel.close()
+                setattr(self,name,None)
+        self.cube_box.children = ()
         self.spectrum_box.children = ()
         self.cube_controls.layout.display = 'none'
+
+    def _source_changed(self,change):
+        self._invalidate()
+        self._invalidate_cubes()
+        self._clear_result()
+        mixture = change['new'] == 'mixture'
+        self.single_controls.layout.display = 'none' if mixture else ''
+        self.mixture_box.layout.display = '' if mixture else 'none'
+        if mixture:
+            if self.mixture_panel is None:
+                from .dyson_mixtures import DysonMixtures
+                self.mixture_panel = DysonMixtures(self.state_rows,self._open_mixture)
+                self.mixture_box.children = (self.mixture_panel,)
+            if self.mixture_panel.previous.value:
+                self._open_mixture(self.mixture_panel.previous.value)
+        else:
+            self._refresh_runs()
+            if self.previous.value:
+                self._open_previous({'new':self.previous.value})
+        self.set_view(self._view)
+
+    def _open_mixture(self,uuid):
+        self._open_previous({'new':uuid})
+
+    def _initial_changed(self,_=None):
+        self._invalidate()
+        self._invalidate_cubes()
+        self._clear_result()
         initial = next(r for r in self.state_rows if (r['state_uuid'],r['root']) == self.initial.value)
         choices = []
         for row in self.state_rows:
@@ -267,18 +314,13 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         if not data['success']:
             self._error(data['message'])
             return
+        self._invalidate_cubes()
+        self._clear_result()
         self.record = service.result(uuid)
-        if self.kondo_panel:
-            self.kondo_panel.close()
-            self.kondo_panel = None
-        self.kondo_box.children = ()
-        if self.map_panel:
-            self.map_panel.close()
-            self.map_panel = None
-        self.map_box.children = ()
-        if self.spectrum:
-            from .widget_lifecycle import close_widget_tree
-            close_widget_tree(self.spectrum)
+        states = self.record['data'].get('initial_states')
+        self.result_identity.value = ('<p><b>Viewing population mixture:</b> '+
+            ' · '.join(f"M{r['multiplicity']} root {r['root']}: p={r['population']:g}" for r in states)+
+            '. Actual transition energies are retained.</p>') if states else ''
         diagram_states = service.diagram_states(self.record['data'],self.state_rows)
         self.spectrum = SpectralViewer(self.record['data'],self._invalidate_cubes,states=diagram_states,
                                       on_selection=self._preview_selection,on_use=self._use_transition_selection)
@@ -324,12 +366,14 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         try:
             from aiida_empa_orca.dyson_data import blend_options
             from aiida_empa_orca.orbitals import cube_parameters
-            if not self.record or not self.cube_states.value:
+            if not self.record or (not self.cube_states.value and not (self.blend.value and self.full_blend.value)):
                 raise ValueError('Select computed Dyson transitions')
             if not self.dyson_code.value or not self.cubehandler_code.value:
                 raise ValueError('Configure Dyson tools and cubehandler')
-            p = cube_parameters({'orbitals':[[0,i] for i in self.cube_states.value],'spin_density':False,
-                'grid_points':self.grid.value,'retention':self.retention.value,'stash_directory':self.stash.value.strip()})
+            indices = (range(len(self.record['data']['transitions'])) if self.blend.value and self.full_blend.value
+                       else self.cube_states.value)
+            p = cube_parameters({'orbitals':[[0,i] for i in indices],'spin_density':False,
+                'grid_points':self.grid.value,'retention':self.retention.value,'stash_directory':self.stash.value.strip()}, max_orbitals=None)
             blend = blend_options(self.spectrum.blend()) if self.blend.value else None
             self.cube_plan = {'transitions_uuid':self.record['transitions_uuid'],'parameters':p,
                 'code_uuid':self.dyson_code.value,'cubehandler_uuid':self.cubehandler_code.value,'blend':blend,'resources':self.cube_budget.values()}

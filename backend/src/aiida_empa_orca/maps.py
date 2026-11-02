@@ -20,6 +20,8 @@ def selected_cubes(manifest, table, parameters):
     kondo = 'channel_ids' in p
     ids = p['channel_ids' if kondo else 'transition_ids']
     rows = {r['id']: r for r in table['channels' if kondo else 'transitions']}
+    if not kondo and p.get('transition_scope') == 'all_computed' and set(ids) != set(rows):
+        raise ValueError('A complete spectral sum requires every computed transition')
     if not set(ids) <= rows.keys():
         raise ValueError('Selected transitions are absent from the Dyson table')
     result = []

@@ -201,6 +201,8 @@ def test_cube_budget_reaches_real_native_job(common_reference,aiida_manager):
         child=instantiate_process(aiida_manager.get_runner(),b);children.append(child);return child.node
     parent.submit=capture
     try:
+        from aiida_empa_orca.dyson_mixture import cube_source
+        parent.ctx.source=cube_source(transitions)
         parent.ctx.location={'uuid':str(remote.uuid),'kind':'remote'}
         parent.generate()
         assert len(children)==1
@@ -249,7 +251,8 @@ def test_map_figure_review_invalidation_and_duplicate_submit(monkeypatch):
     import numpy as np
     from ase import Atoms
     from aiidalab_orca import maps as frontend
-    source={'table_input':'transitions','manifest':{'cubes':[{'kind':'dyson','transition_id':'a','filename':'a.cube'}]}}
+    source={'table_input':'transitions','table':{'transitions':[{'id':'a'}]},
+        'manifest':{'cubes':[{'kind':'dyson','transition_id':'a','filename':'a.cube'}]}}
     monkeypatch.setattr(map_services,'source_data',lambda _:deepcopy(source))
     monkeypatch.setattr(map_services,'map_history',lambda _:[])
     monkeypatch.setattr(frontend,'preview_content',lambda *_:'probe')
@@ -260,8 +263,8 @@ def test_map_figure_review_invalidation_and_duplicate_submit(monkeypatch):
     cut.return_settings=lambda:dict(center=list(map(float,cut.center_txt.value.split())),normal=list(map(float,cut.normal_txt.value.split())),
         offset=float(cut.offset_txt.value),width=cut.width.value,height=cut.height.value,resolution=cut.res.value)
     viewer=SimpleNamespace(slice2d=cut,viewer3d=SimpleNamespace(show_plane_checkbox=ipw.Checkbox()))
-    spin=ipw.Dropdown(options=['spin_averaged'],value='spin_averaged')
-    spectrum=SimpleNamespace(spin=spin)
+    spin=ipw.Dropdown(options=['unpolarized'],value='unpolarized')
+    spectrum=SimpleNamespace(spin=spin,blend=lambda:dict(energy_ev=0.,eta_ev=.1))
     calls=[]
     monkeypatch.setattr(map_services,'prepare_maps',lambda *args,**kw:{'action':'compute','resources':kw['resources']})
     monkeypatch.setattr(map_services,'prepare_figure',lambda *args,**kw:{'action':'compute','resources':kw['resources']})
@@ -281,6 +284,8 @@ def test_map_figure_review_invalidation_and_duplicate_submit(monkeypatch):
         panel.figure_budget.memory.value=1024
         assert panel.figure_plan is None and panel.render.disabled
         panel.figure_budget.memory.value=2048;panel.figure_review.click();panel.vmax.value=2
+        assert panel.figure_plan is None and panel.render.disabled
+        panel.figure_review.click();panel.normalization.value='per_panel'
         assert panel.figure_plan is None and panel.render.disabled
         panel.figure_review.click();panel.render.click();panel.render.click()
         assert [kind for kind,_ in calls]==['maps','figure']

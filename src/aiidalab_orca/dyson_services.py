@@ -116,6 +116,8 @@ def result(uuid):
 
 def diagram_states(table,context):
     """Display the original source sectors, even after a newer CASCI rerun."""
+    if table.get('initial_states'):
+        return []  # The diagram currently assumes one initial state.
     uuids = {table['initial_state_uuid']} | {r['final_state_uuid'] for r in table['transitions']}
     source_rows,sectors = [],set()
     for uuid in sorted(uuids):
@@ -133,7 +135,7 @@ def submit_cubes(transitions_uuid,parameters,code_uuid,cubehandler_uuid,blend=No
     b.transitions = orm.load_node(transitions_uuid)
     assert_idle(b.transitions.get_dict().get('orbital_reference_uuid'))
     b.cube_resources = orm.Dict(dict=helper_resources(resources,default_seconds=3600))
-    b.parameters = orm.Dict(dict=cube_parameters(parameters))
+    b.parameters = orm.Dict(dict=cube_parameters(parameters, max_orbitals=None))
     b.code,b.cubehandler_code = orm.load_code(code_uuid),orm.load_code(cubehandler_uuid)
     if blend:
         b.blend = orm.Dict(dict=blend)

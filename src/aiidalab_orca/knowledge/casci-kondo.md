@@ -70,6 +70,11 @@ GUI version before promising these entry points are present.
 
 ### Scientific and execution inputs
 
+Explain the GUI terminology explicitly: **Common orbitals** are the shared
+spatial-orbital basis. **Electronic states** counts CASCI eigenstates (roots)
+within the selected charge/multiplicity sector: one requests its lowest state,
+two also requests the next. This count does not select the active orbital space.
+
 Record the geometry UUID and coordinate frame, common-orbital reference and
 checkpoint checksum, basis/element overrides, exact inactive/active indices,
 reference electron count, charge/spin sectors, roots, integral approximation,

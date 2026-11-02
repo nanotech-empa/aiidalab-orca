@@ -50,7 +50,8 @@ class CasciStates(ipw.VBox):
                 (f"N+1 electrons · charge {s['charge']-1:+d}",s['charge']-1)],value=s['charge'],
                 description='Charge sector',style=style,layout=wide)
         self.mult = ipw.BoundedIntText(value=s['multiplicity'],min=1,max=99,description='Multiplicity (2S+1)',style=style)
-        self.roots = ipw.BoundedIntText(value=1,min=1,max=100,description='Number of roots',style=style)
+        self.roots = ipw.BoundedIntText(value=1,min=1,max=100,description='Electronic states',style=style)
+        self.roots.tooltip = 'Number of CASCI states (roots) in this charge/spin sector: 1 requests its lowest-energy state; 2 also requests the next state.'
         basis = s['basis']
         self.aux = ipw.Combobox(value=basis+'/C' if basis in ('def2-SVP','def2-TZVP','def2-TZVPP') else 'AutoAux',
                 options=['def2-SVP/C','def2-TZVP/C','def2-TZVPP/C','AutoAux'],ensure_option=False,
@@ -85,12 +86,19 @@ class CasciStates(ipw.VBox):
                                  layout=ipw.Layout(display='none'))
         from .presentation import ComputePanel
         self.calculation = ComputePanel('Prepare orbitals / add CASCI states…', [
-            ipw.HTML('<h4>Common spatial-orbital reference</h4>'), self.prepare,self.common_submit,common_options,
+            ipw.HTML('<h4>Common spatial-orbital reference</h4><p>One shared set of spatial orbitals is used for all CASCI states and charge/spin sectors. '
+                'Preparing it reads the saved wavefunction without running a new SCF calculation.</p>'),
+            self.prepare,self.common_submit,common_options,
             ipw.HTML('<h4>Add a charge / spin sector</h4>'),
             ipw.HTML('<p><b>Choose the active space explicitly.</b> The small initial values are a starting example, not a validated '
             'choice for your molecule. The same spatial orbitals are used for N and N±1; their active electron counts adjust with charge.</p>'),
             ipw.HBox([self.electrons,self.norb],layout=ipw.Layout(flex_flow='row wrap')),
-            self.charge,self.mult,self.roots,advanced,self.review,self.submit])
+            self.charge,self.mult,self.roots,
+            ipw.HTML('<p><b>Electronic states (also called roots):</b> '
+                '<b>1</b> requests the lowest-energy CASCI state in the chosen charge/spin sector; '
+                '<b>2</b> also requests the next state, and so on. '
+                'This is separate from the number of active orbitals.</p>'),
+            advanced,self.review,self.submit])
         self.states_view = ipw.VBox([self.previous,self.status,self.empty,
             self.inspect if on_inspect else self.inspection_box, self.calculation,self.message,self.diagram_box])
         self.guide = kondo_preparation_guide()

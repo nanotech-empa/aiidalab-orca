@@ -77,6 +77,28 @@ def spectrum(table, omega, eta, side='both', shift=0.):
     return result
 
 
+def spectral_maxima(omega, intensity, *, prominence_fraction=.05, height_fraction=.3):
+    """Detect sampled broadened-spectrum maxima, not individual transition poles."""
+    from scipy.signal import find_peaks
+    omega,intensity = np.asarray(omega,dtype=float),np.asarray(intensity,dtype=float)
+    if (omega.ndim != 1 or intensity.shape != omega.shape or len(omega)<3 or
+            not np.isfinite(omega).all() or not np.isfinite(intensity).all() or
+            np.any(np.diff(omega)<=0) or np.any(intensity<0)):
+        raise ValueError('Peak detection requires finite nonnegative intensities on an increasing energy grid')
+    if any(type(p) not in (int,float) or not math.isfinite(p) or not 0 <= p <= 1
+           for p in (prominence_fraction,height_fraction)):
+        raise ValueError('Peak prominence and height fractions must be between zero and one')
+    maximum = float(intensity.max())
+    if maximum == 0:
+        return []
+    indices,properties = find_peaks(intensity,prominence=prominence_fraction*maximum,
+                                    height=height_fraction*maximum)
+    return [dict(energy_ev=float(omega[i]),intensity=float(intensity[i]),
+                 prominence=float(prominence),relative_height=float(intensity[i]/maximum),
+                 relative_prominence=float(prominence/maximum))
+            for i,prominence in zip(indices,properties['prominences'])]
+
+
 def spin_factor(initial_mult,final_mult,convention='unpolarized'):
     """Convert the M_S=S component to an initial-spin-averaged, spin-summed weight.
 

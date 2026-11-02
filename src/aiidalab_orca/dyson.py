@@ -294,7 +294,8 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             '. Actual transition energies are retained.</p>') if states else ''
         diagram_states = service.diagram_states(self.record['data'],self.state_rows)
         self.spectrum = SpectralViewer(self.record['data'],self._invalidate_cubes,states=diagram_states,
-                                      on_selection=self._preview_selection,on_use=self._use_transition_selection)
+                                      on_selection=self._preview_selection,on_use=self._use_transition_selection,
+                                      on_peak_use=self.on_show_maps)
         self.spectrum_box.children = (self.spectrum,)
         options = []
         for i,r in enumerate(self.record['data']['transitions']):

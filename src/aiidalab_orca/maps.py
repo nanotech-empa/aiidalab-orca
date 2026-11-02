@@ -26,16 +26,21 @@ class DysonMaps(ipw.VBox):
         first = amplitudes[0]
         cube = read_cube(io.StringIO(preview_content(cube_uuid, first['filename'])))
         span = (np.asarray(cube['data'].shape)-1) * np.linalg.norm(cube['spacing'], axis=1)
-        self.defaults = default_plane(cube['atoms'].positions, .9*span[1], .9*span[0])
+        self.defaults = default_plane(cube['atoms'].positions, .9*span[1], .9*span[0],
+            masses=cube['atoms'].get_masses(), reference='top' if self.kondo else 'mass')
         style = {'description_width': '165px'}
         self.selection = ipw.SelectMultiple(description='Map channels' if self.kondo else 'Map transitions', style=style,
             options=[(c[id_key], c[id_key]) for c in amplitudes],
             value=tuple(c[id_key] for c in amplitudes), layout=ipw.Layout(width='95%', height='120px'))
         self.kind = ipw.ToggleButtons(options=[('Individual channels', 'individual')] if self.kondo else [('Individual transitions', 'individual'), ('Spectral blend', 'blend')])
-        self.heights = ipw.Text(value='5, 7', description='Observation heights (Å)', style=style, layout=ipw.Layout(width='440px'))
+        self.complete = ipw.Checkbox(value=True, description='Complete spectral sum: all computed transitions', layout=ipw.Layout(width='auto'))
+        self.complete.layout.display = 'none' if self.kondo else ''
+        if not self.kondo:
+            self.kind.value = 'blend'
+        self.heights = ipw.Text(value='5, 7' if self.kondo else '6, 8', description='Observation heights (Å)', style=style, layout=ipw.Layout(width='440px'))
         self.kappa = ipw.BoundedFloatText(value=1.15, min=.001, max=10, step=.01, description='Vacuum κ (Å⁻¹)', style=style)
         self.padding = ipw.BoundedIntText(value=0, min=0, max=512, description='FFT padding / edge', style=style)
-        self.reset = ipw.Button(description='Reset: 1.5 Å above top atom (+z)', icon='undo', layout=ipw.Layout(width='auto'))
+        self.reset = ipw.Button(description='Reset: 1.5 Å above '+('top atom' if self.kondo else 'centre of mass')+' (+z)', icon='undo', layout=ipw.Layout(width='auto'))
         self.reset.on_click(self._reset)
         self.plane_info, self.message = ipw.HTML(), ipw.HTML()
         self.review = ipw.Button(description='Review constant-height maps', icon='list', button_style='primary', layout=ipw.Layout(width='auto'))
@@ -52,35 +57,41 @@ class DysonMaps(ipw.VBox):
         self.dpi = ipw.BoundedIntText(value=300, min=72, max=600, description='Figure DPI', style=style)
         self.bar = ipw.FloatText(value=5., description='Scale bar (Å)', style=style)
         self.rotation = ipw.Dropdown(options=[0, 90, 180, 270], description='Panel rotation (°)', style=style)
+        self.normalization = ipw.Dropdown(options=[('Shared intensity scale', 'shared'),
+            ('Normalize each displayed panel', 'per_panel')],value='shared',description='Display scale',style=style,
+            layout=ipw.Layout(width='95%'))
+        self._shared_limits = (0.,1.)
         self.range_button = ipw.Button(description='Use full map range (shared)', icon='arrows-v', layout=ipw.Layout(width='auto'))
         self.range_button.on_click(self._range)
         self.render = ipw.Button(description='Render shared-scale figure', icon='image', button_style='primary', layout=ipw.Layout(width='auto'))
         self.render.on_click(self._render)
+        self.normalization.observe(self._normalization_changed, names='value')
         self.figures = ipw.Dropdown(description='Stored figures', style=style, layout=ipw.Layout(width='95%'))
         self.figures.observe(self._open_figure, names='value')
         self.image, self.download, self.details = ipw.Image(format='png'), ipw.HTML(), ipw.HTML()
         self.image.layout.display = 'none'
         from .presentation import ComputePanel
         self.appearance = ComputePanel('Figure appearance / export…', [
+            self.normalization,
             ipw.HBox([self.vmin, self.vmax], layout=ipw.Layout(flex_flow='row wrap')),
             self.range_button, ipw.HBox([self.cmap, self.rotation], layout=ipw.Layout(flex_flow='row wrap')),
             ipw.HBox([self.dpi, self.bar], layout=ipw.Layout(flex_flow='row wrap')), self.render])
-        self.figure_box = ipw.VBox([self.figures, ipw.HTML('<p><b>Shared intensity scale</b> · every panel uses the same explicit limits. '
-            'Numerical intensities are preserved without normalization. Change the limits to reveal faint features; '
-            'all panels change together.</p>'), self.download, self.image, self.appearance, self.load_settings, self.details])
+        self.figure_box = ipw.VBox([self.figures, ipw.HTML('<p>The default shared scale preserves brightness comparisons. '
+            'Optional per-panel normalization divides each finished image by its own maximum for display only. '
+            'Stored numerical intensities and relative transition contributions remain unchanged.</p>'), self.download, self.image, self.appearance, self.load_settings, self.details])
         self.figure_box.layout.display = 'none'
         self.calculation = ComputePanel('Compute / extend constant-height maps…', [
             ipw.HTML('<p>Adjust the <b>source slice in 3D orbitals and slicing plane below</b>. '
             'Its Center is the height-reference point; Offset is the source-slice height along Normal. '
             'Observation heights use that same reference and normal. Full-resolution amplitudes are extrapolated before squaring and combining; '
             'the displayed reduced cube only helps position the plane.</p>'), self.reset, self.plane_info,
-            self.selection, self.kind, self.heights, ipw.HBox([self.kappa, self.padding], layout=ipw.Layout(flex_flow='row wrap')),
+            self.selection, self.kind, self.complete, self.heights, ipw.HBox([self.kappa, self.padding], layout=ipw.Layout(flex_flow='row wrap')),
             ipw.HTML('<p>Each map shows one normalized Kondo eigenchannel. Exchange couplings identify AFM/FM channels; they are not spectral intensities. No NRG-based combined map is inferred.</p>' if self.kondo else '<p>Blends use the energy/window, broadening and spin convention selected in the spectral viewer. '
                      'Individual maps use its spin convention. The model produces STM-like intensities, without absolute current calibration.</p>'),
             self.review, self.compute])
         self.empty = ipw.HTML()
         super().__init__([self.previous,self.empty,self.figure_box,self.calculation,self.message])
-        for w in (self.selection, self.kind, self.heights, self.kappa, self.padding):
+        for w in (self.selection, self.kind, self.complete, self.heights, self.kappa, self.padding):
             w.observe(self.invalidate, names='value')
         self.bind_viewer(viewer, preserve=False)
         self._refresh()
@@ -137,6 +148,9 @@ class DysonMaps(ipw.VBox):
                  transition_ids=list(self.selection.value), kind=self.kind.value, spin_convention=self.spectrum.spin.value)
         if self.kind.value == 'blend':
             p['blend'] = self.spectrum.blend()
+            p['transition_scope'] = 'all_computed' if self.complete.value else 'selected'
+            if self.complete.value:
+                p['transition_ids'] = [row['id'] for row in self.source['table']['transitions']]
         return p
 
     def _error(self, exc):
@@ -226,8 +240,19 @@ class DysonMaps(ipw.VBox):
 
     def _range(self, _=None):
         if hasattr(self, 'map_metadata'):
-            self.vmin.value = 0.
-            self.vmax.value = self.map_metadata['maximum'] or 1.
+            self._shared_limits = (0., self.map_metadata['maximum'] or 1.)
+            if self.normalization.value == 'shared':
+                self.vmin.value, self.vmax.value = self._shared_limits
+
+    def _normalization_changed(self, change):
+        normalized = change['new'] == 'per_panel'
+        if normalized:
+            self._shared_limits = (self.vmin.value, self.vmax.value)
+            self.vmin.value, self.vmax.value = 0., 1.
+        else:
+            self.vmin.value, self.vmax.value = self._shared_limits
+        self.vmin.disabled = self.vmax.disabled = self.range_button.disabled = normalized
+        self.render.description = 'Render normalized panels' if normalized else 'Render shared-scale figure'
 
     def _load_settings(self, _=None):
         if not hasattr(self, 'map_metadata'):
@@ -240,6 +265,7 @@ class DysonMaps(ipw.VBox):
         if not self.kondo:
             self.spectrum.spin.value = p['spin_convention']
         if p['kind'] == 'blend':
+            self.complete.value = p.get('transition_scope') == 'all_computed'
             b = p['blend']
             self.spectrum.mode.value, self.spectrum.energy.value = b['mode'], b['energy_ev']
             self.spectrum.window_lower.value, self.spectrum.window_upper.value = b['lower_ev'], b['upper_ev']
@@ -251,7 +277,8 @@ class DysonMaps(ipw.VBox):
             return
         try:
             settings = dict(vmin=self.vmin.value, vmax=self.vmax.value, cmap=self.cmap.value, dpi=self.dpi.value,
-                            scale_bar_angstrom=self.bar.value, rotation=self.rotation.value)
+                            scale_bar_angstrom=self.bar.value, rotation=self.rotation.value,
+                            normalization=self.normalization.value)
             uuid = service.submit_figure(self.map_uuid, settings, self.code_uuid)
             self._start(uuid, 'figure')
         except Exception as exc:
@@ -288,6 +315,7 @@ class DysonMaps(ipw.VBox):
                 filename = 'kondo-channel-maps' if self.kondo else 'dyson-maps'
                 links.append(f'<a download="{filename}.{key}" href="data:{mime};base64,{encoded}">Download {key.upper()}</a>')
             self.download.value = ' · '.join(links)+'<p>Stored image nodes: <code>'+result['png_uuid']+'</code> / <code>'+result['pdf_uuid']+'</code>.</p>'
+            self.normalization.value = result['settings'].get('normalization', 'shared')
             for key in ('vmin', 'vmax', 'cmap', 'dpi', 'rotation'):
                 getattr(self, key).value = result['settings'][key]
             self.bar.value = result['settings']['scale_bar_angstrom']

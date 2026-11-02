@@ -32,6 +32,123 @@ def test_default_height_is_above_highest_atom_not_center_of_mass():
     assert np.array(p['center'])[2] + p['offset'] == 4.5
 
 
+def test_dyson_reference_plane_uses_actual_atomic_masses():
+    atoms = Atoms('HC',positions=[[0,0,-2],[0,0,3]])
+    p = default_plane(atoms.positions,4,5,masses=atoms.get_masses(),reference='mass')
+    assert np.allclose(p['center'],atoms.get_center_of_mass())
+    assert p['offset']==1.5
+    assert p['center'][2]!=3  # The legacy/Kondo top-atom mode remains distinct.
+
+
+@pytest.mark.parametrize('count',[96,144])
+def test_complete_blend_includes_weak_off_resonant_tails_and_populations(tmp_path,count):
+    path=tmp_path/'constant.cube'
+    with path.open('w') as handle:
+        write_cube(handle,Atoms('H',positions=[[0,0,0]],cell=[8,8,8]),
+                   data=np.full((12,12,12),np.sqrt(.4)),origin=[-3,-4,-2])
+    rows=[dict(id=str(i),energy_ev=float(i),strength=.4,final_multiplicity=2,
+               initial_multiplicity=1 if i%2==0 else 3,population=.5) for i in range(count)]
+    table=dict(initial_state=dict(multiplicity=None),transitions=rows)
+    p=parameters() | dict(kind='blend',transition_scope='all_computed',transition_ids=[r['id'] for r in rows],
+                          blend=dict(energy_ev=0.,eta_ev=.1,spin_convention='unpolarized'))
+    arrays,metadata=compute_maps({r['id']:path for r in rows},table,p)
+    expected=.4/Bohr**3*sum(.5*(2. if i%2==0 else 1.)*.1/(i*i+.01) for i in range(count))
+    assert arrays['intensity'][0,0,0,0]==pytest.approx(expected,rel=2e-6)
+    assert len(metadata['sources'])==count
+    # A subset cannot be labelled complete, and partial cube inventories cannot pass review.
+    from aiida_empa_orca.maps import selected_cubes
+    with pytest.raises(ValueError,match='every computed transition'):
+        compute_maps({},table,p | dict(transition_ids=p['transition_ids'][:-1]))
+    manifest=dict(cubes=[dict(kind='dyson',transition_id=r['id'],filename=r['id']+'.cube') for r in rows[:-1]])
+    with pytest.raises(ValueError,match='individual amplitude cube'):
+        selected_cubes(manifest,table,p)
+    with pytest.raises(ValueError,match='32'):
+        map_parameters(p | dict(kind='individual'))
+
+
+def test_per_panel_display_normalization_preserves_raw_arrays(tmp_path,monkeypatch):
+    import matplotlib.axes
+    original=matplotlib.axes.Axes.imshow
+    observed=[]
+    def capture(self,data,*args,**kwargs):
+        observed.append(np.array(data))
+        return original(self,data,*args,**kwargs)
+    monkeypatch.setattr(matplotlib.axes.Axes,'imshow',capture)
+    data=np.array([np.ones((8,8)),np.full((8,8),.01),np.zeros((8,8))])[None]
+    before=data.copy()
+    arrays=dict(intensity=data,u_angstrom=np.linspace(-3,3,8),v_angstrom=np.linspace(-3,3,8),heights_angstrom=[6])
+    draw_maps(arrays,dict(panels=['a','b','zero'],units='angstrom^-3'),
+              dict(vmax=1.,dpi=72,normalization='per_panel'),tmp_path/'map.png',tmp_path/'map.pdf')
+    assert [panel.max() for panel in observed]==[1.,1.,0.]
+    assert np.array_equal(data,before)
+
+
+def test_map_controls_restore_shared_range_after_normalized_display():
+    from types import SimpleNamespace
+    import ipywidgets as ipw
+    from aiidalab_orca.maps import DysonMaps
+    holder=SimpleNamespace(vmin=ipw.FloatText(value=.01),vmax=ipw.FloatText(value=.3),
+                           range_button=ipw.Button(),render=ipw.Button())
+    try:
+        DysonMaps._normalization_changed(holder,dict(new='per_panel'))
+        assert (holder.vmin.value,holder.vmax.value)==(0.,1.) and holder.vmax.disabled
+        DysonMaps._normalization_changed(holder,dict(new='shared'))
+        assert (holder.vmin.value,holder.vmax.value)==(.01,.3) and not holder.vmax.disabled
+    finally:
+        for name in ('vmin','vmax','range_button','render'):getattr(holder,name).close()
+
+
+@pytest.mark.parametrize('kondo',[False,True])
+def test_gui_defaults_complete_scope_and_legacy_figure_settings(monkeypatch,tmp_path,kondo):
+    from types import SimpleNamespace
+    import ipywidgets as ipw
+    from aiidalab_orca import maps as frontend
+    atoms=Atoms('HC',positions=[[0,0,-2],[0,0,3]],cell=[8,8,8])
+    cube_path=tmp_path/'preview.cube'
+    with cube_path.open('w') as handle:
+        write_cube(handle,atoms,data=np.ones((8,8,8)))
+    key='channels' if kondo else 'transitions'
+    id_key='channel_id' if kondo else 'transition_id'
+    source=dict(table_input=key,table={key:[dict(id='a'),dict(id='b')]},
+                manifest=dict(cubes=[dict(kind='kondo' if kondo else 'dyson',filename='a.cube',**{id_key:'a'})]))
+    monkeypatch.setattr(frontend.service,'source_data',lambda _:source)
+    monkeypatch.setattr(frontend,'preview_content',lambda *_:cube_path.read_text())
+    monkeypatch.setattr(frontend.service,'map_history',lambda _:[])
+    cut=SimpleNamespace(center_txt=ipw.Text(),normal_txt=ipw.Text(),offset_txt=ipw.Text(),
+        width=ipw.FloatText(),height=ipw.FloatText(),res=ipw.IntText())
+    cut.return_settings=lambda:dict(center=list(map(float,cut.center_txt.value.split())),
+        normal=list(map(float,cut.normal_txt.value.split())),offset=float(cut.offset_txt.value),
+        width=cut.width.value,height=cut.height.value,resolution=cut.res.value)
+    show_plane=ipw.Checkbox()
+    viewer=SimpleNamespace(slice2d=cut,viewer3d=SimpleNamespace(show_plane_checkbox=show_plane))
+    spectrum=SimpleNamespace(spin=ipw.Dropdown(options=['unpolarized']),blend=lambda:dict(eta_ev=.1))
+    widget=frontend.DysonMaps('source',viewer,spectrum,'code')
+    try:
+        assert widget.normalization.value=='shared'
+        p=widget._parameters()
+        assert p['heights_angstrom']==([5.,7.] if kondo else [6.,8.])
+        assert p['plane']['offset']==1.5 and p['kappa_inv_angstrom']==1.15 and p['padding']==0
+        expected=3. if kondo else atoms.get_center_of_mass()[2]
+        assert p['plane']['center'][2]==pytest.approx(expected,abs=2e-6)
+        if not kondo:
+            assert p['transition_scope']=='all_computed' and p['transition_ids']==['a','b']
+            widget.complete.value=False
+            assert widget._parameters()['transition_ids']==['a']
+        legacy=dict(vmin=.01,vmax=.3,cmap='bone',dpi=72,rotation=0,scale_bar_angstrom=1.)
+        monkeypatch.setattr(frontend.service,'progress',lambda _:dict(finished=True))
+        monkeypatch.setattr(frontend.service,'figure_result',lambda _:dict(images=dict(png=b'png',pdf=b'pdf'),
+            png_uuid='png',pdf_uuid='pdf',settings=legacy))
+        widget.normalization.value='per_panel'
+        widget._open_figure(dict(new='legacy'))
+        assert widget.normalization.value=='shared' and not widget.vmax.disabled
+        assert (widget.vmin.value,widget.vmax.value)==(.01,.3)
+    finally:
+        from aiidalab_orca.app import close_widget_tree
+        close_widget_tree(widget)
+        for name in ('center_txt','normal_txt','offset_txt','width','height','res'):getattr(cut,name).close()
+        show_plane.close();spectrum.spin.close()
+
+
 @pytest.mark.parametrize('normal', [[0, 0, 1], [1, 0, 0], [.3, -.2, .8]])
 def test_map_plane_frame_matches_existing_slice_viewer(normal):
     from aiidalab_widgets_empa.cube import _orthonormal_basis_from_normal
@@ -182,7 +299,7 @@ def test_maps_reuse_without_cubes_or_aiida_caching(aiida_profile, aiida_localhos
     for path in (tmp_path/'source/full_cubes').iterdir():
         path.unlink()
     with enable_caching() if cache_enabled else disable_caching():
-        plan = map_services.prepare_maps(producer.uuid, requested, code.uuid)
+        plan = map_services.prepare_maps(producer.uuid, requested | dict(transition_scope='selected'), code.uuid)
     assert plan['action'] == 'reuse' and plan['reuse_uuid'] == run.uuid
     altered = deepcopy(parameters())
     altered['plane']['offset'] = 1.6

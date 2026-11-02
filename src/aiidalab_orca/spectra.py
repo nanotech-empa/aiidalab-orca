@@ -24,7 +24,7 @@ class SpectralViewer(ipw.VBox):
         self.spin = ipw.Dropdown(options=[('Unpolarized · spin summed','unpolarized'),
             ('Highest M_S component · Andrés tool','highest_ms_component')],description='Spin convention',style=style,layout=ipw.Layout(width='95%'))
         self.side = ipw.Dropdown(layout=ipw.Layout(width='350px'),options=[('Addition and removal','both'),('Removal','removal'),('Addition','addition')],description='Show',style=style)
-        self.eta = ipw.BoundedFloatText(value=.04,min=.0001,max=10,step=.01,description='HWHM η (eV)',style=style)
+        self.eta = ipw.BoundedFloatText(value=.1,min=.0001,max=10,step=.01,description='HWHM η (eV)',style=style)
         self.shift = ipw.FloatText(value=0.,step=.01,description='Energy offset (eV)',style=style)
         self.lower = ipw.FloatText(step=.01,description='Minimum (eV)',style=style)
         self.upper = ipw.FloatText(step=.01,description='Maximum (eV)',style=style)
@@ -64,7 +64,7 @@ class SpectralViewer(ipw.VBox):
             ipw.HBox([self.show_states,self.chart_layout],layout=ipw.Layout(flex_flow='row wrap'))])
         super().__init__([ipw.HBox([self.spin,self.side],layout=ipw.Layout(flex_flow='row wrap')),
             self.display_settings,linked,self.info,self.selected,self.selection_info,self.preview_info,self.use_selection,self.download,self.transition_table,
-            ipw.HTML('<p><b>Spectral intensity blend</b> · select an energy or integrate over a window. Uses the selected transitions below.</p>'),
+            ipw.HTML('<p><b>Spectral intensity blend</b> · select an energy or integrate over a window. Cube and map controls offer the complete sum (default) or a selected subset.</p>'),
             self.mode,self.energy,ipw.HBox([self.window_lower,self.window_upper],layout=ipw.Layout(flex_flow='row wrap'))])
         for w in (self.spin,self.side,self.eta,self.shift,self.lower,self.upper,self.mode,self.energy,self.window_lower,self.window_upper):
             w.observe(self._update,names='value')
@@ -225,8 +225,8 @@ class SpectralViewer(ipw.VBox):
             'Only the computed final states contribute.</p>')
         rows = []
         for raw,row in zip(self.table['transitions'],table['transitions']):
-            rows.append(f'<tr><td>{html.escape(row["id"])}</td><td>{row["side"]}</td><td>{row["final_charge"]:+d}</td><td>{row["final_multiplicity"]}</td><td>{row["final_root"]}</td><td>{row["energy_ev"]+self.shift.value:.3f}</td><td>{raw["strength"]:.5f}</td><td>{row["spin_factor"]:.5g}</td><td>{row["strength"]:.5f}</td><td>{row["final_ci_norm"]:.8f}</td></tr>')
-        self.transition_table.value = '<details><summary>Transition energies, strengths and CI norms</summary><table><tr><th>ID</th><th>Branch</th><th>Charge</th><th>Mult.</th><th>Root</th><th>Energy (eV)</th><th>Component strength</th><th>Spin factor</th><th>Selected weight</th><th>Retained CI norm</th></tr>'+''.join(rows)+'</table></details>'
+            rows.append(f'<tr><td>{html.escape(row["id"])}</td><td>{row["side"]}</td><td>{row["final_charge"]:+d}</td><td>{row["final_multiplicity"]}</td><td>{row["final_root"]}</td><td>{row["energy_ev"]+self.shift.value:.6f}</td><td>{raw["strength"]:.5f}</td><td>{row["spin_factor"]:.5g}</td><td>{row.get("population",1.):.5g}</td><td>{row["strength"]:.5f}</td><td>{row["final_ci_norm"]:.8f}</td></tr>')
+        self.transition_table.value = '<details><summary>Transition energies, strengths and CI norms</summary><table><tr><th>ID</th><th>Branch</th><th>Charge</th><th>Mult.</th><th>Root</th><th>Energy (eV)</th><th>Component strength</th><th>Spin factor</th><th>Initial population</th><th>Selected weight</th><th>Retained CI norm</th></tr>'+''.join(rows)+'</table></details>'
         buffer = io.StringIO()
         writer = csv.writer(buffer)
         writer.writerow(['energy_ev','removal','addition','total'])
@@ -250,18 +250,18 @@ class SpectralViewer(ipw.VBox):
         initial = self.table['initial_state']
         rows = []
         for row in selected:
-            factor = spin_factor(initial['multiplicity'],row['final_multiplicity'],'unpolarized')
+            factor = spin_factor(row.get('initial_multiplicity',initial['multiplicity']),row['final_multiplicity'],'unpolarized')
             gap = -row['energy_ev'] if row['side'] == 'removal' else row['energy_ev']
             rows.append('<tr>'+''.join(f'<td style="padding:5px 8px">{value}</td>' for value in [
                 html.escape(row['id']),row['side'],f"q={row['final_charge']:+d}, mult {row['final_multiplicity']}, r{row['final_root']}",
                 f'{gap:.6f}',f"{row['energy_ev']+self.shift.value:.6f}",f"{row['component_strength']:.5f}",
-                f'{factor:.5g}',f"{row['strength']:.5f}"] )+'</tr>')
-        names = ['Transition','Branch','Final state','E_final − E_initial (eV)','Peak + offset (eV)','Component Z','CG multiplet F','Displayed W']
+                f'{factor:.5g}',f"{row.get('population',1.):.5g}",f"{row['strength']:.5f}"] )+'</tr>')
+        names = ['Transition','Branch','Final state','E_final − E_initial (eV)','Peak + offset (eV)','Component Z','CG multiplet F','Initial population p','Displayed W']
         self.selection_info.value = ('<div style="padding:12px;border:1px solid #dbe3ec;border-radius:8px;background:#f8fafc">'
             f'<b>{len(selected)} selected transition'+('s' if len(selected)!=1 else '')+'</b>'
             '<div style="overflow-x:auto"><table><tr>'+''.join(f'<th style="padding:5px 8px;text-align:left">{n}</th>' for n in names)+'</tr>'+''.join(rows)+'</table></div>'
             '<p style="font-size:12px">F is the Clebsch–Gordan-derived spin-multiplet factor, not a signed CG amplitude. '
-            'Unpolarized: W = Z × F; highest-M_S component: W = Z. The factor is applied once. '
+            'Unpolarized: W = p × Z × F; highest-M_S component: W = p × Z. For a single initial state p = 1. Each factor is applied once. '
             'Peak positions include the energy offset; state-energy differences do not.</p></div>')
 
     def close(self):

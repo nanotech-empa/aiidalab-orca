@@ -92,10 +92,10 @@ def spin_factor(initial_mult,final_mult,convention='unpolarized'):
 def weighted_table(table,convention='unpolarized'):
     transitions = []
     for row in table['transitions']:
-        factor = spin_factor(table['initial_state']['multiplicity'],row['final_multiplicity'],convention)
+        factor = spin_factor(row.get('initial_multiplicity',table['initial_state']['multiplicity']),row['final_multiplicity'],convention)
         component = row.get('component_strength',row['strength'])
         transitions.append(dict(row,component_strength=component,spin_factor=factor,
-                                strength=component*factor))
+                                strength=component*factor*row.get('population',1.)))
     return dict(table,display_spin_convention=convention,strength_convention=convention,
                 source_strength_convention=table.get('source_strength_convention',table.get('strength_convention','highest_ms_component')),
                 transitions=transitions)
@@ -104,7 +104,7 @@ def weighted_table(table,convention='unpolarized'):
 def blend_options(values):
     if set(values)-{'mode','energy_ev','lower_ev','upper_ev','eta_ev','spin_convention','shift_ev'}:
         raise ValueError('Unknown blend parameter')
-    p = {'mode':'energy','energy_ev':0.,'lower_ev':-1.,'upper_ev':1.,'eta_ev':.04,
+    p = {'mode':'energy','energy_ev':0.,'lower_ev':-1.,'upper_ev':1.,'eta_ev':.1,
          'spin_convention':'unpolarized','shift_ev':0.} | values
     if p['mode'] not in ('energy','window') or p['spin_convention'] not in ('unpolarized','highest_ms_component'):
         raise ValueError('Select an energy/window and an explicit spin convention')
@@ -123,7 +123,7 @@ def blend_weight(row,initial_mult,options):
         weight = eta/((p['energy_ev']-pole)**2+eta**2)
     else:
         weight = math.atan((p['upper_ev']-pole)/eta)-math.atan((p['lower_ev']-pole)/eta)
-    return weight*spin_factor(initial_mult,row['final_multiplicity'],p['spin_convention'])
+    return weight*spin_factor(row.get('initial_multiplicity',initial_mult),row['final_multiplicity'],p['spin_convention'])*row.get('population',1.)
 
 
 def fixed_orbital_kernel(initial,final,parameters,indices):

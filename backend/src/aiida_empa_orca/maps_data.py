@@ -27,7 +27,7 @@ def plane_basis(normal):
 
 def map_parameters(values):
     keys = {'plane', 'heights_angstrom', 'kappa_inv_angstrom', 'padding', 'transition_ids', 'channel_ids',
-            'kind', 'spin_convention', 'blend'}
+            'kind', 'spin_convention', 'blend', 'transition_scope'}
     if set(values) - keys:
         raise ValueError('Unknown map settings')
     p = dict(values)
@@ -61,9 +61,15 @@ def map_parameters(values):
     if type(p['padding']) is not int or not 0 <= p['padding'] <= 512:
         raise ValueError('FFT padding must be 0–512 pixels per edge')
     ids = p['channel_ids' if kondo else 'transition_ids']
-    if (not isinstance(ids, list) or not 1 <= len(ids) <= 32 or
+    if (not isinstance(ids, list) or not ids or
             any(not isinstance(i, str) for i in ids) or len(set(ids)) != len(ids)):
-        raise ValueError('Select 1–32 unique transitions')
+        raise ValueError('Select nonempty, unique transitions')
+    if p.get('transition_scope', 'selected') not in ('selected', 'all_computed'):
+        raise ValueError('Choose selected transitions or all computed transitions')
+    if p.get('transition_scope') == 'selected':
+        p.pop('transition_scope')  # Preserve exact reuse of legacy subset-map inputs.
+    if p['kind'] == 'individual' and len(ids) > 32:
+        raise ValueError('Choose at most 32 individual panels; a spectral blend can sum all transitions')
     if p['kind'] not in ('individual', 'blend') or (not kondo and p['spin_convention'] not in ('unpolarized', 'highest_ms_component')):
         raise ValueError('Select individual maps or a blend and an explicit spin convention')
     if p['kind'] == 'blend':
@@ -79,10 +85,17 @@ def map_parameters(values):
     return p
 
 
-def default_plane(positions, width, height, resolution=128):
+def default_plane(positions, width, height, resolution=128, *, masses=None, reference='top'):
     positions = np.asarray(positions, dtype=float)
     center = (positions.min(axis=0) + positions.max(axis=0)) / 2
     center[2] = positions[:, 2].max()
+    if reference == 'mass':
+        weights = np.asarray(masses, dtype=float)
+        if weights.shape != (len(positions),) or not np.isfinite(weights).all() or np.any(weights <= 0):
+            raise ValueError('Centre-of-mass reference requires positive atomic masses')
+        center = np.average(positions, axis=0, weights=weights)
+    elif reference != 'top':
+        raise ValueError('Choose top-atom or centre-of-mass height reference')
     return dict(center=center.tolist(), normal=[0., 0., 1.], offset=1.5,
                 width=float(width), height=float(height), resolution=resolution)
 
@@ -129,6 +142,8 @@ def compute_maps(cubes, table, parameters):
     kondo = 'channel_ids' in p
     ids = p['channel_ids' if kondo else 'transition_ids']
     rows = {r['id']: r for r in table['channels' if kondo else 'transitions']}
+    if not kondo and p.get('transition_scope') == 'all_computed' and set(ids) != set(rows):
+        raise ValueError('A complete spectral sum requires every computed transition')
     if not set(ids) <= rows.keys():
         raise ValueError('A selected transition is absent from the source Dyson result')
     count = len(ids) if p['kind'] == 'individual' else 1
@@ -142,7 +157,7 @@ def compute_maps(cubes, table, parameters):
         source, x, y = sample_source(cube, p['plane'])
         row = rows[identifier]
         weight = (1. if kondo else blend_weight(row, table['initial_state']['multiplicity'], p['blend']) if p['kind'] == 'blend'
-                  else spin_factor(table['initial_state']['multiplicity'], row['final_multiplicity'], p['spin_convention']))
+                  else spin_factor(row.get('initial_multiplicity',table['initial_state']['multiplicity']), row['final_multiplicity'], p['spin_convention'])*row.get('population',1.))
         for h, wave in enumerate(propagate(source, x, y, distances, p['kappa_inv_angstrom'], p['padding'])):
             result[h, j if p['kind'] == 'individual' else 0] += weight * wave**2
         if kondo:
@@ -153,7 +168,9 @@ def compute_maps(cubes, table, parameters):
                             energy_ev=row.get('energy_ev'), final_charge=row.get('final_charge'),
                             final_multiplicity=row['final_multiplicity'], final_root=row.get('final_root'),
                             side=row.get('side'), component_strength=row['strength'],
-                            selected_strength=row['strength']*spin_factor(table['initial_state']['multiplicity'], row['final_multiplicity'], p['spin_convention'])))
+                            initial_multiplicity=row.get('initial_multiplicity',table['initial_state']['multiplicity']),
+                            population=row.get('population',1.),
+                            selected_strength=row['strength']*spin_factor(row.get('initial_multiplicity',table['initial_state']['multiplicity']), row['final_multiplicity'], p['spin_convention'])*row.get('population',1.)))
     n, u, v = plane_basis(p['plane']['normal'])
     units = 'angstrom^-3'
     if p['kind'] == 'blend' and p['blend']['mode'] == 'energy':
@@ -176,8 +193,8 @@ def compute_maps(cubes, table, parameters):
 
 
 def figure_style(values):
-    p = {'vmin': 0., 'cmap': 'bone', 'dpi': 300, 'scale_bar_angstrom': 5., 'rotation': 0} | values
-    if set(p) != {'vmin', 'vmax', 'cmap', 'dpi', 'scale_bar_angstrom', 'rotation'}:
+    p = {'vmin': 0., 'cmap': 'bone', 'dpi': 300, 'scale_bar_angstrom': 5., 'rotation': 0, 'normalization':'shared'} | values
+    if set(p) != {'vmin', 'vmax', 'cmap', 'dpi', 'scale_bar_angstrom', 'rotation', 'normalization'}:
         raise ValueError('Unknown or incomplete figure style')
     if not np.isfinite([p['vmin'], p['vmax'], p['scale_bar_angstrom']]).all() or not 0 <= p['vmin'] < p['vmax']:
         raise ValueError('Choose an explicit increasing, nonnegative shared intensity range')
@@ -185,11 +202,15 @@ def figure_style(values):
         raise ValueError('Unsupported colour map or panel rotation')
     if type(p['dpi']) is not int or not 72 <= p['dpi'] <= 600 or p['scale_bar_angstrom'] < 0:
         raise ValueError('Use 72–600 DPI and a nonnegative scale bar length')
+    if p['normalization'] not in ('shared', 'per_panel'):
+        raise ValueError('Choose shared intensity or per-panel display normalization')
+    if p['normalization'] == 'per_panel' and (p['vmin'] != 0 or p['vmax'] != 1):
+        raise ValueError('Per-panel normalized figures use the relative display range 0–1')
     return p
 
 
 def draw_maps(arrays, metadata, style, png, pdf):
-    """One fixed colour range for every panel; no per-image normalization."""
+    """Render shared intensities or normalized display copies of each panel."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
@@ -213,7 +234,11 @@ def draw_maps(arrays, metadata, style, png, pdf):
     for i in range(nr):
         for j in range(nc):
             ax = axes[i, j]
-            image = ax.imshow(data[i, j], origin='lower', extent=[x[0], x[-1], y[0], y[-1]],
+            panel = data[i, j]
+            if p['normalization'] == 'per_panel':
+                maximum = float(panel.max())
+                panel = panel/maximum if maximum > 0 else np.zeros_like(panel)
+            image = ax.imshow(panel, origin='lower', extent=[x[0], x[-1], y[0], y[-1]],
                               cmap=p['cmap'], norm=norm, aspect='equal', interpolation='nearest')
             ax.set_xticks([])
             ax.set_yticks([])
@@ -229,6 +254,8 @@ def draw_maps(arrays, metadata, style, png, pdf):
     unit_label = r'$\mathrm{\AA}^{-3}$'
     if metadata['units'].endswith('eV^-1'):
         unit_label += r' $\mathrm{eV}^{-1}$'
+    if p['normalization'] == 'per_panel':
+        unit_label = 'Intensity / panel maximum (display only)'
     fig.colorbar(image, ax=axes.ravel().tolist(), label=unit_label, shrink=.65)
     fig.savefig(png, dpi=p['dpi'])
     fig.savefig(pdf, dpi=p['dpi'])

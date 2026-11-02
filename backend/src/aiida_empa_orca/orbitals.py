@@ -12,7 +12,7 @@ from .artifacts import ELECTRONIC_FILES, resolve_electronic, storage_builder, st
 PROCESS_TYPE = 'aiida.workflows:empa_orca.orbitals'
 
 
-def cube_parameters(values):
+def cube_parameters(values, max_orbitals=64):
     p = dict(values)
     if set(p)-{'orbitals','spin_density','grid_points','retention','stash_directory'}:
         raise ValueError('Unknown cube option')
@@ -27,8 +27,8 @@ def cube_parameters(values):
     grid = p.get('grid_points', 80)
     if type(grid) is not int or not 40 <= grid <= 256:
         raise ValueError('Choose 40–256 grid points along each axis')
-    if len(orbitals)>64:
-        raise ValueError('Select at most 64 orbitals per property calculation')
+    if max_orbitals is not None and len(orbitals)>max_orbitals:
+        raise ValueError(f'Select at most {max_orbitals} orbitals per property calculation')
     retention = p.get('retention', 'stash')
     if retention not in ('stash','leave','delete'):
         raise ValueError('Full cubes must be stashed, retained, or deleted')

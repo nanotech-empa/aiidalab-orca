@@ -99,7 +99,7 @@ def submit_figure(map_uuid, settings, code_uuid):
     p = stored_values(figure_style(settings))
     for _, uuid in history(node.outputs.maps.uuid, 'maps', FIGURE_PROCESS):
         old = orm.load_node(uuid)
-        if old.is_finished_ok and old.inputs.settings.get_dict() == p and str(old.inputs.code.uuid) == str(code_uuid):
+        if old.is_finished_ok and stored_values(figure_style(old.inputs.settings.get_dict())) == p and str(old.inputs.code.uuid) == str(code_uuid):
             for key in ('png', 'pdf'):
                 with old.outputs[key].open(mode='rb') as handle:
                     if not handle.read(8):
@@ -111,7 +111,7 @@ def submit_figure(map_uuid, settings, code_uuid):
     b.settings = orm.Dict(dict=p)
     b.metadata.options = calcjob_options(node.outputs.remote_folder)
     b.metadata.disable_cache = True
-    b.metadata.label = 'Molecular maps · shared intensity scale'
+    b.metadata.label = 'Molecular maps · '+('shared intensity scale' if p['normalization'] == 'shared' else 'per-panel display normalization')
     return str(submit(b).uuid)
 
 

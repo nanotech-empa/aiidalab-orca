@@ -76,6 +76,29 @@ JSON downloads retain the spin convention, energy offset, range, broadening and
 raw transition table. The spectrum contains only the computed selected states;
 missing sectors/roots are not a complete spectral sum.
 
+### Automatic spectral maxima
+
+The spectrum detects maxima with `scipy.signal.find_peaks`, as in Gonçalo's
+notebooks. **Minimum prominence** (default **5%**) and **minimum peak height**
+(default **30%**) are both editable under **Spectrum display settings**. Both
+percentages refer to the maximum intensity of the broadened total in the
+visible range; the total includes all computed transitions of the displayed
+addition/removal branches. Changing the range, broadening, spin convention,
+populations or thresholds changes the detected maxima. Endpoints are not
+local maxima; expand the range when a peak lies at its edge.
+
+Labels mark the maxima of the black total curve. Select a detected maximum
+and press **Use peak energy for maps** to set the blend energy without rounding
+it to 0.01 eV or altering the selected transition set. Overlapping transitions
+can produce a maximum between their individual poles. Map/cube submission
+still requires its normal review and explicit button; the complete-sum setting
+remains independent of these display filters. Disabling automatic detection
+restores the transition-only view.
+
+The JSON download records thresholds, detection method, sampled peak energies,
+unshifted energies, heights and prominences. The energies are sampled maxima
+on the displayed grid, not a fit or proof of separately resolved physical states.
+
 ## Initial-state populations
 
 The default remains **Single initial state**. **Initial-state population mixture**

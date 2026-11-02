@@ -9,22 +9,34 @@ import math
 import ipywidgets as ipw
 import numpy as np
 
-from aiida_empa_orca.dyson_data import spectrum,weighted_table,spin_factor
+from aiida_empa_orca.dyson_data import spectrum,weighted_table,spin_factor,spectral_maxima
 from .interactive_svg import InteractiveSvg
 from .transitions import TransitionDiagram, peak_groups, action_attributes
 
 
 class SpectralViewer(ipw.VBox):
-    def __init__(self,table,on_change=None,*,states=None,on_selection=None,on_use=None):
+    def __init__(self,table,on_change=None,*,states=None,on_selection=None,on_use=None,on_peak_use=None):
         self.table = table
         self.on_change = on_change
         self.on_selection,self.on_use = on_selection,on_use
+        self.on_peak_use = on_peak_use
+        self.peak_rows = []
         self._ready = False
         style = {'description_width':'145px'}
         self.spin = ipw.Dropdown(options=[('Unpolarized · spin summed','unpolarized'),
             ('Highest M_S component · Andrés tool','highest_ms_component')],description='Spin convention',style=style,layout=ipw.Layout(width='95%'))
         self.side = ipw.Dropdown(layout=ipw.Layout(width='350px'),options=[('Addition and removal','both'),('Removal','removal'),('Addition','addition')],description='Show',style=style)
         self.eta = ipw.BoundedFloatText(value=.1,min=.0001,max=10,step=.01,description='HWHM η (eV)',style=style)
+        self.auto_peaks = ipw.Checkbox(value=True,description='Detect and label spectral maxima',layout=ipw.Layout(width='auto'))
+        self.peak_prominence = ipw.BoundedFloatText(value=5.,min=0,max=100,step=1.,
+            description='Min. prominence (%)',style={'description_width':'165px'})
+        self.peak_height = ipw.BoundedFloatText(value=30.,min=0,max=100,step=1.,
+            description='Min. peak height (%)',style={'description_width':'165px'})
+        self.peak_choices = ipw.Dropdown(description='Spectral maximum',style=style,layout=ipw.Layout(width='95%'))
+        self.use_peak = ipw.Button(description='Use peak energy for maps',icon='check',disabled=True,layout=ipw.Layout(width='auto'))
+        self.use_peak.on_click(self._use_peak)
+        self.peak_choices.observe(lambda _:setattr(self.use_peak,'disabled',self.peak_choices.value is None),names='value')
+        self.peak_info = ipw.HTML()
         self.shift = ipw.FloatText(value=0.,step=.01,description='Energy offset (eV)',style=style)
         self.lower = ipw.FloatText(step=.01,description='Minimum (eV)',style=style)
         self.upper = ipw.FloatText(step=.01,description='Maximum (eV)',style=style)
@@ -61,12 +73,18 @@ class SpectralViewer(ipw.VBox):
         self.display_settings = ComputePanel('Spectrum display settings…', [
             ipw.HBox([self.eta,self.shift],layout=ipw.Layout(flex_flow='row wrap')),
             ipw.HBox([self.lower,self.upper,reset],layout=ipw.Layout(flex_flow='row wrap')),
+            self.auto_peaks,ipw.HBox([self.peak_prominence,self.peak_height],layout=ipw.Layout(flex_flow='row wrap')),
+            ipw.HTML('<p>Peak prominence and height are percentages of the maximum intensity in the visible spectral range. '
+                'Detection uses the sum of the displayed broadened branches, including all computed transitions and their tails. '
+                'These filters select observation energies; they do not remove transitions from a map.</p>'),
             ipw.HBox([self.show_states,self.chart_layout],layout=ipw.Layout(flex_flow='row wrap'))])
         super().__init__([ipw.HBox([self.spin,self.side],layout=ipw.Layout(flex_flow='row wrap')),
-            self.display_settings,linked,self.info,self.selected,self.selection_info,self.preview_info,self.use_selection,self.download,self.transition_table,
+            self.display_settings,linked,self.info,self.peak_choices,self.use_peak,self.peak_info,
+            self.selected,self.selection_info,self.preview_info,self.use_selection,self.download,self.transition_table,
             ipw.HTML('<p><b>Spectral intensity blend</b> · select an energy or integrate over a window. Cube and map controls offer the complete sum (default) or a selected subset.</p>'),
             self.mode,self.energy,ipw.HBox([self.window_lower,self.window_upper],layout=ipw.Layout(flex_flow='row wrap'))])
-        for w in (self.spin,self.side,self.eta,self.shift,self.lower,self.upper,self.mode,self.energy,self.window_lower,self.window_upper):
+        for w in (self.spin,self.side,self.eta,self.shift,self.lower,self.upper,self.mode,self.energy,self.window_lower,self.window_upper,
+                  self.auto_peaks,self.peak_prominence,self.peak_height):
             w.observe(self._update,names='value')
         self.selected.observe(self._selection_changed,names='value')
         self.show_states.observe(self._show_states,names='value')
@@ -103,6 +121,39 @@ class SpectralViewer(ipw.VBox):
     def _use_selection(self,_=None):
         if self.on_use and self.selected.value:
             self.on_use(list(self.selected.value))
+
+    def _use_peak(self,_=None):
+        if self.peak_choices.value not in [r['energy_ev'] for r in self.peak_rows]:
+            return
+        self.energy.value = self.peak_choices.value
+        self.mode.value = 'energy'
+        if self.on_peak_use:
+            self.on_peak_use()
+
+    def _find_peaks(self,omega,intensity):
+        self.peak_prominence.disabled = self.peak_height.disabled = not self.auto_peaks.value
+        try:
+            self.peak_rows = (spectral_maxima(omega,intensity,
+                prominence_fraction=self.peak_prominence.value/100.,height_fraction=self.peak_height.value/100.)
+                if self.auto_peaks.value else [])
+            for sign,rows in [('−',reversed([r for r in self.peak_rows if r['energy_ev']<0])),
+                              ('+',[r for r in self.peak_rows if r['energy_ev']>=0])]:
+                for number,row in enumerate(rows,1):
+                    row.update(label=f'Peak {sign}{number}',unshifted_energy_ev=row['energy_ev']-self.shift.value)
+            choices = [('Select a detected maximum',None)]+[
+                (f"{r['label']} · {r['energy_ev']:.6f} eV · {r['relative_height']:.1%} of maximum",r['energy_ev'])
+                for r in self.peak_rows]
+            if tuple(choices) != tuple(self.peak_choices.options):
+                self.peak_choices.options = choices
+            self.peak_info.value = ('<p>'+str(len(self.peak_rows))+' spectral maxima detected in the displayed range. '
+                'Use a peak to set the blend/map energy; its sampled energy is retained without rounding to 0.01 eV. '
+                'Overlapping transitions can produce a maximum between their poles. No calculation is submitted.</p>'
+                if self.peak_rows else '<p>No spectral maxima pass the current filters in this range.</p>'
+                if self.auto_peaks.value else '<p>Automatic spectral-maximum detection is disabled.</p>')
+        except ValueError as exc:
+            self.peak_rows = []
+            self.peak_choices.options = [('Select a detected maximum',None)]
+            self.peak_info.value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
 
     def _set_selection(self,identifiers):
         previous = self.selected.value
@@ -169,14 +220,18 @@ class SpectralViewer(ipw.VBox):
                 if selected != self.selected.value:
                     self.selected.value = selected
                     return
-        for control in (self.lower,self.upper,self.shift,self.energy,self.window_lower,self.window_upper):
+        for control in (self.lower,self.upper,self.shift,self.window_lower,self.window_upper):
             if np.isfinite(control.value) and control.value != round(control.value,2):
                 control.value = round(control.value,2)
                 return
         self.energy.layout.display = '' if self.mode.value == 'energy' else 'none'
         self.window_lower.layout.display = self.window_upper.layout.display = '' if self.mode.value == 'window' else 'none'
-        if self.upper.value <= self.lower.value or not np.isfinite([self.lower.value,self.upper.value,self.eta.value,self.shift.value]).all():
+        if self.upper.value <= self.lower.value or not np.isfinite([self.lower.value,self.upper.value,self.eta.value,self.shift.value,
+                                                                  self.peak_prominence.value,self.peak_height.value]).all():
             self.info.value = '<p style="color:#a02020">Choose a finite, increasing energy range.</p>'
+            self.peak_rows = []
+            self.peak_choices.options = [('Select a detected maximum',None)]
+            self.peak_info.value = '<p>Choose a valid spectral range before detecting peaks.</p>'
             return
         table = weighted_table(self.table,self.spin.value)
         omega = np.linspace(self.lower.value,self.upper.value,1600)
@@ -186,6 +241,7 @@ class SpectralViewer(ipw.VBox):
         focused = focused[(focused >= self.lower.value)&(focused <= self.upper.value)]
         omega = np.unique(np.concatenate([omega,focused]))
         curves = spectrum(table,omega,self.eta.value,self.side.value,self.shift.value)
+        self._find_peaks(omega,curves['total'])
         ymax = max(float(curves['total'].max()),1e-12)*1.1
         x = lambda value:65+850*(value-self.lower.value)/(self.upper.value-self.lower.value)
         y = lambda value:295-245*value/ymax
@@ -214,6 +270,14 @@ class SpectralViewer(ipw.VBox):
             a,b = max(65.,x(group[0]['pole_ev'])-6),min(915.,x(group[-1]['pole_ev'])+6)
             title = '; '.join(f"{r['id']} · {r['pole_ev']:.6f} eV · weight {r['strength']:.6g}" for r in group)
             parts.append(f'<rect {action_attributes([r["id"] for r in group],title)} x="{a:.2f}" y="35" width="{b-a:.2f}" height="260" fill="transparent"><title>{html.escape(title)}</title></rect>')
+        if self.auto_peaks.value:
+            points = ' '.join(f'{x(w):.2f},{y(v):.2f}' for w,v in zip(omega,curves['total']))
+            parts.append(f'<polyline points="{points}" fill="none" stroke="#111827" stroke-width="1.3" pointer-events="none"/>')
+        for i,peak in enumerate(self.peak_rows):
+            px,py = x(peak['energy_ev']),y(peak['intensity'])
+            title = html.escape(f"{peak['label']} · {peak['energy_ev']:.6f} eV · prominence {peak['relative_prominence']:.1%}")
+            parts.append(f'<g pointer-events="none"><title>{title}</title><circle cx="{px:.2f}" cy="{py:.2f}" r="3" fill="#111827"/>'
+                f'<text x="{px:.2f}" y="{max(43.,py-9.-12*(i%2)):.2f}" text-anchor="middle" font-size="11">{peak["label"]}</text></g>')
         parts.append('<text x="470" y="344" text-anchor="middle" font-size="18">Transition energy + offset (eV)</text><text transform="translate(18 190) rotate(-90)" text-anchor="middle" font-size="18">Spectral intensity</text></svg>')
         self.plot.value = ''.join(parts)
         if self.diagram:
@@ -222,7 +286,7 @@ class SpectralViewer(ipw.VBox):
         self.info.value = ('<p><span style="color:#2c7be5">● Removal</span> · <span style="color:#f06431">● Addition</span>. '
             'η is half-width at half-maximum; FWHM = 2η. Curves use Andrés’s convention: integrated peak area = π × weight. '
             'Unpolarized weights include the Clebsch–Gordan spin-multiplet factors relative to the stored highest-M_S component. '
-            'Only the computed final states contribute.</p>')
+            'Only the computed final states contribute. The black curve is their displayed total when automatic peak detection is enabled.</p>')
         rows = []
         for raw,row in zip(self.table['transitions'],table['transitions']):
             rows.append(f'<tr><td>{html.escape(row["id"])}</td><td>{row["side"]}</td><td>{row["final_charge"]:+d}</td><td>{row["final_multiplicity"]}</td><td>{row["final_root"]}</td><td>{row["energy_ev"]+self.shift.value:.6f}</td><td>{raw["strength"]:.5f}</td><td>{row["spin_factor"]:.5g}</td><td>{row.get("population",1.):.5g}</td><td>{row["strength"]:.5f}</td><td>{row["final_ci_norm"]:.8f}</td></tr>')
@@ -234,6 +298,10 @@ class SpectralViewer(ipw.VBox):
         metadata = dict(transitions=table,eta_hwhm_ev=self.eta.value,shift_ev=self.shift.value,
                         lower_ev=self.lower.value,upper_ev=self.upper.value,side=self.side.value,
                         selected_transition_ids=list(self.selected.value),
+                        peak_detection=dict(enabled=self.auto_peaks.value,method='scipy.signal.find_peaks',
+                            prominence_fraction=self.peak_prominence.value/100.,height_fraction=self.peak_height.value/100.,
+                            energy_grid='display grid with additional samples around transition poles',
+                            maxima=self.peak_rows),
                         lorentzian_normalization='eta/((omega-pole)^2+eta^2); area=pi*strength')
         csv_data = base64.b64encode(buffer.getvalue().encode()).decode()
         json_data = base64.b64encode(json.dumps(metadata,indent=2,allow_nan=False).encode()).decode()
@@ -269,6 +337,7 @@ class SpectralViewer(ipw.VBox):
             return
         self._disposed = True
         self.on_change = self.on_selection = self.on_use = None
+        self.on_peak_use = None
         from .widget_lifecycle import close_widget_tree
         for child in self.children:
             close_widget_tree(child)

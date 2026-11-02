@@ -23,15 +23,16 @@ def test_missing_states_keep_requested_view_and_offer_explicit_preparation(monke
         result.navigation.value = task
         panel = result.tabs.panels['states']
         assert panel.source_uuid == 'reference'
-        if task != 'casci':
-            assert result.navigation.value == task
-            assert result.prerequisites.layout.display == '' and panel.layout.display == 'none'
-            assert 'CASCI states first' in result.prerequisites.children[0].value
-            result.prerequisites.children[1].click()
-            assert result.navigation.value == 'casci'
+        assert result.navigation.value == task
+        assert result.prerequisites.layout.display == '' and panel.layout.display == 'none'
+        assert 'prepare an orbital reference' in result.prerequisites.children[0].value
+        result.prerequisites.children[1].click()
+        assert result.navigation.value == 'prepare'
         assert panel.layout.display != 'none'
         assert panel.analysis.value == 'states' and panel.calculation.toggle.value
         assert panel.analysis.layout.display == 'none'
+        assert panel.common_preparation.layout.display == '' and panel.sector_preparation.layout.display == 'none'
+        assert result.prerequisites.children[1].disabled
         assert panel.plan is None and panel._dyson is None
         assert (panel.electrons.value, panel.norb.value, panel.charge.value, panel.mult.value) == (2, 2, 0, 1)
         assert panel.common_submit.disabled and panel.submit.disabled
@@ -95,12 +96,11 @@ def test_new_goal_stays_in_setup_and_existing_reference_is_explicit(source, monk
         result = app.result_box.children[0]
         panel = result.tabs.panels['states']
         assert panel.source_uuid == source.uuid
-        assert 'Kondo' in result.analysis_hint.value
-        assert result.navigation.value == 'kondo' and result.goal == 'kondo'
+        assert result.navigation.value == 'prepare' and result.goal == 'kondo'
         assert result.tabs._view_name == 'StackView'
         assert result.prerequisites.layout.display == ''
-        result.prerequisites.children[1].click()
-        assert result.navigation.value == 'casci' and panel.calculation.toggle.value
+        assert result.prerequisites.children[1].disabled
+        assert panel.calculation.toggle.value and panel.sector_preparation.layout.display == 'none'
         assert result.goal == 'kondo' and result.continue_goal.layout.display == ''
         assert app._requested_analysis is None
     finally:
@@ -133,8 +133,74 @@ def test_new_submission_opens_its_goal_after_reference_completes(source, monkeyp
         app._submit()
         assert len(submitted) == 1 and app.pages.selected_index == 2
         result = app.result_box.children[0]
-        assert result.goal == 'dyson' and result.navigation.value == 'dyson'
+        assert result.goal == 'dyson' and result.navigation.value == 'prepare'
         assert result.prerequisites.layout.display == ''
         assert result.tabs.panels['states'].plan is None
     finally:
         app.close()
+
+
+def test_preparation_then_explicit_active_selection_precedes_state_requests(monkeypatch):
+    from aiidalab_orca import casci, viewer, active_space_step
+    from aiidalab_orca.app import close_widget_tree
+    from aiidalab_orca.presentation import ComputePanel
+    references = []
+    ref = {'kind':'restricted','n_electrons':10,'n_orbitals':20,'charge':0,'source_multiplicity':1}
+    monkeypatch.setattr(viewer,'molecule',lambda *args:ipw.Label('Geometry'))
+    monkeypatch.setattr(casci.service,'reference_runs',lambda uuid:list(references))
+    monkeypatch.setattr(casci.service,'reference_data',lambda uuid:dict(ref))
+    monkeypatch.setattr(casci.service,'runs',lambda uuid:[])
+    monkeypatch.setattr(casci.service,'results',lambda *args:[])
+
+    class Inspection(ipw.VBox):
+        def __init__(self, uuid, *, active_indices, apply_window):
+            self.apply_window = apply_window
+            self.catalog_record = None
+            self.calculation = ComputePanel('Read orbital information',[])
+            super().__init__([self.calculation])
+
+        def set_active(self, active):
+            pass
+
+    monkeypatch.setattr(active_space_step,'OrbitalInspection',Inspection)
+
+    def unwanted(*args, **kwargs):
+        raise AssertionError('Moving between stages must not submit a calculation')
+
+    monkeypatch.setattr(casci.service,'prepare_common',unwanted)
+    result = viewer.show_result(reference_data() | {'requested_analysis':'kondo'})
+    try:
+        result.open_goal('kondo')
+        panel = result.tabs.panels['states']
+        assert result.navigation.value == 'prepare' and result.confirmed_space is None
+        references.append({'uuid':'common','kind':'restricted','reference_uuid':'prepared-orbitals'})
+        panel._refresh()
+        assert not result.prerequisites.children[1].disabled
+        result.prerequisites.children[1].click()
+        selection = result.tabs.panels['active']
+        assert result.navigation.value == 'active' and selection.inspection.calculation.toggle.value
+        result.open_analysis('casci')
+        assert panel.layout.display == 'none' and 'confirm the active space' in result.prerequisites.children[0].value
+        result.prerequisites.children[1].click()
+        selection.electrons.value,selection.norb.value = 4,4
+        assert (panel.electrons.value,panel.norb.value) == (2,2)
+        selection.confirm.click()
+        assert result.navigation.value == 'casci'
+        assert result.confirmed_space == ('common',4,4)
+        assert panel.sector_preparation.layout.display == '' and panel.common_preparation.layout.display == 'none'
+        assert not panel.calculation.toggle.value or panel.submit.disabled
+        assert panel.plan is None
+        result.open_analysis('active')
+        assert result.tabs.panels['active'] is selection
+        selection.inspection.apply_window([2,3,4,5,6])
+        assert result.confirmed_space == ('common',6,5)
+        assert result.navigation.value == 'casci' and result.goal == 'kondo'
+        result.open_analysis('prepare')
+        panel.reference.options = [('New reference','another-common')]
+        result.open_analysis('casci')
+        assert panel.layout.display == 'none' and result.prerequisites.layout.display == ''
+        selection.confirm.click()
+        assert 'reference changed' in selection.summary.value
+        assert result.confirmed_space == ('common',6,5)
+    finally:
+        close_widget_tree(result)

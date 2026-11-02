@@ -54,19 +54,34 @@ submission API. Use the app services and native WorkChains for new work.
 
 In **New calculation**, choose the final **Calculation goal**. This keeps the
 user in the molecule/SCF setup wizard; it does not open search. After the
-reference finishes, the goal opens with guidance for its prerequisites. Each
+reference finishes, the next required preparation/analysis stage opens. Each
 later calculation needs its own review and submission. Reusing a saved
 reference is an explicit **Open an existing reference instead** action, followed
 by selection in **Search calculations** and **View results**.
 
 **Results** has one **Analysis / results** selector, including CASCI, Dyson and
 Kondo views of the same retained state workspace. Missing prerequisites keep
-the requested analysis selected and offer an explicit **Prepare CASCI states**
-or **Compute Dyson transitions** action. The final goal remains visible during
-preparation, and **Continue to…** checks that goal's next step. Navigation never
+the requested analysis selected and offer an explicit prerequisite action.
+The main path is **1. Prepare orbital reference → 2. Inspect / confirm active
+space → 3. CASCI states and multiplicities → 4. Dyson → 5. Kondo**, stopping at
+the chosen goal and reusing completed steps. The final goal remains visible
+during preparation, and **Continue to…** checks its next required step. Navigation never
 submits calculations or changes the physical model. CASCI holds orbitals fixed
 and should not be described as orbital-optimized CASSCF. Check the installed
 GUI version before promising these entry points are present.
+
+An SCF reference alone does not establish a reviewed active space. The user
+must inspect/select orbitals or explicitly confirm a deliberate electron/orbital
+count before a new CASCI request. A confirmation belongs to that exact prepared
+reference and active space. Compatible saved CASCI results can establish the
+recorded choice; changing the orbital reference requires review again.
+
+Restricted references retain their restricted orbitals. Unrestricted preparation
+provides QROs for the current CAS input and UNOs for inspection. UNO occupations
+are SCF diagnostics, not correlated natural occupations; inspecting UNOs does
+not switch the CAS basis. Arbitrary reordering, correlated natural-orbital
+preparation and general orbital-optimized CASSCF are not implemented in this GUI.
+Verified imported fixed references remain distinct, provenance-linked sources.
 
 ### Scientific and execution inputs
 

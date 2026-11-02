@@ -2,15 +2,16 @@
 
 Keep **New calculation**, **Search calculations** and **Results** as the app's
 main entry points. Opening a completed SCF/geometry reference starts in the
-Results overview. Each analysis is optional; these sections are not successive
-steps of a single workflow.
+Results overview. Independent properties can branch from that reference.
+CASCI, Dyson and Kondo have explicit preparation dependencies, described in
+[the guided CAS workflow](cas-workflow.md).
 
 ## Where to start
 
 In **New calculation**, choose the final **Calculation goal**, such as Dyson or
 Kondo, then prepare the molecule and review its geometry/SCF calculation in the
 same wizard. Choosing a goal keeps you in setup. When the reference finishes,
-the requested analysis opens with guidance for its next step. Later calculations
+the next required preparation/analysis stage opens. Later calculations
 each require their own settings, review and submission.
 
 To reuse an existing reference, explicitly click **Open an existing reference
@@ -18,9 +19,11 @@ instead**, select a completed SCF/optimization in **Search calculations**, then
 click **View results**. This opens the selected goal for that reference.
 
 **Results** has one **Analysis / results** selector for the overview, orbitals,
-CASCI, Dyson spectra/maps, Kondo, vibrations and calculation details. A missing
+orbital preparation, active-space confirmation, CASCI, Dyson spectra/maps,
+Kondo, vibrations and calculation details. A missing
 prerequisite keeps the requested analysis selected and offers an explicit action
-such as **Prepare CASCI states** or **Compute Dyson transitions**. The final goal
+such as **Prepare orbital reference**, **Inspect and choose active orbitals**,
+or **Compute Dyson transitions**. The final goal
 remains visible while preparing these stages; **Continue to…** returns to that
 goal to check the next step. No navigation action submits a calculation.
 
@@ -36,7 +39,9 @@ different spin or submits a prerequisite calculation automatically.
 | --- | --- |
 | Overview | Final geometry, reference method/charge/spin/energy, XYZ download and optional optimization-convergence plot |
 | Orbitals & density | SCF orbital levels and optional cubes/spin density; a separate QRO/UNO inspection view |
-| CASCI states; Dyson spectrum; Dyson orbitals & maps; Kondo orbitals & maps | Views of one shared electronic-state workspace, with retained references and selections |
+| 1. Prepare orbital reference | Prepare or reuse the shared spatial orbitals without SCF iterations |
+| 2. Inspect / confirm active space | Inspect occupations/shapes and explicitly select the CAS input orbitals/electrons |
+| 3. CASCI states and multiplicities; Dyson; Kondo | Request states only after preparation, then continue to compatible transitions and channels |
 | Vibrations | Stored IR/Raman spectra and animated modes, plus an optional frequency-calculation form |
 | Calculation details | Effective reference inputs, electronic-file storage status and provenance identifiers |
 
@@ -63,9 +68,9 @@ the interface does not group calculations just because their formulas match.
 
 ## Connected electronic analysis
 
-**Analysis / results → CASCI states** opens the CASCI diagram without
+**Analysis / results → 3. CASCI states and multiplicities** opens the CASCI diagram without
 constructing a Dyson viewer. **Inspect active orbitals** opens the corresponding
-reference and active window in **Orbitals & density → QRO / UNO inspection**.
+reference and active window in **2. Inspect / confirm active space**.
 Applying an inspected window returns to the CASCI controls with that reference.
 
 **Dyson spectrum** keeps the existing linked many-electron diagram, transition

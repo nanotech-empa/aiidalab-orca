@@ -1,7 +1,9 @@
 # QRO and UNO inspection
 
-Open a completed SCF/geometry result, expand **CASCI states · fixed geometry
-(draft)**, and open **Inspect QRO / UNO orbitals**.
+Follow [the CAS preparation workflow](cas-workflow.md): prepare/reuse the
+orbital reference in **Analysis / results → 1. Prepare orbital reference**,
+then choose **2. Inspect / confirm active space**. The independent
+**Orbitals & density → QRO / UNO inspection** view remains available too.
 
 1. **Read orbital information** submits a small AiiDA workflow. It preserves
    available orbital files and exports metadata using the registered
@@ -19,7 +21,9 @@ Open a completed SCF/geometry result, expand **CASCI states · fixed geometry
    cubehandler-reduced previews are retrieved into AiiDA. Retained full cubes
    can be used for subsequent high-quality rendering.
 
-This is orbital inspection and review of the current CASCI active window.
+Use the selected-window button to confirm the active space and open the CASCI
+state requests. The manual count controls in the active-space stage offer the
+same explicit confirmation. This is orbital inspection and review of the CASCI active window.
 Selecting UNOs for inspection does not change the orbital reference used by
 existing or new CASCI sectors. A later preparation component can make an
 explicit choice of another shared orbital reference.

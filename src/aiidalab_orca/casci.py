@@ -85,26 +85,33 @@ class CasciStates(ipw.VBox):
         self.dyson_box = ipw.VBox([ipw.HTML('Compute compatible CASCI states to prepare optional Dyson transitions.')],
                                  layout=ipw.Layout(display='none'))
         from .presentation import ComputePanel
-        self.calculation = ComputePanel('Prepare orbitals / add CASCI states…', [
+        self.common_preparation = ipw.VBox([
             ipw.HTML('<h4>Common spatial-orbital reference</h4><p>One shared set of spatial orbitals is used for all CASCI states and charge/spin sectors. '
                 'Preparing it reads the saved wavefunction without running a new SCF calculation.</p>'),
-            self.prepare,self.common_submit,common_options,
+            self.prepare,self.common_submit,common_options])
+        self.active_controls = ipw.HBox([self.electrons,self.norb],layout=ipw.Layout(flex_flow='row wrap'))
+        self.sector_preparation = ipw.VBox([
             ipw.HTML('<h4>Add a charge / spin sector</h4>'),
+            ipw.HTML('<p>Each request computes one charge and multiplicity. To add another spin sector, '
+                'review and submit another request with the same confirmed active space. '
+                'Compatible saved sectors appear together in the energy diagram.</p>'),
             ipw.HTML('<p><b>Choose the active space explicitly.</b> The small initial values are a starting example, not a validated '
             'choice for your molecule. The same spatial orbitals are used for N and N±1; their active electron counts adjust with charge.</p>'),
-            ipw.HBox([self.electrons,self.norb],layout=ipw.Layout(flex_flow='row wrap')),
             self.charge,self.mult,self.roots,
             ipw.HTML('<p><b>Electronic states (also called roots):</b> '
                 '<b>1</b> requests the lowest-energy CASCI state in the chosen charge/spin sector; '
                 '<b>2</b> also requests the next state, and so on. '
                 'This is separate from the number of active orbitals.</p>'),
             advanced,self.review,self.submit])
-        self.states_view = ipw.VBox([self.previous,self.status,self.empty,
-            self.inspect if on_inspect else self.inspection_box, self.calculation,self.message,self.diagram_box])
+        self.calculation = ComputePanel('Prepare orbitals / add CASCI states…',
+                                        [self.common_preparation,self.sector_preparation])
+        self.states_view = ipw.VBox([self.previous,self.status,self.empty,self.diagram_box,
+            self.inspect if on_inspect else self.inspection_box, self.calculation,self.message])
         self.guide = kondo_preparation_guide()
+        self.reference_controls = ipw.HBox([self.reference,self.refresh],layout=ipw.Layout(flex_flow='row wrap'))
         super().__init__([ipw.HTML('<p>Shared spatial orbitals at this fixed geometry. '
             'Use CASCI states on their own, or explore optional Dyson transitions and maps.</p>'), self.guide,
-            ipw.HBox([self.reference,self.refresh],layout=ipw.Layout(flex_flow='row wrap')), self.space_info,
+            self.reference_controls, self.space_info, self.active_controls,
             self.analysis,self.states_view,self.dyson_box])
         for control in (self.electrons,self.norb,self.charge,self.mult,self.roots,self.aux,self.threshold,
                         self.nprocs,self.memory,self.walltime,self.force,self.common_force):
@@ -114,6 +121,22 @@ class CasciStates(ipw.VBox):
         self.aux.observe(self._refresh_diagram,names='value')
         self.charge.observe(self._charge_changed,names='value')
         self._refresh()
+
+    def set_stage(self, stage):
+        """Expose preparation and state requests as separate UI stages."""
+        preparing = stage == 'prepare'
+        legacy = stage == 'legacy'
+        self.common_preparation.layout.display = '' if preparing or legacy else 'none'
+        self.sector_preparation.layout.display = 'none' if preparing else ''
+        self.reference_controls.layout.display = '' if preparing or legacy else 'none'
+        self.active_controls.layout.display = '' if legacy else 'none'
+        self.space_info.layout.display = 'none' if preparing else ''
+        for widget in (self.previous, self.empty, self.inspect, self.inspection_box, self.diagram_box):
+            widget.layout.display = 'none' if preparing else ''
+        self.calculation.toggle.description = 'Prepare orbital reference' if preparing else 'Add / extend CASCI states'
+        if preparing:
+            self.analysis.value = 'states'
+            self.calculation.show()
 
     def _invalidate(self, _=None):
         self.plan = None

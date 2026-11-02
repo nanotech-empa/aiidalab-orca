@@ -5,7 +5,9 @@ charge/spin calculations. It does not optimize atomic positions or CAS orbitals.
 It is a pipeline prototype, not a validated spectroscopy protocol.
 
 Open a completed SCF/geometry calculation, then choose
-**Analysis / results → CASCI states** in Results:
+the preparation and active-space stages described in
+[the guided CAS workflow](cas-workflow.md). **3. CASCI states and multiplicities**
+is available once the orbital reference and active space are established:
 
 1. Review and prepare common orbitals. Restricted SCF orbitals are read without
    iteration; unrestricted orbitals are converted to QROs with ORCA's `UNO`
@@ -13,7 +15,7 @@ Open a completed SCF/geometry calculation, then choose
    nonzero limit overrides `NoIter`. The parser requires ORCA's confirmation
    that SCF was skipped, that the geometry/basis match, and (for unrestricted
    input) that a QRO file was written.
-2. Select the active electron count **in the reference charge state** and the
+2. Inspect and explicitly confirm the active electron count **in the reference charge state** and the
    number of spatial orbitals. Review the displayed zero-based ORCA indices.
    The initial small values are illustrative and must be chosen for the molecule.
    [Inspect QRO/UNO orbitals](orbital-inspection.md) to examine their shapes and

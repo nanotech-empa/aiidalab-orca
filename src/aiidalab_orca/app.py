@@ -9,7 +9,7 @@ from .configuration import GeometrySettings
 from . import services, structure_io
 from .history import HistoryWidget, inspect_run
 from .viewer import show_result
-from .analysis_navigation import ANALYSES, AnalysisChooser
+from .analysis_navigation import ANALYSES, AnalysisChooser, goal_path
 
 
 # Classic Notebook auto-scrolls tall outputs as widgets expand. Scope this to
@@ -144,6 +144,8 @@ class OrcaApp(ipw.VBox):
             '<p><b>First step:</b> prepare the molecule and review its geometry/SCF calculation below. '
             'After it finishes, the requested analysis opens with guidance for the next step. '
             'No later calculation is submitted automatically.</p>')
+        if goal_path(task):
+            self.analysis_hint.value += '<p><b>Your path:</b> '+goal_path(task)+'</p>'
         self.analysis_hint.layout.display = ''
 
     def _settings(self):
@@ -351,7 +353,7 @@ class OrcaApp(ipw.VBox):
                 data = dict(data, requested_analysis=self.analysis_chooser.choice.value)
                 self.result_box.children = [show_result(data)]
                 if self._requested_analysis:
-                    self.result_box.children[0].open_analysis(self._requested_analysis)
+                    self.result_box.children[0].open_goal(self._requested_analysis)
                     self._requested_analysis = None
                 self.result_box.children[0].set_active(self.pages.selected_index == 2)
             else:

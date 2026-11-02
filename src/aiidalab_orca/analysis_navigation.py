@@ -12,6 +12,17 @@ ANALYSES = {
 }
 
 
+def goal_path(goal):
+    if goal not in ('casci','dyson','kondo'):
+        return ''
+    path = 'SCF / verified reference → prepared orbitals → inspect / confirm active space → CASCI states'
+    if goal in ('dyson','kondo'):
+        path += ' → Dyson transitions'
+    if goal == 'kondo':
+        path += ' → Kondo channels'
+    return path
+
+
 class AnalysisChooser(ipw.VBox):
     def __init__(self, choose):
         self.choice = ipw.Dropdown(description='Calculation goal',

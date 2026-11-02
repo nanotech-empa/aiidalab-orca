@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import nglview as nv
 from ase import Atoms
 
-from .analysis_navigation import ANALYSES
+from .analysis_navigation import ANALYSES, goal_path
 
 
 def settings_details(settings, *, single_point=False):
@@ -83,6 +83,9 @@ class ResultsView(ipw.VBox):
     def __init__(self, data):
         from .presentation import LazyStack
         self.data = data
+        self.confirmed_space = None
+        self._selection_reference = None
+        self._preparation_button = None
         s = data['settings']
         self.scf = data.get('single_point', False)
         geometry = ('Geometry optimized with constraints' if data['optimized'] and s.get('constraints') else
@@ -99,16 +102,18 @@ class ResultsView(ipw.VBox):
         self.tabs = LazyStack([
             ('overview', 'Overview', self._overview),
             ('orbitals', 'Orbitals & density', self._orbitals),
+            ('active', 'Inspect orbitals / active space', self._active_space),
             ('states', 'CASCI, Dyson & Kondo', self._states),
             ('vibrations', 'Vibrations', self._vibrations),
             ('details', 'Calculation details', self._details),
         ])
         self.tabs.add_class('orca-workspace-body')
         views = [('Overview', 'overview'), ('Orbitals & density', 'orbitals'),
-                 ('CASCI states', 'casci'), ('Dyson spectrum', 'dyson'),
-                 ('Dyson orbitals & maps', 'maps'), ('Kondo orbitals & maps', 'kondo')]
+                 ('1. Prepare orbital reference', 'prepare'), ('2. Inspect / confirm active space', 'active'),
+                 ('3. CASCI states and multiplicities', 'casci'), ('4. Dyson spectrum', 'dyson'),
+                 ('Dyson orbitals & maps', 'maps'), ('5. Kondo orbitals & maps', 'kondo')]
         views += [(title, key) for key, title in zip(self.tabs.section_keys, self.tabs.titles)
-                  if key not in ('overview', 'orbitals', 'states')]
+                  if key not in ('overview', 'orbitals', 'active', 'states')]
         self.navigation = ipw.Dropdown(description='Analysis / results', options=views,
             style={'description_width': 'initial'}, layout=ipw.Layout(width='95%'))
         self._navigating = False
@@ -116,8 +121,10 @@ class ResultsView(ipw.VBox):
         self.goal = data.get('requested_analysis')
         self.continue_goal = ipw.Button(description='Continue to '+ANALYSES[self.goal][0] if self.goal else '',
             icon='arrow-right', layout=ipw.Layout(width='auto', display='none'))
-        self.continue_goal.on_click(lambda _: self.open_analysis(self.goal) if self.goal else None)
+        self.continue_goal.on_click(lambda _: self.open_goal(self.goal) if self.goal else None)
         goal_text = '<p><b>Calculation goal:</b> '+html.escape(ANALYSES[self.goal][0])+'</p>' if self.goal else ''
+        if self.goal in ('casci','dyson','kondo'):
+            goal_text += '<p><b>Your path:</b> '+goal_path(self.goal)+'. Each calculation is reviewed and submitted separately.</p>'
         self.goal_hint = ipw.VBox([ipw.HTML(goal_text), self.continue_goal],
                                   layout=ipw.Layout(display='' if self.goal else 'none'))
         self.analysis_hint = ipw.HTML(layout=ipw.Layout(display='none'))
@@ -135,8 +142,33 @@ class ResultsView(ipw.VBox):
         if not self._navigating:
             self.open_analysis(key)
 
+    def _space_signature(self, panel):
+        return (panel.reference.value,panel.electrons.value,panel.norb.value)
+
+    def _space_ready(self, panel):
+        return bool(panel._datasets) or self.confirmed_space == self._space_signature(panel)
+
+    def open_goal(self, goal):
+        if goal not in ('casci','dyson','kondo'):
+            return self.open_analysis(goal)
+        self._navigating = True
+        try:
+            panel = self.tabs.show_section('states')
+        finally:
+            self._navigating = False
+        if not hasattr(panel,'analysis'):
+            return self.open_analysis('prepare')
+        if not panel.reference.value:
+            return self.open_analysis('prepare')
+        if not self._space_ready(panel):
+            return self.open_analysis('active')
+        if not panel._datasets:
+            return self.open_analysis('casci')
+        return self.open_analysis(goal)
+
     def _require(self, panel, message, task, label):
         panel.layout.display = 'none'
+        self._preparation_button = None
         old = self.prerequisites.children
         button = ipw.Button(description=label, icon='arrow-right', layout=ipw.Layout(width='auto'))
         button.on_click(lambda _: self.open_analysis(task))
@@ -158,21 +190,43 @@ class ResultsView(ipw.VBox):
                 self.analysis_hint.layout.display = 'none'
                 return self.tabs.show_section(task)
             labels = {key: title for title, key in self.navigation.options}
-            label, help_text = ANALYSES.get(task, ANALYSES['dyson'] if task == 'maps' else (labels.get(task, task), ''))
+            stage_help = {
+                'prepare': ('Prepare the orbital reference', 'Start from the saved SCF wavefunction. Restricted orbitals are retained; unrestricted references produce QROs for CASCI and UNOs for inspection. Imported verified references can be reused.'),
+                'active': ('Inspect and confirm the active space', 'Read orbital information, inspect occupations and shapes, then explicitly choose the active electrons and orbitals. State counts and multiplicities come after this choice.'),
+            }
+            label, help_text = stage_help.get(task,ANALYSES.get(task, ANALYSES['dyson'] if task == 'maps' else (labels.get(task, task), '')))
             self.analysis_hint.value = f'<p><b>{html.escape(label)}:</b> {html.escape(help_text)}</p>'
             self.analysis_hint.layout.display = ''
-            if task in self.tabs.section_keys and task != 'states':
+            if task in self.tabs.section_keys and task not in ('states','active'):
                 return self.tabs.show_section(task)
             panel = self.tabs.show_section('states')
             if not hasattr(panel, 'analysis'):
                 return panel
             if task in dict(self.navigation.options).values():
                 self.navigation.value = task
+            if task == 'prepare':
+                panel.set_stage('prepare')
+                self._require_next_preparation(panel)
+                return panel
+            if task in ('active','casci','dyson','maps','kondo') and not panel.reference.value:
+                self._require(panel, 'First prepare an orbital reference from the saved SCF wavefunction.',
+                              'prepare','Prepare orbital reference')
+                return panel
+            if task == 'active':
+                self._refresh_selection(panel)
+                return self.tabs.show_section('active')
+            if task == 'casci' and not self._space_ready(panel):
+                self._require(panel, 'Inspect the orbitals and confirm the active space before choosing multiplicities and electronic states.',
+                              'active','Inspect and choose active orbitals')
+                return panel
             mode = {'casci': 'states', 'dyson': 'spectrum'}.get(task, task)
+            if hasattr(panel,'set_stage'):
+                panel.set_stage('states' if task in ('casci','dyson','maps','kondo') else 'legacy')
             if task in ('dyson', 'maps', 'kondo') and (not panel.reference.value or not panel._datasets):
+                target = 'casci' if self._space_ready(panel) else 'active'
                 self._require(panel, 'This analysis needs compatible CASCI states first. '
-                    'Prepare the common orbitals and required charge/spin sectors, then return here.',
-                    'casci', 'Prepare CASCI states')
+                    'Use the prepared orbital reference and explicitly selected active space for the required charge/spin sectors.',
+                    target,'Compute CASCI states' if target == 'casci' else 'Inspect and choose active orbitals')
                 return panel
             panel.analysis.value = mode
             if task == 'casci' and (not panel.reference.value or not panel._datasets):
@@ -185,6 +239,45 @@ class ResultsView(ipw.VBox):
             return panel
         finally:
             self._navigating = False
+
+    def _require_next_preparation(self, panel):
+        button = ipw.Button(description='Next: inspect / select active orbitals',icon='arrow-right',
+                            disabled=not bool(panel.reference.value),layout=ipw.Layout(width='auto'))
+        button.on_click(lambda _: self.open_analysis('active'))
+        old = self.prerequisites.children
+        self.prerequisites.children = [ipw.HTML('<p><b>Orbital preparation only:</b> review and prepare '
+            'the common reference here. When it is available, continue to orbital inspection. '
+            'No CASCI state calculation is submitted in this step.</p>'),button]
+        self.prerequisites.layout.display = ''
+        self._preparation_button = button
+        for widget in old:
+            widget.close()
+
+    def _prepared_reference_changed(self, event):
+        if self._preparation_button is not None:
+            self._preparation_button.disabled = not bool(event['new'])
+
+    def _refresh_selection(self, panel):
+        if self._selection_reference == panel.reference.value:
+            return
+        old = self.tabs.panels.pop('active',None)
+        if old:
+            from .app import close_widget_tree
+            close_widget_tree(old)
+        self._selection_reference = str(panel.reference.value)
+
+    def _active_space(self):
+        from .active_space_step import ActiveSpaceStep
+        panel = self.tabs.panels['states']
+        return ActiveSpaceStep(panel.reference.value,panel.electrons.value,panel.norb.value,self._confirm_space)
+
+    def _confirm_space(self, common_uuid, space):
+        panel = self.tabs.show_section('states')
+        if str(panel.reference.value) != str(common_uuid):
+            raise ValueError('The orbital reference changed; inspect the selected reference again.')
+        panel._apply_orbital_window(space['orbitals'])
+        self.confirmed_space = self._space_signature(panel)
+        self.open_analysis('casci')
 
     def _overview(self):
         data = self.data
@@ -235,6 +328,7 @@ class ResultsView(ipw.VBox):
         if extras:
             self.navigation.options = (*self.navigation.options, *extras)
         panel.analysis.observe(self._sync_state_navigation, names='value')
+        panel.reference.observe(self._prepared_reference_changed,names='value')
         return panel
 
     def _vibrations(self):
@@ -261,28 +355,23 @@ class ResultsView(ipw.VBox):
         return ipw.VBox(items)
 
     def _prepare_common(self):
-        panel = self.open_analysis('casci')
-        if hasattr(panel, 'calculation'):
-            panel.analysis.value = 'states'
-            panel.calculation.show()
+        self.open_analysis('prepare')
 
     def set_active(self, active):
         self.tabs.set_active(active)
 
     def _inspect_window(self, common_uuid, indices):
-        panel = self.open_analysis('orbitals')
-        if hasattr(panel, 'inspect_reference'):
-            panel.inspect_reference(common_uuid, indices)
+        self.open_analysis('active')
 
     def _use_window(self, common_uuid, indices):
-        panel = self.open_analysis('casci')
+        panel = self.tabs.show_section('states')
         if hasattr(panel, '_apply_orbital_window'):
             if common_uuid not in [value for _, value in panel.reference.options]:
                 panel._refresh()
             panel.reference.value = common_uuid
             panel._apply_orbital_window(indices)
-            panel.analysis.value = 'states'
-            panel.calculation.show()
+            self.confirmed_space = self._space_signature(panel)
+            self.open_analysis('casci')
 
 
 def show_result(data):

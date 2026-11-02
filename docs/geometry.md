@@ -179,8 +179,13 @@ Changes to a published protocol should receive a new version identifier.
 
 PBE/def2-SVP and PBE0/def2-SVP are the initial starting protocols. Their existing
 scientific defaults are preserved: TightSCF, NormalOpt, no extra dispersion or
-grid keyword. Method and basis controls provide documented suggestions and also
-accept typed ORCA names. SCF and geometry convergence are visible in the main
+grid keyword. Method and basis are editable search fields. Their arrows show
+suggestions matching the current text: with `def2-SVP` entered, the basis list
+shows matching names, including `def2-SVPD` and `ma-def2-SVP`. Clear the field
+and open its arrow to browse all suggestions, or replace the text directly,
+for example with `def2-TZVP` or `cc-pVTZ`. You can also enter an ORCA name
+outside the suggestion list; ORCA checks its availability for your elements.
+SCF and geometry convergence are visible in the main
 settings, including TightSCF/VeryTightSCF and TightOpt/VeryTightOpt as requested
 in the [design review](https://github.com/nanotech-empa/aiidalab-orca/issues/1#issuecomment-6176333944).
 

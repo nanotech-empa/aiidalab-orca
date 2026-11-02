@@ -50,6 +50,20 @@ submission API. Use the app services and native WorkChains for new work.
 
 ## Establish the reviewed plan
 
+### Finding the controls in the GUI
+
+In **New calculation**, the **Other calculations** buttons open a reference
+selection route for orbitals, CASCI, Dyson, Kondo and IR/Raman. Choose the
+analysis, select a completed SCF/optimization in **Search calculations**, then
+click **View results**. The requested workspace opens. **Results** also has
+direct analysis buttons, and its shared electronic-state tab is named
+**CASCI, Dyson & Kondo**. Missing CASCI prerequisites open the preparation form
+with guidance; no calculation is submitted by navigating. CASCI holds orbitals
+fixed and should not be described as orbital-optimized CASSCF. Check the
+installed GUI version before promising these entry points are present.
+
+### Scientific and execution inputs
+
 Record the geometry UUID and coordinate frame, common-orbital reference and
 checkpoint checksum, basis/element overrides, exact inactive/active indices,
 reference electron count, charge/spin sectors, roots, integral approximation,
@@ -176,7 +190,7 @@ plane and observation height, including any viewer override. Use a shared
 explicit brightness scale for compared images and μ points.
 
 Save maps and PNG/PDF figures through CalcJobs with all settings as inputs.
-Verify Search → the molecular reference → States & Dyson → Kondo orbitals &
+Verify Search → the molecular reference → CASCI, Dyson & Kondo → Kondo orbitals &
 maps, select the intended μ result, and inspect the stored images. A service
 test or generated report alone is not browser-rendering evidence.
 

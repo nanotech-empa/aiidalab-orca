@@ -42,10 +42,11 @@ def test_vibrations_and_dft_do_not_construct_casci(monkeypatch):
     result = viewer.show_result(reference_data())
     try:
         assert not calls  # Overview does not prepare any optional analysis.
-        vibration = result.tabs.show_section('vibrations')
+        result.analysis_chooser.buttons['vibrations'].click()
+        vibration = result.tabs.panels['vibrations']
         assert calls == [('vibrations', 'reference')]
         vibration.mode = 5
-        result.tabs.show_section('orbitals')
+        result.analysis_chooser.buttons['orbitals'].click()
         assert calls[-1] == ('orbitals', 'reference') and not vibration.active
         assert result.tabs.show_section('vibrations') is vibration
         assert vibration.mode == 5 and vibration.active
@@ -65,7 +66,7 @@ def test_unoptimized_reference_explains_vibration_prerequisite(monkeypatch):
     try:
         panel = result.tabs.show_section('vibrations')
         assert 'geometry optimization' in panel.value
-        assert result.tabs.titles == ('Overview', 'Orbitals & density', 'States & Dyson',
+        assert result.tabs.titles == ('Overview', 'Orbitals & density', 'CASCI, Dyson & Kondo',
                                      'Vibrations', 'Calculation details')
     finally:
         close_widget_tree(result)

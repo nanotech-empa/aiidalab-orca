@@ -5,11 +5,28 @@ main entry points. Opening a completed SCF/geometry reference starts in the
 Results overview. Each analysis is optional; these sections are not successive
 steps of a single workflow.
 
+## Where to start
+
+**New calculation** includes visible **Other calculations** buttons for
+**Orbitals & density**, **CASCI states**, **Dyson spectra & maps**,
+**Kondo orbitals & maps**, and **IR / Raman**. Choose an analysis, select a
+completed SCF or optimization in **Search calculations**, then click
+**View results**. The requested workspace opens for that reference. The same
+buttons are visible at the top of **Results** so you can change analyses there.
+
+Ordinary orbital inspection starts from SCF results. CASCI first needs a common
+spatial-orbital reference and an explicitly reviewed active space; it holds
+orbitals fixed, unlike CASSCF. Dyson needs compatible initial and N±1 final
+states. Kondo adds the local-moment and charging-energy checks described in
+[the Kondo guide](kondo.md). When CASCI prerequisites are missing, the app opens
+their preparation form and explains the next step. It never substitutes a
+different spin or submits a prerequisite calculation automatically.
+
 | Section | Contents |
 | --- | --- |
 | Overview | Final geometry, reference method/charge/spin/energy, XYZ download and optional optimization-convergence plot |
 | Orbitals & density | SCF orbital levels and optional cubes/spin density; a separate QRO/UNO inspection view |
-| States & Dyson | CASCI state energies, with separate views for optional Dyson spectra and orbital/maps results |
+| CASCI, Dyson & Kondo | CASCI state energies, with separate views for Dyson spectra, orbital/maps results and Kondo exchange channels |
 | Vibrations | Stored IR/Raman spectra and animated modes, plus an optional frequency-calculation form |
 | Calculation details | Effective reference inputs, electronic-file storage status and provenance identifiers |
 
@@ -36,7 +53,7 @@ the interface does not group calculations just because their formulas match.
 
 ## Connected electronic analysis
 
-**States & Dyson → Many-electron states** opens the CASCI diagram without
+**CASCI, Dyson & Kondo → Many-electron states** opens the CASCI diagram without
 constructing a Dyson viewer. **Inspect active orbitals** opens the corresponding
 reference and active window in **Orbitals & density → QRO / UNO inspection**.
 Applying an inspected window returns to the CASCI controls with that reference.

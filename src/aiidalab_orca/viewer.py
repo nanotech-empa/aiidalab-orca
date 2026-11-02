@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import nglview as nv
 from ase import Atoms
 
+from .analysis_navigation import ANALYSES, AnalysisChooser
+
 
 def settings_details(settings, *, single_point=False):
     """Expose the full effective specification, including expert overrides."""
@@ -97,13 +99,39 @@ class ResultsView(ipw.VBox):
         self.tabs = LazyTabs([
             ('overview', 'Overview', self._overview),
             ('orbitals', 'Orbitals & density', self._orbitals),
-            ('states', 'States & Dyson', self._states),
+            ('states', 'CASCI, Dyson & Kondo', self._states),
             ('vibrations', 'Vibrations', self._vibrations),
             ('details', 'Calculation details', self._details),
         ])
         self.tabs.add_class('orca-property-tabs')
-        super().__init__([ipw.HTML(_RESULT_STYLE+context+warnings), self.tabs], layout=ipw.Layout(width='100%', min_width='0'))
+        self.analysis_chooser = AnalysisChooser(self.open_analysis)
+        self.analysis_hint = ipw.HTML(layout=ipw.Layout(display='none'))
+        super().__init__([ipw.HTML(_RESULT_STYLE+context+warnings), self.analysis_chooser,
+                          self.analysis_hint, self.tabs], layout=ipw.Layout(width='100%', min_width='0'))
         self.add_class('orca-results')
+
+    def open_analysis(self, task):
+        label, help_text = ANALYSES[task]
+        self.analysis_hint.value = f'<p><b>{html.escape(label)}:</b> {html.escape(help_text)}</p>'
+        self.analysis_hint.layout.display = ''
+        if task in ('orbitals', 'vibrations'):
+            return self.tabs.show_section(task)
+        panel = self.tabs.show_section('states')
+        if not hasattr(panel, 'analysis'):
+            return panel
+        mode = {'casci': 'states', 'dyson': 'spectrum', 'kondo': 'kondo'}[task]
+        if not panel.reference.value or not panel._datasets:
+            panel.analysis.value = 'states'
+            panel.calculation.show()
+            if task != 'casci':
+                self.analysis_hint.value += ('<p><b>First prepare the CASCI states below.</b> '
+                    'Use the same common orbitals and active space for the required charge/spin sectors. '
+                    'When they are ready, choose the requested analysis again.</p>')
+        else:
+            panel.analysis.value = mode
+            if mode != 'states' and panel._dyson and not panel._dyson.record:
+                panel._dyson.calculation.show()
+        return panel
 
     def _overview(self):
         data = self.data
@@ -120,7 +148,7 @@ class ResultsView(ipw.VBox):
         cards = []
         for key, title, description, icon in [
             ('orbitals', 'Orbitals & density', 'SCF levels, orbital cubes, spin density and QRO/UNO inspection.', 'cubes'),
-            ('states', 'States & Dyson', 'CASCI states on their own, or optional Dyson transitions, spectra and maps.', 'exchange'),
+            ('states', 'CASCI, Dyson & Kondo', 'CASCI states, Dyson transitions and spectra, or Kondo exchange channels and maps.', 'exchange'),
             ('vibrations', 'Vibrations', 'Normal modes, IR and Raman at an optimized geometry.', 'music'),
         ]:
             button = ipw.Button(description=title, icon=icon, layout=ipw.Layout(width='auto'))

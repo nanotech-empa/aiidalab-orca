@@ -13,17 +13,12 @@ ANALYSES = {
 
 
 class AnalysisChooser(ipw.VBox):
-    def __init__(self, choose, *, select_reference=False):
-        self.buttons = {}
-        for key, (label, help_text) in ANALYSES.items():
-            button = ipw.Button(description=label, tooltip=help_text,
-                                layout=ipw.Layout(width='auto', margin='2px 6px 2px 0'))
-            button.on_click(lambda _, task=key: choose(task))
-            self.buttons[key] = button
-        text = ('<h3>Other calculations</h3><p>Use the form below for geometry optimization or SCF. '
-                'For another analysis, choose it here, then select a completed reference in '
-                '<b>Search calculations</b>. Existing results can be reused.</p>' if select_reference else
-                '<h4>Choose an analysis</h4><p>Open saved results or review a new calculation for this reference. '
-                'Opening a workspace does not submit a calculation.</p>')
-        super().__init__([ipw.HTML(text), ipw.HBox(list(self.buttons.values()),
-            layout=ipw.Layout(flex_flow='row wrap'))])
+    def __init__(self, choose):
+        self.choice = ipw.Dropdown(description='Calculation goal',
+            options=[('Geometry optimization / SCF only', None)] +
+                    [(label, key) for key, (label, _) in ANALYSES.items()],
+            style={'description_width': 'initial'}, layout=ipw.Layout(width='95%'))
+        self.choice.observe(lambda event: choose(event['new']), names='value')
+        super().__init__([ipw.HTML('<h3>Start a new calculation</h3><p>Choose your goal, '
+            'then prepare the molecule and its SCF reference below. Each later calculation '
+            'has its own settings and review.</p>'), self.choice])

@@ -42,11 +42,11 @@ def test_vibrations_and_dft_do_not_construct_casci(monkeypatch):
     result = viewer.show_result(reference_data())
     try:
         assert not calls  # Overview does not prepare any optional analysis.
-        result.analysis_chooser.buttons['vibrations'].click()
+        result.navigation.value = 'vibrations'
         vibration = result.tabs.panels['vibrations']
         assert calls == [('vibrations', 'reference')]
         vibration.mode = 5
-        result.analysis_chooser.buttons['orbitals'].click()
+        result.navigation.value = 'orbitals'
         assert calls[-1] == ('orbitals', 'reference') and not vibration.active
         assert result.tabs.show_section('vibrations') is vibration
         assert vibration.mode == 5 and vibration.active

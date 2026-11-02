@@ -52,15 +52,21 @@ submission API. Use the app services and native WorkChains for new work.
 
 ### Finding the controls in the GUI
 
-In **New calculation**, the **Other calculations** buttons open a reference
-selection route for orbitals, CASCI, Dyson, Kondo and IR/Raman. Choose the
-analysis, select a completed SCF/optimization in **Search calculations**, then
-click **View results**. The requested workspace opens. **Results** also has
-direct analysis buttons, and its shared electronic-state tab is named
-**CASCI, Dyson & Kondo**. Missing CASCI prerequisites open the preparation form
-with guidance; no calculation is submitted by navigating. CASCI holds orbitals
-fixed and should not be described as orbital-optimized CASSCF. Check the
-installed GUI version before promising these entry points are present.
+In **New calculation**, choose the final **Calculation goal**. This keeps the
+user in the molecule/SCF setup wizard; it does not open search. After the
+reference finishes, the goal opens with guidance for its prerequisites. Each
+later calculation needs its own review and submission. Reusing a saved
+reference is an explicit **Open an existing reference instead** action, followed
+by selection in **Search calculations** and **View results**.
+
+**Results** has one **Analysis / results** selector, including CASCI, Dyson and
+Kondo views of the same retained state workspace. Missing prerequisites keep
+the requested analysis selected and offer an explicit **Prepare CASCI states**
+or **Compute Dyson transitions** action. The final goal remains visible during
+preparation, and **Continue to…** checks that goal's next step. Navigation never
+submits calculations or changes the physical model. CASCI holds orbitals fixed
+and should not be described as orbital-optimized CASSCF. Check the installed
+GUI version before promising these entry points are present.
 
 ### Scientific and execution inputs
 
@@ -190,7 +196,7 @@ plane and observation height, including any viewer override. Use a shared
 explicit brightness scale for compared images and μ points.
 
 Save maps and PNG/PDF figures through CalcJobs with all settings as inputs.
-Verify Search → the molecular reference → CASCI, Dyson & Kondo → Kondo orbitals &
+Verify Search → the molecular reference → Analysis / results → Kondo orbitals &
 maps, select the intended μ result, and inspect the stored images. A service
 test or generated report alone is not browser-rendering evidence.
 

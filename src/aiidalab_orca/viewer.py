@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import nglview as nv
 from ase import Atoms
 
-from .analysis_navigation import ANALYSES, AnalysisChooser
+from .analysis_navigation import ANALYSES
 
 
 def settings_details(settings, *, single_point=False):
@@ -81,7 +81,7 @@ class ResultsView(ipw.VBox):
     """Independent analysis workspaces sharing one serialized reference."""
 
     def __init__(self, data):
-        from .presentation import LazyTabs
+        from .presentation import LazyStack
         self.data = data
         s = data['settings']
         self.scf = data.get('single_point', False)
@@ -96,42 +96,95 @@ class ResultsView(ipw.VBox):
                    f"<p><b>Reference:</b> {html.escape(s['method'])}/{html.escape(basis)} · "
                    f"charge {s['charge']:+d} · multiplicity {s['multiplicity']}{energy}</p></div>")
         warnings = ''.join('<p class="orca-notice">'+html.escape(w)+'</p>' for w in data.get('warnings', []))
-        self.tabs = LazyTabs([
+        self.tabs = LazyStack([
             ('overview', 'Overview', self._overview),
             ('orbitals', 'Orbitals & density', self._orbitals),
             ('states', 'CASCI, Dyson & Kondo', self._states),
             ('vibrations', 'Vibrations', self._vibrations),
             ('details', 'Calculation details', self._details),
         ])
-        self.tabs.add_class('orca-property-tabs')
-        self.analysis_chooser = AnalysisChooser(self.open_analysis)
+        self.tabs.add_class('orca-workspace-body')
+        views = [('Overview', 'overview'), ('Orbitals & density', 'orbitals'),
+                 ('CASCI states', 'casci'), ('Dyson spectrum', 'dyson'),
+                 ('Dyson orbitals & maps', 'maps'), ('Kondo orbitals & maps', 'kondo')]
+        views += [(title, key) for key, title in zip(self.tabs.section_keys, self.tabs.titles)
+                  if key not in ('overview', 'orbitals', 'states')]
+        self.navigation = ipw.Dropdown(description='Analysis / results', options=views,
+            style={'description_width': 'initial'}, layout=ipw.Layout(width='95%'))
+        self._navigating = False
+        self.navigation.observe(self._navigate, names='value')
+        self.goal = data.get('requested_analysis')
+        self.continue_goal = ipw.Button(description='Continue to '+ANALYSES[self.goal][0] if self.goal else '',
+            icon='arrow-right', layout=ipw.Layout(width='auto', display='none'))
+        self.continue_goal.on_click(lambda _: self.open_analysis(self.goal) if self.goal else None)
+        goal_text = '<p><b>Calculation goal:</b> '+html.escape(ANALYSES[self.goal][0])+'</p>' if self.goal else ''
+        self.goal_hint = ipw.VBox([ipw.HTML(goal_text), self.continue_goal],
+                                  layout=ipw.Layout(display='' if self.goal else 'none'))
         self.analysis_hint = ipw.HTML(layout=ipw.Layout(display='none'))
-        super().__init__([ipw.HTML(_RESULT_STYLE+context+warnings), self.analysis_chooser,
-                          self.analysis_hint, self.tabs], layout=ipw.Layout(width='100%', min_width='0'))
+        self.prerequisites = ipw.VBox(layout=ipw.Layout(display='none'))
+        super().__init__([ipw.HTML(_RESULT_STYLE+context+warnings), self.goal_hint, self.navigation,
+                          self.analysis_hint, self.prerequisites, self.tabs], layout=ipw.Layout(width='100%', min_width='0'))
         self.add_class('orca-results')
 
+    def _navigate(self, event):
+        if not self._navigating:
+            self.open_analysis(event['new'])
+
+    def _sync_state_navigation(self, event):
+        key = {'states': 'casci', 'spectrum': 'dyson'}.get(event['new'], event['new'])
+        if not self._navigating:
+            self.open_analysis(key)
+
+    def _require(self, panel, message, task, label):
+        panel.layout.display = 'none'
+        old = self.prerequisites.children
+        button = ipw.Button(description=label, icon='arrow-right', layout=ipw.Layout(width='auto'))
+        button.on_click(lambda _: self.open_analysis(task))
+        self.prerequisites.children = [ipw.HTML('<p class="orca-notice">'+message+'</p>'), button]
+        self.prerequisites.layout.display = ''
+        for widget in old:
+            widget.close()
+
     def open_analysis(self, task):
-        label, help_text = ANALYSES[task]
-        self.analysis_hint.value = f'<p><b>{html.escape(label)}:</b> {html.escape(help_text)}</p>'
-        self.analysis_hint.layout.display = ''
-        if task in ('orbitals', 'vibrations'):
-            return self.tabs.show_section(task)
-        panel = self.tabs.show_section('states')
-        if not hasattr(panel, 'analysis'):
-            return panel
-        mode = {'casci': 'states', 'dyson': 'spectrum', 'kondo': 'kondo'}[task]
-        if not panel.reference.value or not panel._datasets:
-            panel.analysis.value = 'states'
-            panel.calculation.show()
-            if task != 'casci':
-                self.analysis_hint.value += ('<p><b>First prepare the CASCI states below.</b> '
-                    'Use the same common orbitals and active space for the required charge/spin sectors. '
-                    'When they are ready, choose the requested analysis again.</p>')
-        else:
+        self._navigating = True
+        try:
+            self.prerequisites.layout.display = 'none'
+            for panel in self.tabs.panels.values():
+                panel.layout.display = ''
+            if task in dict(self.navigation.options).values():
+                self.navigation.value = task
+            self.continue_goal.layout.display = '' if self.goal and task != self.goal else 'none'
+            if task in ('overview', 'details'):
+                self.analysis_hint.layout.display = 'none'
+                return self.tabs.show_section(task)
+            labels = {key: title for title, key in self.navigation.options}
+            label, help_text = ANALYSES.get(task, ANALYSES['dyson'] if task == 'maps' else (labels.get(task, task), ''))
+            self.analysis_hint.value = f'<p><b>{html.escape(label)}:</b> {html.escape(help_text)}</p>'
+            self.analysis_hint.layout.display = ''
+            if task in self.tabs.section_keys and task != 'states':
+                return self.tabs.show_section(task)
+            panel = self.tabs.show_section('states')
+            if not hasattr(panel, 'analysis'):
+                return panel
+            if task in dict(self.navigation.options).values():
+                self.navigation.value = task
+            mode = {'casci': 'states', 'dyson': 'spectrum'}.get(task, task)
+            if task in ('dyson', 'maps', 'kondo') and (not panel.reference.value or not panel._datasets):
+                self._require(panel, 'This analysis needs compatible CASCI states first. '
+                    'Prepare the common orbitals and required charge/spin sectors, then return here.',
+                    'casci', 'Prepare CASCI states')
+                return panel
             panel.analysis.value = mode
-            if mode != 'states' and panel._dyson and not panel._dyson.record:
+            if task == 'casci' and (not panel.reference.value or not panel._datasets):
+                panel.calculation.show()
+            elif task in ('maps', 'kondo') and panel._dyson and not panel._dyson.record:
+                self._require(panel, 'This analysis needs computed Dyson transitions first.',
+                              'dyson', 'Compute Dyson transitions')
+            elif task == 'dyson' and panel._dyson and not panel._dyson.record:
                 panel._dyson.calculation.show()
-        return panel
+            return panel
+        finally:
+            self._navigating = False
 
     def _overview(self):
         data = self.data
@@ -145,19 +198,9 @@ class ResultsView(ipw.VBox):
             items.append(ipw.HTML('<p>Reused an available reference. No new ORCA calculation was needed.</p>'))
         if 'spin_squared' in data.get('summary', {}):
             items.append(ipw.HTML(f"<p>Reference ⟨S²⟩ = {data['summary']['spin_squared']:.5f}</p>"))
-        cards = []
-        for key, title, description, icon in [
-            ('orbitals', 'Orbitals & density', 'SCF levels, orbital cubes, spin density and QRO/UNO inspection.', 'cubes'),
-            ('states', 'CASCI, Dyson & Kondo', 'CASCI states, Dyson transitions and spectra, or Kondo exchange channels and maps.', 'exchange'),
-            ('vibrations', 'Vibrations', 'Normal modes, IR and Raman at an optimized geometry.', 'music'),
-        ]:
-            button = ipw.Button(description=title, icon=icon, layout=ipw.Layout(width='auto'))
-            button.on_click(lambda _, section=key: self.tabs.show_section(section))
-            card = ipw.VBox([button, ipw.HTML('<p>'+description+'</p>')])
-            card.add_class('orca-analysis-card')
-            cards.append(card)
-        items += [ipw.HTML('<h4>Optional analyses</h4>'),
-                  ipw.HBox(cards, layout=ipw.Layout(flex_flow='row wrap', gap='10px'))]
+        items.append(ipw.HTML('<p>Use <b>Analysis / results</b> above to inspect orbitals, '
+            'prepare CASCI states, compute Dyson or Kondo properties, or open vibrational spectroscopy. '
+            'Each view explains its prerequisites and offers its own calculation review.</p>'))
         energies = data.get('summary', {}).get('scf_evaluation_energies_hartree', [])
         if data['optimized'] and energies:
             fig, ax = plt.subplots(figsize=(7.4, 2.7))
@@ -184,7 +227,15 @@ class ResultsView(ipw.VBox):
             return ipw.HTML('<p class="orca-notice">CASCI requires a completed SCF reference. '
                            'It is optional and is independent of vibrational spectroscopy.</p>')
         from .casci import CasciStates
-        return CasciStates(self.data, on_inspect=self._inspect_window)
+        panel = CasciStates(self.data, on_inspect=self._inspect_window)
+        panel.analysis.layout.display = 'none'
+        modes = {value for _, value in self.navigation.options}
+        extras = [(label, key) for label, key in panel.analysis.options
+                  if key not in ('states', 'spectrum', 'maps', 'kondo') and key not in modes]
+        if extras:
+            self.navigation.options = (*self.navigation.options, *extras)
+        panel.analysis.observe(self._sync_state_navigation, names='value')
+        return panel
 
     def _vibrations(self):
         if not self.data['optimized']:
@@ -210,7 +261,7 @@ class ResultsView(ipw.VBox):
         return ipw.VBox(items)
 
     def _prepare_common(self):
-        panel = self.tabs.show_section('states')
+        panel = self.open_analysis('casci')
         if hasattr(panel, 'calculation'):
             panel.analysis.value = 'states'
             panel.calculation.show()
@@ -219,12 +270,12 @@ class ResultsView(ipw.VBox):
         self.tabs.set_active(active)
 
     def _inspect_window(self, common_uuid, indices):
-        panel = self.tabs.show_section('orbitals')
+        panel = self.open_analysis('orbitals')
         if hasattr(panel, 'inspect_reference'):
             panel.inspect_reference(common_uuid, indices)
 
     def _use_window(self, common_uuid, indices):
-        panel = self.tabs.show_section('states')
+        panel = self.open_analysis('casci')
         if hasattr(panel, '_apply_orbital_window'):
             if common_uuid not in [value for _, value in panel.reference.options]:
                 panel._refresh()

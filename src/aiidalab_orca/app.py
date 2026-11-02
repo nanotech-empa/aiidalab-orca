@@ -106,8 +106,12 @@ class OrcaApp(ipw.VBox):
         self.submitted_notice = ipw.VBox([
             ipw.HTML("<p>These inputs have been submitted. Follow progress in <b>Results</b>, or edit a copy to prepare another calculation.</p>"), edit_copy,
         ])
-        self.analysis_chooser = AnalysisChooser(self.choose_analysis, select_reference=True)
-        self.draft_panel = ipw.VBox([self.analysis_chooser, self.steps])
+        self.analysis_chooser = AnalysisChooser(self.choose_analysis)
+        self.open_existing = ipw.Button(description='Open an existing reference instead', icon='folder-open',
+                                        layout=ipw.Layout(width='auto'))
+        self.open_existing.on_click(lambda _: setattr(self.pages, 'selected_index', 1))
+        self.calculation_start = ipw.VBox([self.analysis_chooser, self.analysis_hint, self.open_existing])
+        self.draft_panel = ipw.VBox([self.calculation_start, self.steps])
         self.history = HistoryWidget(self.load_run, self.use_geometry, self.copy_settings)
         self.pages = ipw.Tab(children=[self.draft_panel, self.history,
                                       ipw.VBox([ipw.HBox([refresh, self.use_final, self.copy]), self.status,
@@ -117,7 +121,7 @@ class OrcaApp(ipw.VBox):
         self.pages.observe(self._page_changed, names="selected_index")
         super().__init__([
             ipw.HTML(_APP_STYLE + "<div style='border-left:5px solid #237b98;padding:10px 20px;background:#f5f7fa'><h2 style='margin:0'>ORCA · Molecular analysis</h2><p>Geometry, orbitals, electronic states and vibrational spectroscopy with AiiDA provenance.</p></div>"),
-            self.error, self.analysis_hint, self.pages,
+            self.error, self.pages,
         ], layout=ipw.Layout(max_width="1100px"))
         self.add_class("aiidalab-orca-app")
         self.structure.observe(self._structure_changed, names="revision")
@@ -131,16 +135,16 @@ class OrcaApp(ipw.VBox):
         self._update_steps()
 
     def choose_analysis(self, task):
-        label, help_text = ANALYSES[task]
         self._requested_analysis = task
+        if task is None:
+            self.analysis_hint.layout.display = 'none'
+            return
+        label, help_text = ANALYSES[task]
         self.analysis_hint.value = (f'<p><b>{html.escape(label)}:</b> {html.escape(help_text)}</p>'
-            '<p>Select a completed SCF or optimization below, then click <b>View results</b>. '
-            'The requested analysis will open for that reference.</p>')
+            '<p><b>First step:</b> prepare the molecule and review its geometry/SCF calculation below. '
+            'After it finishes, the requested analysis opens with guidance for the next step. '
+            'No later calculation is submitted automatically.</p>')
         self.analysis_hint.layout.display = ''
-        if self.pages.selected_index == 1:
-            self.history.refresh(0)
-        else:
-            self.pages.selected_index = 1
 
     def _settings(self):
         values = self.science.values()
@@ -221,7 +225,7 @@ class OrcaApp(ipw.VBox):
 
     def _edit_copy(self, _=None):
         self._submitted = False
-        self.draft_panel.children = [self.analysis_chooser, self.steps]
+        self.draft_panel.children = [self.calculation_start, self.steps]
         self._structure_changed()
         self.pages.selected_index = 0
         self.steps.selected_index = 0
@@ -230,9 +234,6 @@ class OrcaApp(ipw.VBox):
         self.science.set_optimization_enabled(change["new"])
 
     def _page_changed(self, change):
-        if change["new"] == 0:
-            self._requested_analysis = None
-            self.analysis_hint.layout.display = 'none'
         if change["new"] == 1:
             self.history.refresh()
         for view in self.result_box.children:
@@ -300,6 +301,7 @@ class OrcaApp(ipw.VBox):
         self.submit_button.disabled = True
         try:
             self.process_uuid = services.submit_plan(self.review, self.label.value)
+            self._requested_analysis = self.analysis_chooser.choice.value
             self.review = None
             self._submitted = True
             self._update_steps()
@@ -315,6 +317,7 @@ class OrcaApp(ipw.VBox):
     def load_run(self, uuid):
         try:
             inspect_run(uuid)
+            self._requested_analysis = self.analysis_chooser.choice.value
             self.process_uuid = uuid
             self.pages.selected_index = 2
             self.refresh_status()
@@ -345,11 +348,11 @@ class OrcaApp(ipw.VBox):
                 widget.set_active(False)
         if data["finished"]:
             if data.get("scientific_success", data["successful"]):
+                data = dict(data, requested_analysis=self.analysis_chooser.choice.value)
                 self.result_box.children = [show_result(data)]
                 if self._requested_analysis:
                     self.result_box.children[0].open_analysis(self._requested_analysis)
                     self._requested_analysis = None
-                    self.analysis_hint.layout.display = 'none'
                 self.result_box.children[0].set_active(self.pages.selected_index == 2)
             else:
                 message = data["exit_message"] or "Workflow did not finish successfully"

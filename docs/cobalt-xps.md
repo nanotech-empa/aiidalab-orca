@@ -117,11 +117,47 @@ requests 445/841 roots. The current Co input instead contains one 1s-hole
 configuration and has 376/316 CSFs as well as 376/316 roots. Applying the Fe
 reference-list construction to Co would give 50 1s-hole configurations and
 465/385 CSFs, retaining the requested 376/316 roots. The SI does not print an
-explicit Co input, so this analogue remains to be tested natively. Matching
-root counts is not a reference-space validation. A frozen control must check
+explicit Co input. Native scalar controls now qualify the independently
+generated Co analogue, while equivalence to the authors' unprinted Co input
+remains unestablished. Matching root counts is not a reference-space validation.
+A frozen control must check
 the actual dimensions, selected 1s-state character and energies before changing
 the model or interpreting its intensity differences. This audit changes no
 existing inputs or results; the orbital-relaxation benchmark is independent.
+
+### Validated frozen reference-space controls (2026-11-03)
+
+Two submitted native controls used identical common orbitals, fixed geometry,
+basis, Hamiltonian and integration grids. The restricted baseline reproduced
+all 692 historical spin-free state energies within 1.01e−10 Hartree, below the
+unchanged 1e−7 guard. The expanded input added only 49 1s-hole occupation
+configurations. Its actual CSF dimensions are 465 triplets and 385 singlets,
+while the requested roots remain 376 and 316. Both calculations terminated
+normally and passed the original orbital-character and normalization checks.
+
+| Selected 1s state | Restricted ligand π occupation | Expanded ligand π occupation | Expanded − restricted energy (eV) |
+| --- | ---: | ---: | ---: |
+| Triplet | ≈2 | <0.0001 | −35.2411 |
+| Singlet | ≈2 | <0.0001 | −35.2498 |
+
+The expanded reference is π⁰/d⁹, while the restricted reference is π²/d⁷.
+All 480 Co 2p spin-free energies agree within the 1e−7 Hartree guard; the largest
+sorted difference at printed precision is 2.8e−9 eV. This isolates a reference
+selection problem in the old bound-transition construction. Use the existing
+2p state energies and recompute transition weights with the qualified lower
+1s state to test the spectrum. The 1s energy difference itself supplies no
+binding-energy correction. A new SOC/XES calculation and any production
+protocol change still require scientific review. The selected neutral doublet
+and the frozen-orbital intensity approximation retain their stated limits.
+
+The native controls are `32abbf4f-722e-4e6b-9fab-bf1c35217295` and
+`960c6fc3-c0ab-4df8-b07d-2b771362c535`. The provenance-linked comparison is
+`fb804cdc-e33d-4f56-a089-f8af7b815b75`, and its two-page PDF is
+`6ccc2a81-bcdc-44c5-833c-7bf0fda0c62d`. These are instance provenance
+identifiers. The comparison rechecks captured validators, actual native state
+tables and occupations, input differences and common-source fingerprints.
+Omitted printed weights are bounded without renormalization; sorted energy-set
+agreement does not establish wavefunction overlaps through degeneracies.
 
 The four spin-coupled 1s spectator components are equally populated for an
 unpolarized doublet reference and core removal. Spin coupling is already

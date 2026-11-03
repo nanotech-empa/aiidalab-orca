@@ -134,6 +134,18 @@ elements and nonorthogonal Dyson approximations require scientific review.
 Do not silently combine these methods or reuse a common-orbital Dyson kernel
 for separately optimized orbital sets.
 
+For the bound-transition model, distinguish requested roots from the native
+configuration and CSF dimensions in every multiplicity block. Matching the
+paper's 376/316 Co root counts does not prove the same CI space was used.
+The current draft retains one neutral-derived 1s-hole configuration; this is
+not automatically the lowest 1s-ionized eigenstate when charge-transfer
+configurations are admitted. The published SI explicitly selects the lowest
+1s-ionized state for Fe/Mn and provides an Fe input with a larger 1s-hole space;
+it does not print a Co input. Inspect the selected 1s state's native character
+as well as its energy, and consult the reference-space audit in the method
+guide. An energy-only comparison of a larger space neither validates XPS
+intensities nor authorizes replacing the production protocol or submitting SOC.
+
 During core-hole orbital relaxation, individual valence MOs can mix within a
 full valence-CAS block. A fixed-index character failure alone does not prove
 that the intended subspace was lost. Diagnose it with native coefficient and

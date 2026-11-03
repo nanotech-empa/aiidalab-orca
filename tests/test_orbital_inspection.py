@@ -238,6 +238,27 @@ def test_inspection_widget_distinguishes_sets_and_never_maps_uno_indices_to_qro(
     finally:widget.close()
 
 
+def test_closing_inspection_disposes_owned_preview_and_renderer_once(monkeypatch):
+    import ipywidgets as ipw
+    from unittest.mock import Mock
+    from aiidalab_orca import inspection_services as service
+    from aiidalab_orca.app import close_widget_tree
+    from aiidalab_orca.inspection import OrbitalInspection
+    monkeypatch.setattr(service,'catalog',lambda _:None)
+    monkeypatch.setattr(service,'codes',lambda _:{'export':[],'plot':[],'cubehandler':[]})
+    widget=OrbitalInspection('common')
+    preview,renderer=ipw.VBox(),ipw.VBox()
+    close_preview,close_renderer=Mock(wraps=preview.close),Mock(wraps=renderer.close)
+    monkeypatch.setattr(preview,'close',close_preview)
+    monkeypatch.setattr(renderer,'close',close_renderer)
+    widget._cube_view,widget.render_panel=preview,renderer
+    widget.cube_box.children=(preview,renderer)
+    close_widget_tree(widget)
+    assert close_preview.call_count == close_renderer.call_count == 1
+    close_widget_tree(widget)
+    assert close_preview.call_count == close_renderer.call_count == 1
+
+
 def test_reexported_metadata_reuses_same_orbital_identity():
     original={'orbital_reference_uuid':'reference','sets':{'UNO':{'filename':'aiida.uno','sha256':'digest',
               'size_bytes':100,'levels':[{'index':0,'occupation':1.999}]}}}

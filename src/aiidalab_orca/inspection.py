@@ -271,11 +271,12 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self._show_cube()
 
     def _clear_cube(self):
+        from .app import close_widget_tree
         if self.render_panel:
-            self.render_panel.close()
+            close_widget_tree(self.render_panel)
             self.render_panel = None
         if self._cube_view:
-            self._cube_view.close()
+            close_widget_tree(self._cube_view)
             self._cube_view = None
         self.cube_box.children = ()
         self.download.value,self.result_info.value = '',''

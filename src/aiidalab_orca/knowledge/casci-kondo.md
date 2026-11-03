@@ -113,6 +113,35 @@ spatial-orbital basis. **Electronic states** counts CASCI eigenstates (roots)
 within the selected charge/multiplicity sector: one requests its lowest state,
 two also requests the next. This count does not select the active orbital space.
 
+The submission form accepts space/comma-separated lists: **Charges** such as
+`0 +1 -1 +2 -2`, and **Multiplicities (2S+1)** such as `1 2 3 4`. Charges are
+absolute molecular charges; for reference charge q₀, active electrons at charge
+q are reference active electrons − (q − q₀). **Review charge / spin combinations**
+lists every requested pair, including parity/capacity skip reasons and explicit
+requested versus available state counts. When fewer spin-adapted states exist,
+the review proposes all available states; the user must see this before
+submission. Do not silently replace a requested spin or misclassify missing
+files/resource errors as forbidden combinations. Those errors block the batch.
+
+**Submit reviewed calculations** starts independent WorkChains for valid new
+pairs; matching saved/running requests are reused. The table shows job count,
+per-job resources and each ORCA input. Jobs may run concurrently. A submission
+error stops subsequent requests and retains accepted UUIDs. Closing the GUI
+does not stop submitted calculations. **Available charge** filters the saved
+calculation selector without altering the submission lists or active-space
+confirmation. Additional charge sectors do not relax Dyson's N±1 rule.
+
+Explain execution inheritance: orbital preparation uses the SCF code,
+computer and original resources. The preparation panel displays those actual
+settings; saved remote/stashed wavefunctions are read on that computer.
+CASCI retains the orbital reference's computer, but the user can edit its
+process count, memory and wall time in **CASCI resources and advanced settings**.
+The batch review shows the execution target and per-calculation resources.
+The full compatible state diagram remains the main result. **Calculation
+history and status** is collapsed below it and only inspects individual runs;
+its charge/calculation selectors do not filter the diagram, reset its energy
+zero/limits, or overwrite the submission draft.
+
 Record the geometry UUID and coordinate frame, common-orbital reference and
 checkpoint checksum, basis/element overrides, exact inactive/active indices,
 reference electron count, charge/spin sectors, roots, integral approximation,

@@ -35,7 +35,7 @@ def test_missing_states_keep_requested_view_and_offer_explicit_preparation(monke
         assert panel.preparation_actions.children[1].disabled
         assert panel.guide.layout.display == 'none'
         assert panel.plan is None and panel._dyson is None
-        assert (panel.electrons.value, panel.norb.value, panel.charge.value, panel.mult.value) == (2, 2, 0, 1)
+        assert (panel.electrons.value, panel.norb.value, panel.charge.value, panel.mult.value) == (2, 2, '0', '1')
         assert panel.common_submit.disabled and panel.submit.disabled
     finally:
         close_widget_tree(result)

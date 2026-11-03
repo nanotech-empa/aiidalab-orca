@@ -40,6 +40,18 @@ def active_space(values, reference):
     return {'electrons': nel, 'orbitals': list(indices)}
 
 
+def spin_sector_dimension(norb, electrons, multiplicity):
+    """Number of spin-adapted states in a complete spatial active space."""
+    unpaired = multiplicity-1
+    if (multiplicity < 1 or not 0 <= electrons <= 2*norb or
+            unpaired > min(electrons, 2*norb-electrons) or (electrons-unpaired) % 2):
+        return 0
+    alpha, beta = (electrons+unpaired)//2, (electrons-unpaired)//2
+    def choose(n, k):
+        return math.comb(n, k) if 0 <= k <= n else 0
+    return choose(norb, alpha)*choose(norb, beta)-choose(norb, alpha+1)*choose(norb, beta-1)
+
+
 def casci_settings(values, reference, space):
     defaults = {'charge':reference['charge'], 'multiplicity':reference['source_multiplicity'], 'nroots':1,
                 'nprocs':reference['settings']['nprocs'], 'memory_mb':reference['settings']['memory_mb'],
@@ -54,8 +66,6 @@ def casci_settings(values, reference, space):
             raise ValueError(f'{key} must be an integer'+('' if key == 'charge' else ' greater than zero'))
     if s['memory_mb'] < 256*s['nprocs']:
         raise ValueError('Provide at least 256 MiB per process')
-    if abs(s['charge']-reference['charge']) > 1:
-        raise ValueError('This step supports the reference charge and its N±1 neighbours')
     from .protocols import _token
     s['auxiliary_basis'] = _token(s['auxiliary_basis'], 'CASCI correlation auxiliary basis')
     if type(s['tprintwf']) not in (float, int) or not math.isfinite(s['tprintwf']) or not 0 < s['tprintwf'] <= 1e-2:
@@ -64,10 +74,7 @@ def casci_settings(values, reference, space):
     m, unpaired = len(space['orbitals']), s['multiplicity']-1
     if not 0 <= electrons <= 2*m or electrons < unpaired or (electrons-unpaired) % 2:
         raise ValueError('Charge/multiplicity is incompatible with the active electron count')
-    alpha, beta = (electrons+unpaired)//2, (electrons-unpaired)//2
-    def choose(n, k):
-        return math.comb(n, k) if 0 <= k <= n else 0
-    dimension = choose(m, alpha)*choose(m, beta)-choose(m, alpha+1)*choose(m, beta-1)
+    dimension = spin_sector_dimension(m, electrons, s['multiplicity'])
     if s['nroots'] > dimension:
         raise ValueError(f'This spin sector contains only {dimension} states; request fewer roots')
     return s

@@ -9,6 +9,7 @@ import ipywidgets as ipw
 from . import inspection_services as service
 from .casci_services import progress
 from .orbitals import CubeDisplayMixin
+from .orbital_selection import OrbitalIndexInput
 from . import property_services
 
 
@@ -31,6 +32,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self.kind.observe(self._kind_changed,names='value')
         self.info, self.occupations, self.table, self.metadata_download = (ipw.HTML() for _ in range(4))
         self.orbitals = ipw.SelectMultiple(description='Orbitals to inspect',style=style,layout=ipw.Layout(width='95%',height='170px'))
+        self.selection_input = OrbitalIndexInput(self.orbitals,style=style)
         self.use_window = ipw.Button(description='Use selected QRO window for CASCI',icon='check',layout=ipw.Layout(width='auto'))
         self.use_window.on_click(self._apply_window)
         self.window_message = ipw.HTML()
@@ -59,11 +61,14 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
             'select orbitals in the list, review their visualization, then generate the previews. '
             'Once complete, choose an <b>Orbital to display</b> in the 3D viewer below. '
             'Preview generation is separate from CASCI.</p>'),
-            self.read,self.status,self.message,self.kind,self.info,self.occupations,self.metadata_download,self.table,self.orbitals,
+            self.read,self.status,self.message,self.kind,self.info,self.occupations,self.metadata_download,self.table,
+            self.selection_input,self.orbitals,
             ipw.HBox([self.review,self.submit],layout=ipw.Layout(flex_flow='row wrap')),self.calculation,
             self.previous,self.result_info,self.cube,self.download,self.cube_box,
             self.use_window,self.window_message])
-        for widget in (self.orbitals,self.grid,self.retention,self.stash,self.plot_code,self.cubehandler_code):
+        self.selection_input.observe(self._selection_changed,names='valid')
+        self.orbitals.observe(self._selection_changed,names='value')
+        for widget in (self.grid,self.retention,self.stash,self.plot_code,self.cubehandler_code):
             widget.observe(self._invalidate,names='value')
         self._refresh_catalog()
         self._retention_changed()
@@ -127,6 +132,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         else:
             indices = [i for i in self.active_indices if i < data['n_orbitals']]
         self.orbitals.value = tuple(indices)
+        self._selection_changed()
         self.table.value = '<details><summary>All orbital indices and occupations</summary><table><tr><th>Index</th><th>Occupation</th><th>Orbital energy (eV)</th><th>CASCI window</th></tr>'+''.join(table)+'</table></details>'
         self._occupation_plot(record['levels'],kind)
         self._refresh_runs()
@@ -149,9 +155,10 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         try:
             if self.kind.value == 'UNO' or not self.apply_window:
                 return
-            indices = sorted(self.orbitals.value)
+            indices = self.selection_input.selected_indices()
             if not indices or indices != list(range(indices[0],indices[-1]+1)):
-                raise ValueError('Select a contiguous QRO window; arbitrary orbital reordering is a later step')
+                raise ValueError('The current CASCI preparation requires a contiguous orbital window. '
+                                 'Noncontiguous selections can still generate previews.')
             self.apply_window(indices)
             self.window_message.value = '<p>CASCI active window updated. Review the electron count and calculation before submitting.</p>'
         except Exception as exc:
@@ -161,6 +168,14 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self.plan = None
         self.submit.disabled = True
         self.message.value = ''
+
+    def _selection_changed(self,_=None):
+        self._invalidate()
+        self.window_message.value = ''
+        ready = bool(self.catalog_record and self.kind.value and
+                     self.selection_input.valid and self.orbitals.value)
+        self.review.disabled = not ready
+        self.use_window.disabled = not (ready and self.kind.value != 'UNO' and self.apply_window)
 
     def _retention_changed(self,_=None):
         self.stash.layout.display = '' if self.retention.value == 'stash' else 'none'
@@ -176,7 +191,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self._invalidate()
         try:
             self.plan = service.review_cubes(self.common_uuid,self.catalog_record['uuid'],self.kind.value,
-                {'orbitals':[[0,index] for index in self.orbitals.value],'spin_density':False,'grid_points':self.grid.value,
+                {'orbitals':[[0,index] for index in self.selection_input.selected_indices()],'spin_density':False,'grid_points':self.grid.value,
                  'retention':self.retention.value,'stash_directory':self.stash.value.strip()},
                 {'plot':self.plot_code.value,'cubehandler':self.cubehandler_code.value})
             action = 'Reuse verified inspection cubes.' if self.plan['action'] == 'reuse' else 'Generate selected orbital cubes and reduce them with cubehandler.'

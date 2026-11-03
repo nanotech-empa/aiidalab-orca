@@ -42,6 +42,11 @@ The primary actions are visible: **Read orbital information**, select orbitals,
 **Review orbital visualization**, then **Generate orbital previews**. Once the
 job finishes, choose **Orbital to display** to view an orbital's shape.
 
+The **Orbital indices** field and highlighted list are synchronized. Enter
+zero-based indices separated by spaces or commas, with inclusive ranges such
+as `1 3..10 14, 18..21`. Arbitrary selections can generate previews; selecting
+them does not itself change the CAS or submit a job.
+
 Select a contiguous orbital window and use its selection button, or enter the
 active electron/orbital counts and click **Confirm this active space**.
 The app validates the inactive/active partition and records your confirmation

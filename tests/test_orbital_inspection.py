@@ -259,6 +259,51 @@ def test_closing_inspection_disposes_owned_preview_and_renderer_once(monkeypatch
     assert close_preview.call_count == close_renderer.call_count == 1
 
 
+def test_invalid_typed_selection_cannot_review_submit_or_apply_previous_indices(monkeypatch):
+    from aiidalab_orca import inspection_services as service
+    from aiidalab_orca.inspection import OrbitalInspection
+    record = {'uuid':'catalog','data':{'orbital_reference_uuid':'reference',
+        'n_electrons':10,'n_orbitals':12,'sets':{
+            'restricted':{'levels':[{'index':i,'occupation':2. if i < 5 else 0.} for i in range(12)]},
+            'UNO':{'levels':[{'index':i,'occupation':2. if i < 5 else 0.} for i in range(12)]}}}}
+    monkeypatch.setattr(service,'catalog',lambda _:deepcopy(record))
+    monkeypatch.setattr(service,'codes',lambda _:{'export':[],'plot':[],'cubehandler':[]})
+    monkeypatch.setattr(service,'cube_runs',lambda *_:[])
+    reviewed,submitted,applied=[],[],[]
+    def review(*args):
+        reviewed.append(args[3]['orbitals'])
+        return {'action':'new'}
+    monkeypatch.setattr(service,'review_cubes',review)
+    monkeypatch.setattr(service,'submit_cubes',lambda plan:submitted.append(plan))
+    widget=OrbitalInspection('common',active_indices=[4,5],apply_window=applied.append)
+    try:
+        field=widget.selection_input.text
+        field.value = '1 3..5 8'
+        widget.review.click()
+        assert reviewed == [[[0,1],[0,3],[0,4],[0,5],[0,8]]]
+        assert not widget.submit.disabled
+        field.value = '1 3..'
+        assert widget.plan is None
+        assert widget.review.disabled and widget.submit.disabled and widget.use_window.disabled
+        widget._review()
+        widget._apply_window()
+        widget.submit.click()
+        assert len(reviewed) == 1 and not submitted and not applied
+        field.value = '3 .. 5'
+        assert not widget.review.disabled and not widget.use_window.disabled
+        widget.use_window.click()
+        assert applied == [[3,4,5]]
+        field.value = '99'
+        widget.kind.value = 'UNO'
+        assert widget.selection_input.valid
+        assert field.value == '3 5'
+        assert widget.use_window.disabled
+        field.value = ''
+        assert widget.review.disabled and widget.use_window.disabled
+    finally:
+        widget.close()
+
+
 def test_reexported_metadata_reuses_same_orbital_identity():
     original={'orbital_reference_uuid':'reference','sets':{'UNO':{'filename':'aiida.uno','sha256':'digest',
               'size_bytes':100,'levels':[{'index':0,'occupation':1.999}]}}}

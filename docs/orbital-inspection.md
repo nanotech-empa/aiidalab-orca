@@ -12,7 +12,16 @@ then choose **2. Inspect / confirm active space**. The independent
 2. Choose **QRO** or **UNO**. The list, occupation plot and expandable table
    show the zero-based indices of that particular set. The JSON download
    records the original occupations, source file digest and reference UUID.
-3. Select one or more orbitals, click **Review orbital visualization**, then
+3. Select one or more orbitals in the list, or type their **Orbital indices**.
+   Spaces and commas separate zero-based indices, and `3..10` selects every
+   index from 3 through 10, inclusive. Mix them as `1 3..10 14, 18..21`;
+   spaces around `..` are accepted too. The field and highlighted rows update
+   each other. Duplicate indices are counted once. Invalid text preserves the
+   previous highlights and blocks review/submission until corrected; clicking
+   rows also replaces the invalid text. Switching orbital sets resets the
+   field to that set's highlighted selection. Noncontiguous selections work
+   for previews; the current general CASCI path still needs a contiguous window.
+   Click **Review orbital visualization**, then
    **Generate orbital previews**. These actions are visible beside the orbital
    list; **Preview settings and file storage…** holds the optional grid/code
    and retention controls. Once the job finishes, choose **Orbital to display**

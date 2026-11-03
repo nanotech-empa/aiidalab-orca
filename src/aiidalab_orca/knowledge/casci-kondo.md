@@ -78,6 +78,17 @@ completion, **Orbital to display** selects the 3D preview. Preview settings and
 file storage are optional advanced controls; no CASCI calculation is needed
 to visualize the orbitals.
 
+The **Orbital indices** text field is synchronized with the highlighted list
+in both directions. It accepts zero-based indices separated by spaces or
+commas, inclusive ranges such as `3..10` (including both endpoints), and mixed
+entries such as `1 3..10 14, 18..21`; spaces around `..` are accepted.
+Duplicates count once. Invalid text keeps the previous highlights and blocks
+review/submission until corrected or replaced by clicking rows. Changing
+orbital sets resets the field to the new set's highlighted selection.
+Arbitrary selections are supported for previews; they do not automatically
+change the CAS. The general CASCI preparation still requires a contiguous
+window and explicit confirmation; the QPU permutation path is separate.
+
 An SCF reference alone does not establish a reviewed active space. The user
 must inspect/select orbitals or explicitly confirm a deliberate electron/orbital
 count before a new CASCI request. A confirmation belongs to that exact prepared

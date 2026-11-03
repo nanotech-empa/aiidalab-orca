@@ -185,3 +185,17 @@ Exchange eigenvalues are not brightness weights. These results do not establish
 a combined experimental Kondo map, Kondo temperature, linewidth, Fano profile
 or PP-STM CO-tip simulation. Document qualitative agreement and discrepancies
 without selecting a new model solely to match the picture.
+
+## Dyson spectral spin conventions
+
+The spectrum selector uses physical labels: **Spin averaged · unpolarized
+(default)** and **Single spin component · M_S = S**. The default averages over
+equally populated initial spin projections and sums final projections/electron
+spin; the advanced option shows the stored highest-projection matrix component.
+For a doublet initial state, the default multiplies singlet-final component
+intensities by 1 and triplet-final component intensities by 3/2, once.
+Changing the selector changes intensity weights, not electronic energies or
+stored Dyson amplitudes. It is not a general spin-polarized tunnelling model.
+Initial-state populations are a separate choice: 50/50 mixing is explicit,
+not a universal default. In spectral maps, unnormalized Dyson amplitudes already
+carry their strength; do not multiply that strength into |Dyson|² again.

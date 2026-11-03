@@ -9,9 +9,10 @@ from .orbitals import CubeDisplayMixin
 from .property_services import default_stash_directory,property_result
 from .spectra import SpectralViewer
 from .helper_budget import HelperBudget
+from .peak_maps import PeakMapMixin
 
 
-class DysonStates(CubeDisplayMixin,ipw.VBox):
+class DysonStates(PeakMapMixin,CubeDisplayMixin,ipw.VBox):
     def __init__(self,common_uuid,datasets,on_show_maps=None):
         self.on_show_maps = on_show_maps
         self.common_uuid = str(common_uuid)
@@ -26,6 +27,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.source_mode = ipw.ToggleButtons(options=[('Single initial state','single'),('Initial-state population mixture','mixture')])
         self.result_identity = ipw.HTML()
         self.map_panel = None
+        self._init_peak_maps()
         self.kondo_panel = None
         self.kondo_box = ipw.VBox()
         self.map_box = ipw.Accordion(children=[],selected_index=None)
@@ -93,7 +95,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.orbital_view.set_title(0, '3D orbitals and slicing plane')
         self.orbital_view.observe(self._resize_cube, names='selected_index')
         self.cube_empty = ipw.HTML()
-        self.cube_controls = ipw.VBox([self.cube_previous,self.cube_empty,self.cube_calculation,self.map_box,self.orbital_view])
+        self.cube_controls = ipw.VBox([self.peak_map_status,self.cube_previous,self.cube_empty,self.cube_calculation,self.map_box,self.orbital_view])
         self.cube_controls.layout.display = 'none'
         self.calculation = ComputePanel('Compute / extend Dyson transitions…', [
             ipw.HTML('<p>Select an initial many-electron state and compatible N±1 final states at this fixed geometry. '
@@ -145,6 +147,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         return f"q={row['charge']:+d} · multiplicity {row['multiplicity']} · root {row['root']} · {row['energy_hartree']:.8f} Ha"
 
     def _clear_result(self):
+        self._clear_peak_maps()
         if self.spectrum:
             from .widget_lifecycle import close_widget_tree
             close_widget_tree(self.spectrum)
@@ -195,6 +198,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self._open_previous({'new':uuid})
 
     def _initial_changed(self,_=None):
+        self._clear_peak_maps()
         self._invalidate()
         self._invalidate_cubes()
         self._clear_result()
@@ -214,6 +218,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.message.value = ''
 
     def _invalidate_cubes(self,_=None):
+        self._validate_peak_map_request()
         self.cube_plan,self.cube_submit.disabled = None,True
         self.cube_message.value = ''
         if self.map_panel:
@@ -316,6 +321,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             return
         self._invalidate_cubes()
         self._clear_result()
+        self._clear_peak_maps()
         self.record = service.result(uuid)
         states = self.record['data'].get('initial_states')
         self.result_identity.value = ('<p><b>Viewing population mixture:</b> '+
@@ -324,7 +330,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         diagram_states = service.diagram_states(self.record['data'],self.state_rows)
         self.spectrum = SpectralViewer(self.record['data'],self._invalidate_cubes,states=diagram_states,
                                       on_selection=self._preview_selection,on_use=self._use_transition_selection,
-                                      on_peak_use=self.on_show_maps)
+                                      on_peak_use=self._use_peak_energy)
         self.spectrum_box.children = (self.spectrum,)
         options = []
         for i,r in enumerate(self.record['data']['transitions']):
@@ -349,10 +355,14 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             self.spectrum.preview_info.value = '<p>Select one transition to inspect its stored orbital, or use this selection for an intensity blend.</p>'
 
     def _use_transition_selection(self,identifiers):
+        self._clear_peak_maps()
         if not self.record:
             return
         self.cube_states.value = tuple(i for i,row in enumerate(self.record['data']['transitions']) if row['id'] in identifiers)
         if self.map_panel:
+            self.map_panel.kind.value = 'individual'
+            if hasattr(self.map_panel, 'complete'):
+                self.map_panel.complete.value = False
             available = {value for _,value in self.map_panel.selection.options}
             self.map_panel.selection.value = tuple(i for i in identifiers if i in available)
             if not set(identifiers) <= available:
@@ -369,6 +379,8 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             from aiida_empa_orca.orbitals import cube_parameters
             if not self.record or (not self.cube_states.value and not (self.blend.value and self.full_blend.value)):
                 raise ValueError('Select computed Dyson transitions')
+            if self._peak_map_request and self.retention.value == 'delete':
+                raise ValueError('Spectral maps need full-resolution amplitudes. Select Stash or Leave for full cubes.')
             if not self.dyson_code.value or not self.cubehandler_code.value:
                 raise ValueError('Configure Dyson tools and cubehandler')
             indices = (range(len(self.record['data']['transitions'])) if self.blend.value and self.full_blend.value
@@ -434,6 +446,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             self.map_box.children = (self.map_panel,)
             self.map_box.set_title(0,'STM-like constant-height maps (draft)')
             self.map_box.selected_index = 0
+        self._sync_peak_map()
 
     def close(self):
         if getattr(self,'_disposed',False):

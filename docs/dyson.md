@@ -94,12 +94,32 @@ populations or thresholds changes the detected maxima. Endpoints are not
 local maxima; expand the range when a peak lies at its edge.
 
 Labels mark the maxima of the black total curve. Select a detected maximum
-and press **Use peak energy for maps** to set the blend energy without rounding
-it to 0.01 eV or altering the selected transition set. Overlapping transitions
-can produce a maximum between their individual poles. Map/cube submission
-still requires its normal review and explicit button; the complete-sum setting
-remains independent of these display filters. Disabling automatic detection
-restores the transition-only view.
+and press **Prepare spectral map at this peak**. The app keeps the exact sampled
+energy and automatically selects the amplitude cubes for **all computed
+transitions**, including weak Lorentzian tails. The separate highlighted
+transition list remains an individual-orbital inspection selection; it does not
+truncate a peak's spectral map. Overlapping transitions can produce a maximum
+between their individual poles.
+
+The map workspace shows a two-step guide:
+
+1. **Prepare amplitude cubes**, when a complete saved set is unavailable. The
+   cube controls open with all transitions selected. Review the grid and
+   Stash/Leave retention, then explicitly submit cube generation. A complete set
+   already running is opened rather than duplicated. The cubes can be reused for
+   other peak energies. Existing partial sets are reported; one complete source
+   set is required by the map calculation.
+2. **Compute the spectral map**. A complete saved set opens this step directly;
+   otherwise it opens when cube generation finishes. The spectral blend, full
+   transition set and peak energy are carried forward automatically. Review the
+   source plane and observation heights, then explicitly review/submit numerical
+   maps. That review checks access to the full-resolution files. Peak preparation
+   itself submits no jobs and does not repeat SCF, CASCI or Dyson coefficients.
+
+Changing spectral energy/broadening/spin settings clears this prepared peak
+request, preventing a stale peak label. **Inspect selected transition orbitals /
+maps** returns to editable individual-transition preparation. Disabling automatic
+detection restores the transition-only view.
 
 The JSON download records thresholds, detection method, sampled peak energies,
 unshifted energies, heights and prominences. The energies are sampled maxima

@@ -101,6 +101,12 @@ class ParameterRows(ipw.VBox):
         self._changed()
 
 
+class _SpinDefaultState(tl.HasTraits):
+    """Initial-default bookkeeping; retains the assistant snapshot API."""
+
+    value = tl.Bool(True)
+
+
 class GeometrySettings(ipw.VBox):
     revision = tl.Int()
 
@@ -121,7 +127,7 @@ class GeometrySettings(ipw.VBox):
         self.basis = ipw.Combobox(options=BASES, value="def2-SVP", description="Basis", ensure_option=False, style=style, layout=width)
         self.charge = ipw.IntText(description="Charge", value=0, style=style, layout=width)
         self.multiplicity = ipw.BoundedIntText(description="Multiplicity (2S+1)", value=1, min=1, max=100, style=style, layout=width)
-        self.auto_multiplicity = ipw.Checkbox(value=True, description="Use lowest allowed multiplicity", layout=ipw.Layout(width="auto"))
+        self.auto_multiplicity = _SpinDefaultState()
         self.spin_hint = ipw.HTML()
         self.reference = dropdown("Reference type", [("Automatic from spin", "auto"), *REFERENCES[1:]])
         self.approximation = dropdown("RI approximation", [("Automatic from method", "auto"), *APPROXIMATIONS[1:]])
@@ -166,7 +172,7 @@ class GeometrySettings(ipw.VBox):
                 for label, url in MANUAL_LINKS.items()) + "</p>"),
             advanced, self.summary,
         ])
-        super().__init__([self.charge, self.multiplicity, self.auto_multiplicity, self.spin_hint, self.optimization_controls])
+        super().__init__([self.charge, self.multiplicity, self.spin_hint, self.optimization_controls])
         self.charge.observe(self._update_spin, names="value")
         self.auto_multiplicity.observe(self._update_spin, names="value")
         self.multiplicity.observe(self._spin_edited, names="value")
@@ -184,12 +190,13 @@ class GeometrySettings(ipw.VBox):
     def _spin_edited(self, _=None):
         if not self._loading and not self._updating_spin:
             self.auto_multiplicity.value = False
+            self._update_spin()
 
     def _update_spin(self, _=None):
         if self._loading:
             return
         if self._nuclear_charge is None:
-            self.spin_hint.value = "<p>The automatic default uses the molecule and charge: 1 for even, 2 for odd electron counts.</p>"
+            self.spin_hint.value = "<p>Choose a molecule and charge to see the allowed multiplicities. The field is always editable; its initial value uses the lowest allowed multiplicity.</p>"
             return
         electrons = self._nuclear_charge - self.charge.value
         if electrons < 1:
@@ -202,9 +209,16 @@ class GeometrySettings(ipw.VBox):
                 self.multiplicity.value = lowest
             finally:
                 self._updating_spin = False
-        mode = "Automatic default" if self.auto_multiplicity.value else "Manual or copied spin retained"
-        self.spin_hint.value = (f"<p>{mode}. {electrons} electrons; lowest allowed multiplicity: {lowest}. "
-                                "Electron count does not determine the ground-state spin; choose a higher multiplicity when appropriate.</p>")
+        allowed = list(range(lowest, min(electrons + 1, lowest + 10) + 1, 2))
+        examples = ", ".join(str(value) for value in allowed)
+        if allowed[-1] < electrons + 1:
+            examples += ", …"
+        invalid = self.multiplicity.value < lowest or self.multiplicity.value > electrons + 1 or (self.multiplicity.value - lowest) % 2
+        warning = " <b>The entered multiplicity is not allowed for this electron count; edit it before continuing.</b>" if invalid else ""
+        self.spin_hint.value = (f"<p>{electrons} electrons; allowed multiplicities: {examples}. "
+            f"Lowest allowed: {lowest}. The initial value uses this minimum; you can edit it directly. "
+            "Manual and copied choices are retained. Electron count does not determine the ground-state spin."
+            + warning + "</p>")
 
     def values(self):
         return {"schema_version": 2, "protocol": self.protocol.value,

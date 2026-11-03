@@ -321,3 +321,12 @@ Exchange eigenvalues are not brightness weights. These results do not establish
 a combined experimental Kondo map, Kondo temperature, linewidth, Fano profile
 or PP-STM CO-tip simulation. Document qualitative agreement and discrepancies
 without selecting a new model solely to match the picture.
+## Editable spin and memory units
+
+The geometry/SCF multiplicity is always editable; there is no lowest-multiplicity
+checkbox. A fresh default uses the lowest allowed value, while a user's manual or
+copied choice is retained and validated against electron count and charge. The
+allowed-values hint is bounded by the electron count and does not predict the
+physical ground-state spin. Geometry/SCF and CASCI memory inputs display GiB;
+the existing `memory_mb` settings and backend still use integer MiB (2 GiB =
+2048 MiB). Assistant snapshots and copied settings preserve that meaning.

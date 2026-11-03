@@ -6,6 +6,7 @@ import html
 import ipywidgets as ipw
 
 from .configuration import GeometrySettings
+from .resources import MemoryInput
 from . import services, structure_io
 from .history import HistoryWidget, inspect_run
 from .viewer import show_result
@@ -51,7 +52,7 @@ class OrcaApp(ipw.VBox):
         for key in ("method", "basis", "charge", "multiplicity", "convergence", "max_steps", "max_scf"):
             setattr(self, key, getattr(self.science, key))
         self.nprocs = ipw.BoundedIntText(value=2, min=1, max=128, description="Processes", style=style, layout=width)
-        self.memory = ipw.BoundedIntText(value=2048, min=256, max=1000000, description="Total memory (MB)", style=style, layout=width)
+        self.memory = MemoryInput(value=2048, min=256, max=1000000, style=style, layout=width)
         self.wallclock = ipw.BoundedIntText(value=30, min=1, max=10080, description="Wall time (minutes)", style=style, layout=width)
         self.code = ipw.Dropdown(options=services.codes(), description="ORCA code", style=style, layout=width)
         self.force = ipw.Checkbox(value=False, description="Recompute even if a compatible result is available", layout=ipw.Layout(width="auto"))

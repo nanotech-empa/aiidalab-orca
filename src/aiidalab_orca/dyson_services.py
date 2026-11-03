@@ -104,6 +104,8 @@ def result(uuid):
 
 def diagram_states(table,context):
     """Display the original source sectors, even after a newer CASCI rerun."""
+    if table.get('initial_states'):
+        return []  # The diagram currently assumes one initial state.
     uuids = {table['initial_state_uuid']} | {r['final_state_uuid'] for r in table['transitions']}
     source_rows,sectors = [],set()
     for uuid in sorted(uuids):
@@ -119,7 +121,7 @@ def submit_cubes(transitions_uuid,parameters,code_uuid,cubehandler_uuid,blend=No
         raise ValueError('Configure Dyson and cubehandler codes on the calculation computer')
     b = backend.DysonCubesWorkChain.get_builder()
     b.transitions = orm.load_node(transitions_uuid)
-    b.parameters = orm.Dict(dict=cube_parameters(parameters))
+    b.parameters = orm.Dict(dict=cube_parameters(parameters, max_orbitals=None))
     b.code,b.cubehandler_code = orm.load_code(code_uuid),orm.load_code(cubehandler_uuid)
     if blend:
         b.blend = orm.Dict(dict=blend)
@@ -132,4 +134,33 @@ def cube_runs(transitions_uuid):
     for uuid in backend.previous(transitions_uuid,'transitions',backend.CUBES_PROCESS):
         node = orm.load_node(uuid)
         result.append((f'{node.ctime:%Y-%m-%d %H:%M} · {node.process_state.value} · {str(uuid)[:8]}',str(uuid)))
+    return result
+
+
+def map_cube_inventory(transitions_uuid):
+    """Find one saved/running complete amplitude set, returning only plain values.
+
+    This inspects provenance and retention metadata. Physical file access is
+    checked by map review, which can also reuse durable numerical maps.
+    """
+    table = orm.load_node(transitions_uuid).get_dict()
+    required = {row['id'] for row in table['transitions']}
+    indices = set(range(len(table['transitions'])))
+    result = dict(cube_uuid=None, running_uuid=None, available_count=0)
+    for _, uuid in cube_runs(transitions_uuid):
+        node = orm.load_node(uuid)
+        if node.is_finished_ok:
+            manifest = node.outputs.manifest.get_dict()
+            if manifest['retention'] == 'delete':
+                continue
+            available = {row['transition_id'] for row in manifest['cubes'] if row['kind'] == 'dyson'}
+            result['available_count'] = max(result['available_count'], len(required & available))
+            if required <= available and result['cube_uuid'] is None:
+                result['cube_uuid'] = str(uuid)
+        elif not node.is_terminated:
+            parameters = node.inputs.parameters.get_dict()
+            selected = {pair[1] for pair in parameters['orbitals'] if pair[0] == 0}
+            if (indices <= selected and parameters['retention'] != 'delete' and
+                    result['running_uuid'] is None):
+                result['running_uuid'] = str(uuid)
     return result

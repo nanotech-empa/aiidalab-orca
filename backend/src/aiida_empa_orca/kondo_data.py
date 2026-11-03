@@ -31,6 +31,8 @@ def exchange(table, values):
     This is a local-moment, equal-hybridization model. It does not estimate
     Kondo temperatures or spectral weights, or replace an NRG calculation.
     """
+    if table.get('initial_states'):
+        raise ValueError('Kondo exchange requires one initial spin multiplet; population mixtures apply to spectra and Dyson maps')
     p = parameters(values, table)
     if table.get('strength_convention') != 'highest_ms_component':
         raise ValueError('Use raw highest-Ms Dyson components; do not apply spectral spin weights twice')

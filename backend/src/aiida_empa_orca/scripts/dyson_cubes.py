@@ -165,6 +165,8 @@ def main():
         manifest['channels_uuid'] = request['channels_uuid']
     else:
         coefficient_source = np.load('coefficients.npz', allow_pickle=False)
+        if table.get('initial_states'):
+            manifest['orbital_source']['initial_states'] = table['initial_states']
     with coefficient_source as arrays:
         for _,index in p['orbitals']:
             row = table['channels' if kondo else 'transitions'][index]

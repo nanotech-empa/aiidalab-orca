@@ -185,3 +185,40 @@ Exchange eigenvalues are not brightness weights. These results do not establish
 a combined experimental Kondo map, Kondo temperature, linewidth, Fano profile
 or PP-STM CO-tip simulation. Document qualitative agreement and discrepancies
 without selecting a new model solely to match the picture.
+
+## Dyson spectral spin conventions
+
+The spectrum selector uses physical labels: **Spin averaged · unpolarized
+(default)** and **Single spin component · M_S = S**. The default averages over
+equally populated initial spin projections and sums final projections/electron
+spin; the advanced option shows the stored highest-projection matrix component.
+For a doublet initial state, the default multiplies singlet-final component
+intensities by 1 and triplet-final component intensities by 3/2, once.
+Changing the selector changes intensity weights, not electronic energies or
+stored Dyson amplitudes. It is not a general spin-polarized tunnelling model.
+Initial-state populations are a separate choice: 50/50 mixing is explicit,
+not a universal default. In spectral maps, unnormalized Dyson amplitudes already
+carry their strength; do not multiply that strength into |Dyson|² again.
+
+## Prepare a spectral map from a detected peak
+
+Choose the maximum in **Spectral maximum**, then **Prepare spectral map at this
+peak**. The peak action carries its precise energy, broadening, spin convention
+and every computed transition into map preparation. It does not require manual
+cube selection. All computed transitions, including weak off-resonant tails,
+contribute; selecting a single highlighted transition is a different operation.
+
+The workspace opens **Step 1 of 2: prepare amplitude cubes** if a complete saved
+set is missing, with all amplitudes already selected. The user reviews the grid
+and Stash/Leave retention and explicitly submits. An existing complete running
+set is opened instead of duplicated. A complete saved set skips directly to
+**Step 2 of 2: compute the spectral map**. This step also opens when new cubes
+finish, with the full spectral blend already selected. The user reviews the
+source plane/heights and explicitly reviews/submits numerical maps. Provenance
+and retention are checked on the peak action; full-file access is verified at
+map review. No peak action submits a job. Existing partial sets are reported;
+the current map calculation needs one complete amplitude source set.
+
+Changing spectral settings clears the prepared peak request. The separate
+**Inspect selected transition orbitals / maps** action restores editable
+individual-transition controls. Keep these two purposes clear when guiding users.

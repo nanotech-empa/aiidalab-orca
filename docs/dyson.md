@@ -34,9 +34,15 @@ CASCI printing threshold, not a hidden renormalization.
 
 The spectrum offers two conventions without repeating any electronic calculation:
 
-- **Highest M_S component**: use the stored strength, matching the upstream tool.
-- **Unpolarized, spin summed**: average over equally populated initial spin
+- **Single spin component · M_S = S**: use the stored strength between the
+  highest-projection initial and final states, for raw-component comparison.
+- **Spin averaged · unpolarized (default)**: average over equally populated initial spin
   projections and sum over final projections and tunnelling-electron spin.
+
+The selector describes physical conventions; tool authorship remains in the
+implementation attribution rather than the option label. Guidance below the
+selector explains the selected convention. Switching it changes intensity
+weights without repeating CASCI/Dyson calculations or shifting transition energies.
 
 For spin-pure states without SOC, the Wigner–Eckart/Clebsch–Gordan spin-1/2 relation gives the
 factor below relative to the stored highest-projection component. It applies to
@@ -58,7 +64,7 @@ apply that coefficient twice or simply multiply by the final multiplicity.
 The transition table and JSON export show the component strength, conversion
 factor and selected weight separately, with explicit normalization conventions.
 
-This is not a model of spin-polarized tunnelling, non-equilibrium spin
+This does not infer spin-polarized tunnelling, non-equilibrium spin-projection
 populations, spin–orbit mixing, or higher-order/inelastic tunnelling processes.
 No general STM cross section is inferred solely from a Dyson norm.
 
@@ -70,10 +76,84 @@ No substrate Fermi energy is inferred from an isolated molecule.
 
 The interactive Lorentzian uses the upstream convention
 `eta / ((omega − pole)^2 + eta^2)`: eta is **HWHM** in eV and the integrated area
-is **pi times the selected weight**. The default HWHM is 0.04 eV. Spectrum CSV and
+is **pi times the selected weight**. The default HWHM is 0.1 eV, matching
+Gonçalo's reference notebooks. Spectrum CSV and
 JSON downloads retain the spin convention, energy offset, range, broadening and
 raw transition table. The spectrum contains only the computed selected states;
 missing sectors/roots are not a complete spectral sum.
+
+### Automatic spectral maxima
+
+The spectrum detects maxima with `scipy.signal.find_peaks`, as in Gonçalo's
+notebooks. **Minimum prominence** (default **5%**) and **minimum peak height**
+(default **30%**) are both editable under **Spectrum display settings**. Both
+percentages refer to the maximum intensity of the broadened total in the
+visible range; the total includes all computed transitions of the displayed
+addition/removal branches. Changing the range, broadening, spin convention,
+populations or thresholds changes the detected maxima. Endpoints are not
+local maxima; expand the range when a peak lies at its edge.
+
+Labels mark the maxima of the black total curve. Select a detected maximum
+and press **Prepare spectral map at this peak**. The app keeps the exact sampled
+energy and automatically selects the amplitude cubes for **all computed
+transitions**, including weak Lorentzian tails. The separate highlighted
+transition list remains an individual-orbital inspection selection; it does not
+truncate a peak's spectral map. Overlapping transitions can produce a maximum
+between their individual poles.
+
+The map workspace shows a two-step guide:
+
+1. **Prepare amplitude cubes**, when a complete saved set is unavailable. The
+   cube controls open with all transitions selected. Review the grid and
+   Stash/Leave retention, then explicitly submit cube generation. A complete set
+   already running is opened rather than duplicated. The cubes can be reused for
+   other peak energies. Existing partial sets are reported; one complete source
+   set is required by the map calculation.
+2. **Compute the spectral map**. A complete saved set opens this step directly;
+   otherwise it opens when cube generation finishes. The spectral blend, full
+   transition set and peak energy are carried forward automatically. Review the
+   source plane and observation heights, then explicitly review/submit numerical
+   maps. That review checks access to the full-resolution files. Peak preparation
+   itself submits no jobs and does not repeat SCF, CASCI or Dyson coefficients.
+
+Changing spectral energy/broadening/spin settings clears this prepared peak
+request, preventing a stale peak label. **Inspect selected transition orbitals /
+maps** returns to editable individual-transition preparation. Disabling automatic
+detection restores the transition-only view.
+
+The JSON download records thresholds, detection method, sampled peak energies,
+unshifted energies, heights and prominences. The energies are sampled maxima
+on the displayed grid, not a fit or proof of separately resolved physical states.
+
+## Initial-state populations
+
+The default remains **Single initial state**. **Initial-state population mixture**
+combines already saved Dyson results, with one result per initial state/root.
+Specify nonnegative populations summing to one, review, then explicitly save
+the mixture. **Set equal populations** gives 0.5/0.5 for two selected states;
+the app does not infer thermal occupations or silently normalize invalid input.
+Populations refer to whole multiplets, separately from the spin-projection average.
+
+Each source must share charge, geometry, fixed spatial orbitals, active space
+and integral model. The saved mixture is a new calcfunction result linked to
+the original transition tables. Raw coefficients and strengths remain unchanged,
+and each transition retains its own initial state's actual energy difference.
+Equal populations do not imply degenerate initial energies; no degeneracy
+approximation is offered in this version.
+
+For initial state `i` and transition `j`, the unpolarized spectrum uses
+`p_i * F_ij * Z_ij * eta / ((omega - pole_ij)^2 + eta^2)`.
+The map uses `p_i * F_ij * eta / ((omega - pole_ij)^2 + eta^2) * |D_ij(r)|^2`
+after propagating each amplitude. The raw `|D|²` already contains `Z`.
+Both spectra and maps sum incoherently over the selected states and finals.
+Highest-M_S-component mode sets `F=1` while retaining populations.
+The transition readouts and JSON expose populations, spin factors and component
+strengths separately. Kondo exchange still requires a single initial spin multiplet.
+
+Complete cube blends and maps include every computed transition, without the
+old 64-cube/32-map blend caps. Individual multi-panel maps retain their size
+limits. Missing final states must still be computed explicitly; a mixture or
+complete-sum checkbox cannot create them.
 
 ## Separate components and storage
 

@@ -149,10 +149,12 @@ intensities nor authorizes replacing the production protocol or submitting SOC.
 The documented fixed-geometry CoPc controls now find a π⁰/d⁹ 1s state
 35.24–35.25 eV below the restricted π²/d⁷ reference. All 480 Co 2p spin-free
 energies remain invariant within the 1e−7 Hartree guard. This is an
-instance-specific reference-selection diagnosis, with native provenance in the
+instance-specific reference-space sensitivity check, with native provenance in the
 method guide. A new spectrum needs transition weights from the qualified
 1s state and separate scientific review; the 1s energy change is not an XPS
 binding-energy correction.
+Review the paper's intermediate-state and energy conventions before treating
+the expanded 1s space as a production correction.
 
 During core-hole orbital relaxation, individual valence MOs can mix within a
 full valence-CAS block. A fixed-index character failure alone does not prove

@@ -125,6 +125,14 @@ the actual dimensions, selected 1s-state character and energies before changing
 the model or interpreting its intensity differences. This audit changes no
 existing inputs or results; the orbital-relaxation benchmark is independent.
 
+The [deposited preprint](https://hal.science/hal-05619872/file/chemrxiv-2026-t0g71.pdf)
+(manuscript pp. 7–8 and 10) describes an unrelaxed 1s intermediate, notes an
+approximately 30 eV overestimate of absolute RAS-CI binding energies, and
+discusses its plotted energies through 1s–2p differences. Its plotted agreement
+is not an absolute-binding-energy validation. Reconcile that intermediate
+convention before promoting the expanded-space control to a production
+protocol. The final journal main text remains inaccessible.
+
 ### Validated frozen reference-space controls (2026-11-03)
 
 Two submitted native controls used identical common orbitals, fixed geometry,
@@ -142,10 +150,11 @@ normally and passed the original orbital-character and normalization checks.
 
 The expanded reference is π⁰/d⁹, while the restricted reference is π²/d⁷.
 All 480 Co 2p spin-free energies agree within the 1e−7 Hartree guard; the largest
-sorted difference at printed precision is 2.8e−9 eV. This isolates a reference
-selection problem in the old bound-transition construction. Use the existing
-2p state energies and recompute transition weights with the qualified lower
-1s state to test the spectrum. The 1s energy difference itself supplies no
+sorted difference at printed precision is 2.8e−9 eV. This isolates sensitivity
+to the selected 1s reference in the bound-transition construction, not a
+validated replacement intensity model. A transition-weight comparison must
+distinguish the neutral-derived and lowest expanded-space 1s references.
+The 1s energy difference itself supplies no
 binding-energy correction. A new SOC/XES calculation and any production
 protocol change still require scientific review. The selected neutral doublet
 and the frozen-orbital intensity approximation retain their stated limits.

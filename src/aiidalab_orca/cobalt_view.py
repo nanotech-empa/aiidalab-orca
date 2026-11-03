@@ -26,7 +26,7 @@ class CobaltSpectrum(ipw.VBox):
         self.figure.update_layout(template='plotly_white',height=430,yaxis_title='Relative intensity · core-transition approximation',
             margin=dict(l=65,r=25,t=30,b=55))
         self.table,self.download=ipw.HTML(),ipw.HTML()
-        super().__init__([ipw.HTML('<p class="orca-notice"><b>Frozen-orbital RAS-CI + spin–orbit coupling.</b> Ionized-state orbital relaxation is omitted, and the absolute binding energies are not validated. Relative peak weights use a bound core-to-core transition approximation to XPS; no continuum photoelectron is calculated. The display shift changes plot alignment and is saved separately.</p>'),
+        super().__init__([ipw.HTML('<p class="orca-notice"><b>Frozen-orbital RAS-CI + spin–orbit coupling.</b> Ionized-state orbital relaxation is omitted, and the absolute binding energies are not validated. Relative peak weights use a bound core-to-core transition approximation to XPS; no continuum photoelectron is calculated. The neutral-derived single-configuration 1s reference remains under review against the paper\'s reference-space construction, so relative intensities are also unvalidated. The display shift changes plot alignment and is saved separately.</p>'),
             ipw.HBox([self.shift,self.gaussian,self.lorentzian],layout=ipw.Layout(flex_flow='row wrap')),
             self.figure,self.table,self.download])
         for w in (self.shift,self.gaussian,self.lorentzian):w.observe(self._update,names='value')

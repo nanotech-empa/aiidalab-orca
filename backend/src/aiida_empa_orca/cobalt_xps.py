@@ -128,10 +128,12 @@ def validate_copc(structure, settings):
 
 
 def configuration_space(occupation):
-    """Published CoPc RAS references, generated rather than copied as a long list.
+    """Draft CoPc restriction with one neutral-derived 1s-hole configuration.
 
     One 1s-hole reference, all 2p-hole/valence configurations, and all
-    valence-ionized configurations. This gives 376 triplet / 316 singlet CSFs.
+    valence-ionized configurations give 376 triplet / 316 singlet CSFs.
+    Those equal the paper's requested root counts; equality of counts alone
+    does not establish equivalence to its full reference-space construction.
     """
     if (len(occupation)!=6 or any(type(x) is not int or x not in (0,1,2) for x in occupation)
             or sum(occupation)!=9 or occupation.count(1)!=1):

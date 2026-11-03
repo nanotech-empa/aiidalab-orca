@@ -92,7 +92,9 @@ independently; the paper and SI are not redistributed here.
    Frozen-orbital RAS-CI(16,10) includes one 1s-hole spectator configuration,
    all 2p-hole configurations with nine valence electrons, and all
    valence-ionized configurations with eight valence electrons. The resulting
-   spin-adapted dimensions are **376 triplets and 316 singlets**, matching the SI.
+   spin-adapted dimensions are **376 triplets and 316 singlets**. These equal
+   the paper's requested root counts; this alone does not establish identical
+   CI spaces (see the reference-space audit below).
 5. Native SOMF spin–orbit coupling mixes these states. Co 2p multiplets arise
    from the computed many-electron Hamiltonian, not an empirical split doublet.
 
@@ -106,6 +108,20 @@ The 1s-hole spectator uses the dominant neutral configuration in the
 state-specific natural-orbital basis and requires its
 weight to be at least 0.8. A more strongly mixed ground state requires a more
 general spectator preparation, rather than silently using one configuration.
+
+### Reference-space audit: roots versus configurations
+
+The published SI's explicit Fe example contains 90 distinct 1s-hole occupation
+configurations. Its unpruned quartet/doublet spaces have 564/1050 CSFs, while it
+requests 445/841 roots. The current Co input instead contains one 1s-hole
+configuration and has 376/316 CSFs as well as 376/316 roots. Applying the Fe
+reference-list construction to Co would give 50 1s-hole configurations and
+465/385 CSFs, retaining the requested 376/316 roots. The SI does not print an
+explicit Co input, so this analogue remains to be tested natively. Matching
+root counts is not a reference-space validation. A frozen control must check
+the actual dimensions, selected 1s-state character and energies before changing
+the model or interpreting its intensity differences. This audit changes no
+existing inputs or results; the orbital-relaxation benchmark is independent.
 
 The four spin-coupled 1s spectator components are equally populated for an
 unpolarized doublet reference and core removal. Spin coupling is already

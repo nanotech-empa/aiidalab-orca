@@ -35,6 +35,13 @@ configured launcher as well as the staged script before a production campaign;
 a launcher "Usage" error is a software deployment failure, not SCF instability.
 Keep the historical code/executable intact when replacing that launcher.
 
+For diagnostic ShellJobs, map every `SinglefileData` to an explicit, unique
+staging filename, including evidence files. An original input still named
+`aiida.inp` can overwrite the intended execution input even when its node key
+is different. Check the complete destination map and the actual staged input
+hash. A zero launcher/ShellJob exit status does not establish native ORCA
+success; require the native normal-termination and stage-specific checks.
+
 For every accepted doublet-reference 1s branch require:
 
 - Native normal termination and actual final gradient convergence, including
@@ -62,6 +69,13 @@ iteration cap, more iterations can be justified. A plateau, oscillation,
 normalization problem, wrong hole or wrong state needs a diagnosis. Do not
 blindly restart the same calculation or propagate its damaged checkpoint.
 
+For a process paused after repeated transport failures, first verify that the
+configured connection works again and inspect the same process and scheduler
+job. `verdi process play <UUID>` resumes that paused process; it does not
+repair a native scientific failure. Do not duplicate its submission or revive
+an intentionally killed process. When CSCS authentication expires, ask the user
+to renew it before retrying the configured route.
+
 ORCA 6.1.1 `IonizeAlpha/Beta` plus `FreezeAndRelease` can print "No orbitals to
 constrain!". A named solver is not evidence it activated. The validated
 doublet construction uses an occupied-MO swap plus a compact spin configuration.
@@ -82,6 +96,22 @@ MPI/scratch settings. Retain the reviewed launcher explicitly and verify its
 computer, executable and resource limits; inheriting the source's code can lose
 the job-local shared-memory configuration. Check the first native energy
 against the qualified source before trusting further optimization.
+
+A time-limited optimization can save a GBW from an earlier completed macro
+than the last energy printed in its output. Fingerprint the actual saved GBW
+and independently read it in a frozen native CalcJob with the same manifold,
+weights, Hamiltonian and numerical grids. Compare every requested state energy
+within the existing 1e−7 Hartree guard, and repeat normalization and core/valence
+identity checks. Record the macro actually reproduced. Qualification for a
+diagnostic or bounded numerical restart does not accept an optimized energy;
+native gradient convergence and final readback remain separate requirements.
+Finite orbital-rotation probes are diagnostics inside the reviewed model,
+not a convergence test or permission to change occupation restrictions.
+
+Select CI states by their native multiplicity and root headers, not by the
+position of a printed block. ORCA can print the lower quartet before the
+doublet. Check a selected configuration's associated energy against the
+corresponding spin-resolved state energy before interpreting its weight.
 
 Keep every failed attempt and its native output. A corrected parser or
 post-hoc analysis creates new provenance, rather than rewriting an old node.

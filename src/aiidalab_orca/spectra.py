@@ -34,7 +34,7 @@ class SpectralViewer(ipw.VBox):
         self.peak_height = ipw.BoundedFloatText(value=30.,min=0,max=100,step=1.,
             description='Min. peak height (%)',style={'description_width':'165px'})
         self.peak_choices = ipw.Dropdown(description='Spectral maximum',style=style,layout=ipw.Layout(width='95%'))
-        self.use_peak = ipw.Button(description='Use peak energy for maps',icon='check',disabled=True,layout=ipw.Layout(width='auto'))
+        self.use_peak = ipw.Button(description='Prepare spectral map at this peak',icon='check',disabled=True,layout=ipw.Layout(width='auto'))
         self.use_peak.on_click(self._use_peak)
         self.peak_choices.observe(lambda _:setattr(self.use_peak,'disabled',self.peak_choices.value is None),names='value')
         self.peak_info = ipw.HTML()
@@ -56,7 +56,7 @@ class SpectralViewer(ipw.VBox):
         self.selected.value = (best['id'],)
         self.selection_info = ipw.HTML()
         self.preview_info = ipw.HTML()
-        self.use_selection = ipw.Button(description='Use selection for cubes / maps',icon='check',layout=ipw.Layout(width='auto'))
+        self.use_selection = ipw.Button(description='Inspect selected transition orbitals / maps',icon='check',layout=ipw.Layout(width='auto'))
         self.use_selection.on_click(self._use_selection)
         self.show_states = ipw.Checkbox(value=bool(states),disabled=not bool(states),description='Show connected many-electron states',layout=ipw.Layout(width='auto',margin='0 20px 0 0'))
         self.diagram = TransitionDiagram(states,table,self._action) if states else None
@@ -147,7 +147,8 @@ class SpectralViewer(ipw.VBox):
             if tuple(choices) != tuple(self.peak_choices.options):
                 self.peak_choices.options = choices
             self.peak_info.value = ('<p>'+str(len(self.peak_rows))+' spectral maxima detected in the displayed range. '
-                'Use a peak to set the blend/map energy; its sampled energy is retained without rounding to 0.01 eV. '
+                'Prepare a spectral map to carry this energy and all computed transitions into the cube/map steps automatically. '
+                'Its sampled energy is retained without rounding to 0.01 eV. '
                 'Overlapping transitions can produce a maximum between their poles. No calculation is submitted.</p>'
                 if self.peak_rows else '<p>No spectral maxima pass the current filters in this range.</p>'
                 if self.auto_peaks.value else '<p>Automatic spectral-maximum detection is disabled.</p>')

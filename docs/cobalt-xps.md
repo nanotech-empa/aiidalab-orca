@@ -152,6 +152,18 @@ not establish SOC multiplets or supply an energy correction to the RAS-CI plot.
 The reader checks the linked convergence/readback evidence before showing an
 energy; an invalid record shows its diagnostic instead.
 
+The separate **Multireference Co 2p energy checks** section reads a completed,
+accepted energy-only CoPc RASSCF benchmark. It remains hidden when no accepted
+record exists. Its reader checks the linked optimization/readback jobs, captured
+validators, all 480 native state energies, final gradient, saved-checkpoint
+identity, core/valence evidence and neutral energy reference. Invalid evidence
+shows a diagnostic and clears previously displayed energies. The table compares
+the lowest frozen and relaxed spin-free energies in each spin sector; the two
+minima can have different configuration character. The state-average lowering
+and complete provenance are downloadable. This display does not submit a
+calculation, add SOC, or assign photoionization intensities. The relaxed
+multireference benchmark remains unvalidated at the time of this implementation.
+
 ## Validation status
 
 The original protocol v1 ORCA 6.1.1 ARM64 run completed CoPc SA-CASSCF on eight

@@ -10,6 +10,7 @@ from . import kondo_services as service
 from .guidance import kondo_preparation_guide
 from .orbitals import CubeDisplayMixin
 from .property_services import property_result, default_stash_directory
+from .kondo_guidance import chemical_potential_help
 
 
 class KondoChannels(CubeDisplayMixin, ipw.VBox):
@@ -22,6 +23,14 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
         style = {'description_width': '170px'}
         wide = ipw.Layout(width='95%')
         self.mu = ipw.FloatText(value=0., description='Chemical potential μ (eV)', style=style)
+        self.mu_help = ipw.HTML()
+        self._mu_context, self._mu_context_error = None, ''
+        try:
+            self._mu_context = service.chemical_potential_context(self.transitions_uuid)
+        except Exception as exc:
+            self._mu_context_error = str(exc)
+        self.mu.observe(self._update_mu_help, names='value')
+        self._update_mu_help()
         self.review = ipw.Button(description='Review Kondo orbitals', icon='list', button_style='primary', layout=ipw.Layout(width='auto'))
         self.submit = ipw.Button(description='Compute Kondo orbitals', icon='play', button_style='success', disabled=True, layout=ipw.Layout(width='auto'))
         self.review.on_click(self._review)
@@ -61,8 +70,11 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
             'The exchange matrix uses signed Dyson amplitudes, charged-state energies and Clebsch–Gordan factors.</p>'
             '<p>μ follows ε = E + (N−N₀)μ: increasing μ lowers the removal cost and raises the addition cost. '
             'Both costs must stay positive. No substrate alignment is inferred automatically.</p>'),
-            self.guide, self.previous, self.mu, ipw.HBox([self.review, self.submit]), self.message, self.result_box])
+            self.guide, self.previous, self.mu, self.mu_help, ipw.HBox([self.review, self.submit]), self.message, self.result_box])
         self._refresh()
+
+    def _update_mu_help(self, _=None):
+        self.mu_help.value = chemical_potential_help(self._mu_context, self.mu.value, self._mu_context_error)
 
     def _invalidate(self, _=None):
         self.plan, self.submit.disabled = None, True

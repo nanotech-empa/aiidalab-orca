@@ -106,6 +106,19 @@ components already contain their component Clebsch–Gordan factors. Use the
 exchange conversion implemented in `kondo_data.py`; do not apply the spectral
 spin-sum factor or multiply the Dyson strength a second time.
 
+The μ field now includes general alignment guidance. With vacuum zero, clean
+Au(111) has a representative Fermi level near −5.3 eV; under the app's plus-sign
+convention, +5.3 eV is a simple bare-metal alignment estimate. An arbitrary DFT
+Fermi-energy zero cannot be reused directly. Adsorption, interface dipoles and
+substrate screening change charging energies. The Kondo-model paper uses
+molecule-specific effective μ values of 3, 4, 5 and 4.3 eV, not one Au constant.
+Example comparisons at 3, 4, 5 and 5.3 eV are permitted only within the selected
+computed charging interval; the widget lists the applicable examples and current
+minimum costs, without setting the field or submitting. Values close to a charge
+boundary require particular care even if both costs remain positive. Do not
+describe such a model scan as a fitted substrate alignment or a prediction of
+Kondo temperature. See [the μ guidance](../../../docs/kondo.md#choosing-μ-an-au111-example).
+
 ## Convergence and bounded recovery
 
 Follow specific process UUIDs and scheduler IDs. Confirm their current state;

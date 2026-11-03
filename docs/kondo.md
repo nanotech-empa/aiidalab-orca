@@ -123,6 +123,32 @@ it does not prove global charge stability. A small charging gap warns that the
 local-moment perturbative approximation may fail. The spectral viewer's rigid
 display offset is not reused as a physical chemical potential.
 
+### Choosing μ: an Au(111) example
+
+With vacuum energy set to zero, a representative clean-Au(111) Fermi level is
+approximately **−5.3 eV**, corresponding to a work function of about 5.3 eV
+([experimental surface example](https://pubs.acs.org/doi/10.1021/acs.langmuir.3c00572)).
+For vacuum-aligned gas-phase charging energies, the app's plus-sign convention
+corresponds to `mu = -E_F`, so **+5.3 eV** is a simple bare-metal alignment estimate.
+Do not insert a Fermi energy referenced to an arbitrary DFT potential zero.
+
+This estimate is not a fitted molecular alignment. Adsorption, interface dipoles
+and substrate screening change the charging energetics. The Kondo paper uses
+molecule-dependent effective values of 3 eV (PorA₂), 5 eV (fused aza-triangulene),
+4 eV (ETRI, Figure 7/Table 3) and 4.3 eV (A5T), adjusted alongside the hybridization
+to describe experiment ([Sections II.4 and IV](https://arxiv.org/html/2405.15958v2)).
+For an exploratory scan, one could compare 3, 4 and 5 eV and the bare-Au 5.3 eV
+estimate, **only where the selected charging range permits**. These are example
+values, not a universal Au preset or a validated phenalenyl protocol.
+
+Help beside μ shows the allowed open interval for the selected computed states,
+the example values that lie inside it, and the current minimum removal/addition
+costs. It updates as the field changes, flags nonpositive costs and warns below
+0.1 eV, consistently with exchange review. Positive costs alone do not establish
+the validity of local-moment perturbation theory; stay away from charge boundaries
+and assess costs relative to the substrate coupling. The help chooses no μ,
+changes no saved result, and submits no calculation.
+
 The selected roots and missing charge/spin sectors are recorded. Completeness
 and convergence with the charged-state manifold remain scientific checks.
 A singlet initial state is rejected: an excited triplet population or a

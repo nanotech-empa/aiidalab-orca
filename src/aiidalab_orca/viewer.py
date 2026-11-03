@@ -86,6 +86,7 @@ class ResultsView(ipw.VBox):
         self.confirmed_space = None
         self._selection_reference = None
         self._preparation_button = None
+        self._preparation_status = None
         s = data['settings']
         self.scf = data.get('single_point', False)
         geometry = ('Geometry optimized with constraints' if data['optimized'] and s.get('constraints') else
@@ -169,6 +170,7 @@ class ResultsView(ipw.VBox):
     def _require(self, panel, message, task, label):
         panel.layout.display = 'none'
         self._preparation_button = None
+        self._preparation_status = None
         old = self.prerequisites.children
         button = ipw.Button(description=label, icon='arrow-right', layout=ipw.Layout(width='auto'))
         button.on_click(lambda _: self.open_analysis(task))
@@ -241,21 +243,26 @@ class ResultsView(ipw.VBox):
             self._navigating = False
 
     def _require_next_preparation(self, panel):
-        button = ipw.Button(description='Next: inspect / select active orbitals',icon='arrow-right',
+        button = ipw.Button(description='View orbitals and choose active space',icon='eye',button_style='primary',
                             disabled=not bool(panel.reference.value),layout=ipw.Layout(width='auto'))
         button.on_click(lambda _: self.open_analysis('active'))
-        old = self.prerequisites.children
-        self.prerequisites.children = [ipw.HTML('<p><b>Orbital preparation only:</b> review and prepare '
-            'the common reference here. When it is available, continue to orbital inspection. '
-            'No CASCI state calculation is submitted in this step.</p>'),button]
-        self.prerequisites.layout.display = ''
+        old = (*self.prerequisites.children,*panel.preparation_actions.children)
+        self.prerequisites.children = ()
+        self.prerequisites.layout.display = 'none'
+        self._preparation_status = ipw.HTML()
+        panel.preparation_actions.children = [self._preparation_status,button]
         self._preparation_button = button
+        self._prepared_reference_changed({'new':panel.reference.value})
         for widget in old:
             widget.close()
 
     def _prepared_reference_changed(self, event):
         if self._preparation_button is not None:
             self._preparation_button.disabled = not bool(event['new'])
+        if self._preparation_status is not None:
+            self._preparation_status.value = ('<p><b>Prepared orbital reference selected.</b> Continue below to list '
+                'the orbitals and generate their 3D previews.</p>' if event['new'] else
+                '<p>Prepare or select an orbital reference to continue to visualization.</p>')
 
     def _refresh_selection(self, panel):
         if self._selection_reference == panel.reference.value:

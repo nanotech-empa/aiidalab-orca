@@ -85,10 +85,11 @@ class CasciStates(ipw.VBox):
         self.dyson_box = ipw.VBox([ipw.HTML('Compute compatible CASCI states to prepare optional Dyson transitions.')],
                                  layout=ipw.Layout(display='none'))
         from .presentation import ComputePanel
+        self.preparation_actions = ipw.VBox()
         self.common_preparation = ipw.VBox([
             ipw.HTML('<h4>Common spatial-orbital reference</h4><p>One shared set of spatial orbitals is used for all CASCI states and charge/spin sectors. '
                 'Preparing it reads the saved wavefunction without running a new SCF calculation.</p>'),
-            self.prepare,self.common_submit,common_options])
+            self.prepare,self.common_submit,self.preparation_actions,common_options])
         self.active_controls = ipw.HBox([self.electrons,self.norb],layout=ipw.Layout(flex_flow='row wrap'))
         self.sector_preparation = ipw.VBox([
             ipw.HTML('<h4>Add a charge / spin sector</h4>'),
@@ -126,6 +127,7 @@ class CasciStates(ipw.VBox):
         """Expose preparation and state requests as separate UI stages."""
         preparing = stage == 'prepare'
         legacy = stage == 'legacy'
+        self.guide.layout.display = 'none' if preparing else ''
         self.common_preparation.layout.display = '' if preparing or legacy else 'none'
         self.sector_preparation.layout.display = 'none' if preparing else ''
         self.reference_controls.layout.display = '' if preparing or legacy else 'none'

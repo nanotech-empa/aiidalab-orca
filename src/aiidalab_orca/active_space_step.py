@@ -28,8 +28,6 @@ class ActiveSpaceStep(ipw.VBox):
             initial_indices = []
         self.inspection = OrbitalInspection(self.common_uuid, active_indices=initial_indices,
                                             apply_window=self._use_selected)
-        if not self.inspection.catalog_record:
-            self.inspection.calculation.show()
         kind = self.reference['kind']
         basis = {'QRO': 'QRO spatial orbitals', 'restricted': 'restricted SCF spatial orbitals',
                  'fixed': 'imported fixed spatial orbitals'}.get(kind, kind)

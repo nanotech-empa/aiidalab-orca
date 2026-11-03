@@ -28,7 +28,9 @@ preparation, then prepare or reuse the common spatial-orbital reference.
 Preparation reads the saved wavefunction without SCF iterations. A new orbital
 reference has a new identity; existing CASCI states remain tied to their
 original reference. If the reference already exists, reuse it. Click
-**Next: inspect / select active orbitals** when it is available.
+**View orbitals and choose active space** beneath the preparation controls when
+it is available. The selected common-orbital reference is the input file set;
+the next stage provides its orbital list and visualizations.
 
 ## 2. Inspect and confirm the active space
 
@@ -36,6 +38,9 @@ Choose **2. Inspect / confirm active space**. **Read orbital information**
 explicitly submits a metadata-export job when no reusable catalog exists.
 Inspect orbital occupations and, when useful, request orbital-shape previews.
 See [the inspection guide](orbital-inspection.md) for those controls.
+The primary actions are visible: **Read orbital information**, select orbitals,
+**Review orbital visualization**, then **Generate orbital previews**. Once the
+job finishes, choose **Orbital to display** to view an orbital's shape.
 
 Select a contiguous orbital window and use its selection button, or enter the
 active electron/orbital counts and click **Confirm this active space**.

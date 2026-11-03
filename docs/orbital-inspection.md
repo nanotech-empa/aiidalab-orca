@@ -12,7 +12,11 @@ then choose **2. Inspect / confirm active space**. The independent
 2. Choose **QRO** or **UNO**. The list, occupation plot and expandable table
    show the zero-based indices of that particular set. The JSON download
    records the original occupations, source file digest and reference UUID.
-3. Select one or more orbitals, review the cube request, and submit it.
+3. Select one or more orbitals, click **Review orbital visualization**, then
+   **Generate orbital previews**. These actions are visible beside the orbital
+   list; **Preview settings and file storage…** holds the optional grid/code
+   and retention controls. Once the job finishes, choose **Orbital to display**
+   to show its shape in the 3D viewer.
    The configured `orca_plot` and cubehandler run through a CalcJob on the
    reference computer. The EMPA cube viewer provides isosurfaces, slices,
    saved visualizations and subsequent CalcJob rendering.

@@ -70,6 +70,14 @@ submits calculations or changes the physical model. CASCI holds orbitals fixed
 and should not be described as orbital-optimized CASSCF. Check the installed
 GUI version before promising these entry points are present.
 
+The common-orbital selector chooses a prepared reference. To see orbital
+shapes, use **View orbitals and choose active space** beneath the preparation
+controls. In inspection, click **Read orbital information**, select orbitals,
+then **Review orbital visualization → Generate orbital previews**. After
+completion, **Orbital to display** selects the 3D preview. Preview settings and
+file storage are optional advanced controls; no CASCI calculation is needed
+to visualize the orbitals.
+
 An SCF reference alone does not establish a reviewed active space. The user
 must inspect/select orbitals or explicitly confirm a deliberate electron/orbital
 count before a new CASCI request. A confirmation belongs to that exact prepared

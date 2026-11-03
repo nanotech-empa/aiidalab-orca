@@ -32,7 +32,8 @@ def test_missing_states_keep_requested_view_and_offer_explicit_preparation(monke
         assert panel.analysis.value == 'states' and panel.calculation.toggle.value
         assert panel.analysis.layout.display == 'none'
         assert panel.common_preparation.layout.display == '' and panel.sector_preparation.layout.display == 'none'
-        assert result.prerequisites.children[1].disabled
+        assert panel.preparation_actions.children[1].disabled
+        assert panel.guide.layout.display == 'none'
         assert panel.plan is None and panel._dyson is None
         assert (panel.electrons.value, panel.norb.value, panel.charge.value, panel.mult.value) == (2, 2, 0, 1)
         assert panel.common_submit.disabled and panel.submit.disabled
@@ -98,8 +99,8 @@ def test_new_goal_stays_in_setup_and_existing_reference_is_explicit(source, monk
         assert panel.source_uuid == source.uuid
         assert result.navigation.value == 'prepare' and result.goal == 'kondo'
         assert result.tabs._view_name == 'StackView'
-        assert result.prerequisites.layout.display == ''
-        assert result.prerequisites.children[1].disabled
+        assert result.prerequisites.layout.display == 'none'
+        assert panel.preparation_actions.children[1].disabled
         assert panel.calculation.toggle.value and panel.sector_preparation.layout.display == 'none'
         assert result.goal == 'kondo' and result.continue_goal.layout.display == ''
         assert app._requested_analysis is None
@@ -134,7 +135,7 @@ def test_new_submission_opens_its_goal_after_reference_completes(source, monkeyp
         assert len(submitted) == 1 and app.pages.selected_index == 2
         result = app.result_box.children[0]
         assert result.goal == 'dyson' and result.navigation.value == 'prepare'
-        assert result.prerequisites.layout.display == ''
+        assert result.tabs.panels['states'].preparation_actions.children[1].disabled
         assert result.tabs.panels['states'].plan is None
     finally:
         app.close()
@@ -175,10 +176,10 @@ def test_preparation_then_explicit_active_selection_precedes_state_requests(monk
         assert result.navigation.value == 'prepare' and result.confirmed_space is None
         references.append({'uuid':'common','kind':'restricted','reference_uuid':'prepared-orbitals'})
         panel._refresh()
-        assert not result.prerequisites.children[1].disabled
-        result.prerequisites.children[1].click()
+        assert not panel.preparation_actions.children[1].disabled
+        panel.preparation_actions.children[1].click()
         selection = result.tabs.panels['active']
-        assert result.navigation.value == 'active' and selection.inspection.calculation.toggle.value
+        assert result.navigation.value == 'active' and not selection.inspection.calculation.toggle.value
         result.open_analysis('casci')
         assert panel.layout.display == 'none' and 'confirm the active space' in result.prerequisites.children[0].value
         result.prerequisites.children[1].click()

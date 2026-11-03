@@ -43,24 +43,26 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self.cubehandler_code = ipw.Dropdown(options=choices['cubehandler'],description='Cubehandler',style=style,layout=wide)
         advanced = ipw.Accordion(children=[ipw.VBox([self.grid,self.export_code,self.plot_code,self.cubehandler_code,self.force])],selected_index=None)
         advanced.set_title(0,'Inspection grid and codes')
-        self.review = ipw.Button(description='Review inspection cubes',icon='list',layout=ipw.Layout(width='auto'))
+        self.review = ipw.Button(description='Review orbital visualization',icon='list',layout=ipw.Layout(width='auto'))
         self.review.on_click(self._review)
-        self.submit = ipw.Button(description='Compute inspection cubes',icon='play',button_style='success',disabled=True,layout=ipw.Layout(width='auto'))
+        self.submit = ipw.Button(description='Generate orbital previews',icon='play',button_style='success',disabled=True,layout=ipw.Layout(width='auto'))
         self.submit.on_click(self._submit)
         self.message, self.status, self.result_info = ipw.HTML(),ipw.HTML(),ipw.HTML()
         self.previous = ipw.Dropdown(description='Inspection results',style=style,layout=wide)
         self.previous.observe(self._open_previous,names='value')
-        self.cube = ipw.Dropdown(description='Preview cube',style=style,layout=wide)
+        self.cube = ipw.Dropdown(description='Orbital to display',style=style,layout=wide)
         self.cube.observe(self._show_cube,names='value')
         self.download, self.cube_box = ipw.HTML(),ipw.VBox()
         from .presentation import ComputePanel
-        self.calculation = ComputePanel('Read orbital information / compute previews…', [self.read,
-            self.retention,self.stash,advanced,self.review,self.message,self.submit,self.status])
-        super().__init__([ipw.HTML('<p>Inspect the preserved orbital files, then select orbitals to visualize. '
-            'The source SCF and CASCI results are linked through their common-orbital reference.</p>'),
-            self.kind,self.info,self.occupations,self.metadata_download,self.table,self.orbitals,self.use_window,self.window_message,
-            self.previous,self.result_info,self.calculation,
-            self.cube,self.download,self.cube_box])
+        self.calculation = ComputePanel('Preview settings and file storage…', [self.retention,self.stash,advanced])
+        super().__init__([ipw.HTML('<p><b>To see the orbital shapes:</b> read orbital information, '
+            'select orbitals in the list, review their visualization, then generate the previews. '
+            'Once complete, choose an <b>Orbital to display</b> in the 3D viewer below. '
+            'Preview generation is separate from CASCI.</p>'),
+            self.read,self.status,self.message,self.kind,self.info,self.occupations,self.metadata_download,self.table,self.orbitals,
+            ipw.HBox([self.review,self.submit],layout=ipw.Layout(flex_flow='row wrap')),self.calculation,
+            self.previous,self.result_info,self.cube,self.download,self.cube_box,
+            self.use_window,self.window_message])
         for widget in (self.orbitals,self.grid,self.retention,self.stash,self.plot_code,self.cubehandler_code):
             widget.observe(self._invalidate,names='value')
         self._refresh_catalog()

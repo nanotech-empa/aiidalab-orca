@@ -203,7 +203,8 @@ class XpsSpectroscopy(ipw.VBox):
         try:
             while self._running_uuid:
                 state = progress(self._running_uuid)
-                self.status.value = '<p><b>'+html.escape(state['state'])+'</b> · <code>'+self._running_uuid+'</code></p>'
+                label = 'Selected XPS calculation' if self.previous.value == self._running_uuid else 'Background XPS calculation'
+                self.status.value = '<p>'+label+': <b>'+html.escape(state['state'])+'</b> · <code>'+self._running_uuid+'</code></p>'
                 if state['finished']:
                     uuid, self._running_uuid = self._running_uuid, None
                     self.review.disabled = False

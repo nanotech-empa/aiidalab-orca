@@ -23,8 +23,9 @@ class SpectralViewer(ipw.VBox):
         self.peak_rows = []
         self._ready = False
         style = {'description_width':'145px'}
-        self.spin = ipw.Dropdown(options=[('Unpolarized · spin summed','unpolarized'),
-            ('Highest M_S component · Andrés tool','highest_ms_component')],description='Spin convention',style=style,layout=ipw.Layout(width='95%'))
+        self.spin = ipw.Dropdown(options=[('Spin averaged · unpolarized (default)','unpolarized'),
+            ('Single spin component · M_S = S','highest_ms_component')],description='Spin convention',style=style,layout=ipw.Layout(width='95%'))
+        self.spin_help = ipw.HTML()
         self.side = ipw.Dropdown(layout=ipw.Layout(width='350px'),options=[('Addition and removal','both'),('Removal','removal'),('Addition','addition')],description='Show',style=style)
         self.eta = ipw.BoundedFloatText(value=.1,min=.0001,max=10,step=.01,description='HWHM η (eV)',style=style)
         self.auto_peaks = ipw.Checkbox(value=True,description='Detect and label spectral maxima',layout=ipw.Layout(width='auto'))
@@ -78,10 +79,10 @@ class SpectralViewer(ipw.VBox):
                 'Detection uses the sum of the displayed broadened branches, including all computed transitions and their tails. '
                 'These filters select observation energies; they do not remove transitions from a map.</p>'),
             ipw.HBox([self.show_states,self.chart_layout],layout=ipw.Layout(flex_flow='row wrap'))])
-        super().__init__([ipw.HBox([self.spin,self.side],layout=ipw.Layout(flex_flow='row wrap')),
+        super().__init__([ipw.HBox([self.spin,self.side],layout=ipw.Layout(flex_flow='row wrap')),self.spin_help,
             self.display_settings,linked,self.info,self.peak_choices,self.use_peak,self.peak_info,
             self.selected,self.selection_info,self.preview_info,self.use_selection,self.download,self.transition_table,
-            ipw.HTML('<p><b>Spectral intensity blend</b> · select an energy or integrate over a window. Cube and map controls offer the complete sum (default) or a selected subset.</p>'),
+            ipw.HTML('<p><b>Spectral intensity blend</b> · select an energy or integrate over a window. Cube and map controls determine which computed transitions contribute.</p>'),
             self.mode,self.energy,ipw.HBox([self.window_lower,self.window_upper],layout=ipw.Layout(flex_flow='row wrap'))])
         for w in (self.spin,self.side,self.eta,self.shift,self.lower,self.upper,self.mode,self.energy,self.window_lower,self.window_upper,
                   self.auto_peaks,self.peak_prominence,self.peak_height):
@@ -212,6 +213,19 @@ class SpectralViewer(ipw.VBox):
     def _update(self,_=None):
         if not self._ready:
             return
+        if self.spin.value == 'unpolarized':
+            self.spin_help.value = (
+                '<p><b>Spin-averaged spectrum (default).</b> Average over equally populated initial '
+                'spin projections and sum over final projections and electron spin. '
+                'Each stored component intensity receives its spin-multiplet factor once. '
+                'For an initial doublet, singlet-final weights are unchanged and triplet-final weights '
+                'are multiplied by 1.5. This changes intensity weights, not transition energies.</p>')
+        else:
+            self.spin_help.value = (
+                '<p><b>Single spin component (advanced).</b> Show the stored transition between '
+                'initial and final states with M_S = S, without summing the other spin projections. '
+                'Use this to inspect raw component intensities. This option alone is not a model '
+                'of spin-polarized tunnelling. Transition energies and raw Dyson amplitudes are unchanged.</p>')
         if isinstance(_,dict) and _.get('owner') is self.side and self.side.value != 'both':
             rows = [r for r in weighted_table(self.table,self.spin.value)['transitions'] if r['side'] == self.side.value]
             if rows:
@@ -284,7 +298,7 @@ class SpectralViewer(ipw.VBox):
             self.diagram.update(self.selected.value,self.spin.value,self.side.value,self.lower.value,self.upper.value,self.shift.value)
         self._selection_details(table)
         self.info.value = ('<p><span style="color:#2c7be5">● Removal</span> · <span style="color:#f06431">● Addition</span>. '
-            'η is half-width at half-maximum; FWHM = 2η. Curves use Andrés’s convention: integrated peak area = π × weight. '
+            'η is half-width at half-maximum; FWHM = 2η. Lorentzian normalization: integrated peak area = π × weight. '
             'Unpolarized weights include the Clebsch–Gordan spin-multiplet factors relative to the stored highest-M_S component. '
             'Only the computed final states contribute. The black curve is their displayed total when automatic peak detection is enabled.</p>')
         rows = []

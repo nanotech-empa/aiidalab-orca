@@ -34,9 +34,15 @@ CASCI printing threshold, not a hidden renormalization.
 
 The spectrum offers two conventions without repeating any electronic calculation:
 
-- **Highest M_S component**: use the stored strength, matching the upstream tool.
-- **Unpolarized, spin summed**: average over equally populated initial spin
+- **Single spin component · M_S = S**: use the stored strength between the
+  highest-projection initial and final states, for raw-component comparison.
+- **Spin averaged · unpolarized (default)**: average over equally populated initial spin
   projections and sum over final projections and tunnelling-electron spin.
+
+The selector describes physical conventions; tool authorship remains in the
+implementation attribution rather than the option label. Guidance below the
+selector explains the selected convention. Switching it changes intensity
+weights without repeating CASCI/Dyson calculations or shifting transition energies.
 
 For spin-pure states without SOC, the Wigner–Eckart/Clebsch–Gordan spin-1/2 relation gives the
 factor below relative to the stored highest-projection component. It applies to

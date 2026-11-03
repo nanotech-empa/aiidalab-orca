@@ -454,3 +454,17 @@ The reference-grid step must pass before channel cubes start. Resource/cube
 edits invalidate review, each submit consumes it, and the shared reference busy
 guard also covers Kondo maps/figures across reopened GUIs. Follow L09 for the
 bounded browser test; do not change scientific checks to bypass a resource block.
+
+## Dyson spectral spin conventions
+
+The spectrum selector uses physical labels: **Spin averaged · unpolarized
+(default)** and **Single spin component · M_S = S**. The default averages over
+equally populated initial spin projections and sums final projections/electron
+spin; the advanced option shows the stored highest-projection matrix component.
+For a doublet initial state, the default multiplies singlet-final component
+intensities by 1 and triplet-final component intensities by 3/2, once.
+Changing the selector changes intensity weights, not electronic energies or
+stored Dyson amplitudes. It is not a general spin-polarized tunnelling model.
+Initial-state populations are a separate choice: 50/50 mixing is explicit,
+not a universal default. In spectral maps, unnormalized Dyson amplitudes already
+carry their strength; do not multiply that strength into |Dyson|² again.

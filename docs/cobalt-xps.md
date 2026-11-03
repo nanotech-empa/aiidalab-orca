@@ -43,12 +43,17 @@ results. Compatible results are reused by provenance and actual file availabilit
 independently of AiiDA caching. Detailed native validation failures are shown
 in the app, including the measured energy difference when that guard fails.
 
-The protocol follows Carniato et al.,
+The implemented protocol follows the preprint and supporting information of Carniato et al.,
 [Ionization-Induced Double Charge Transfer in Metallophthalocyanines Revealed
 by Ab Initio Simulation of 2p Photoelectron Spectra](https://doi.org/10.26434/chemrxiv-2026-t0g71),
-including its supporting information. This is a **2026 preprint, not a
-peer-reviewed method validation**. The implementation generates the occupation
-references independently; it does not redistribute the paper or SI.
+subsequently published in
+[J. Phys. Chem. Lett. 17, 4804–4810 (2026)](https://doi.org/10.1021/acs.jpclett.6c00486).
+A check on 2026-11-03 found unchanged printed ORCA input examples in the
+[published supporting information](https://doi.org/10.1021/acs.jpclett.6c00486.s001)
+and the same stated Co active space and frozen-spectrum root counts. The journal
+main text has not been compared in full. Publication does not validate this
+implementation or its molecular spectra. Occupation references are generated
+independently; the paper and SI are not redistributed here.
 
 ## Model and limits
 

@@ -9,6 +9,12 @@ from aiida_empa_orca.orbitals import cube_parameters
 from .casci_services import progress
 
 
+def chemical_potential_context(transitions_uuid):
+    """Read immutable charging energies without retaining a node in the UI."""
+    from .kondo_guidance import charging_context
+    return charging_context(orm.load_node(transitions_uuid).get_dict())
+
+
 def history(transitions_uuid):
     rows = []
     for uuid in kondo.previous(transitions_uuid, 'transitions', kondo.PROCESS):

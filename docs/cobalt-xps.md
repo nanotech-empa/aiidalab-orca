@@ -281,3 +281,83 @@ is MOs 2–4, each with 100% Co s/p character at printed precision and occupatio
 Only text was staged for this one-process check; the wavefunction was not
 converted, copied or localized. This validates the core-assignment stage,
 not the full molecular RAS-CI/SOC spectrum.
+
+### Frozen-spectrum audit and relaxation diagnostics (2026-11-03)
+
+The isolated-molecule scalar checks now have independently validated saved
+wavefunctions at both fixed optimized geometries. They use PBE/UKS,
+spin-free X2C, x2c-TZVPall and RI-J/x2c/J. Each ion is an MS=1 determinant
+created by removing one beta electron from the selected Co 2p orbital.
+
+| Geometry | Frozen ORCA (eV) | Relaxed ORCA (eV) | Relaxation lowering (eV) | QE scalar (eV) | Final S² |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| CoPc, C32H16CoN8 | 817.94451 | 789.42810 | 28.51641 | 788.19639 | 2.465892 |
+| Co-dcHp, C28H16CoN6 | 817.55222 | 788.85869 | 28.69353 | 788.35200 | 2.067209 |
+
+These are conditional single-determinant energy benchmarks, not pure triplets,
+2p centroids or SOC-resolved 2p₃/₂ lines. The table retains each method's own
+Hamiltonian and energy reference; it supplies no correction to the different
+cc-pwCVTZ/cc-pVTZ multireference spectrum. QE includes its stored
+pseudopotential correction. No experimental alignment is applied.
+
+The accepted comparison records are
+`9aa6dabc-7e31-4644-9de1-e71887162788` and
+`9e8ea1f5-4136-4966-9242-21cbd102809b`. Native final gradients are 9.01e−7
+and 7.65e−7 respectively. Independent readback changes the ion energies by
+at most 2.01e−10 Hartree, below the unchanged 1e−7 guard. Both datasets are
+available through **Scalar Co 2p energy checks**. The completed CoPc selected
+four-carbon dataset and Co-dcHp one-carbon pilot have also passed actual
+browser checks of the raw spin branches, QE overlay, readback notices and
+provenance downloads. The full 28-carbon Co-dcHp campaign remains in progress.
+
+The earlier frozen CoPc RAS-CI/SOC output contains low-energy core-hole
+states that do not carry the reported bright spectrum's weight:
+
+| Native feature | State index | Binding energy (eV) |
+| --- | ---: | ---: |
+| Lowest SOC state in the Co 2p energy window | 420 | 791.29202 |
+| Lowest reported nonzero spectral stick | 870 | 823.78938 |
+| Largest discrete spectral stick | 1280 | 838.62634 |
+
+The largest discrete stick need not be the maximum of a broadened curve.
+An audit of all 1,444 SOC states and 5,760 printed transitions verifies the
+native-to-stored energy conversion. An independent frozen readback of the
+written neutral natural-orbital GBW reproduces all 90 neutral energies within
+1.01e−10 Hartree. It confirms the selected doublet configuration `222210`
+and its weight 0.96530. Thus this check does not support either an energy
+conversion error or a wrong neutral-configuration assignment as the cause
+of the high bright peaks.
+
+For the low state, the printed SOC weights of triplet roots 105/106 sum to
+0.996074. Those spin-free parents have almost no occupation of the selected
+ligand π orbital: the native printed configuration weights bound its occupation
+between 0 and 0.0021 electrons. The first bright state's leading parents retain
+approximately two electrons there, as does the selected neutral configuration.
+This is consistent with charge-transfer final states and weak coupling in the
+single-configuration bound-transition approximation. It does not validate
+that approximation's intensities. A weighted average of spin-free occupations
+alone is not a SOC occupation expectation; off-diagonal matrix elements would
+also be needed. No omitted configuration weights were renormalized.
+
+The immutable native spectrum is
+`03ccc873-6789-4ef8-8ecd-84e9f261b3fb`; the configuration/energy audit is
+`80139bea-877c-4711-ae63-e4aecd844833`. The neutral readback is
+`993e892d-1172-4f2e-bfd4-8086a9c9f386`, with multiplicity-selected diagnostic
+`7f7f21a1-d33a-4226-a8bf-4c77912d8c78`. These are instance provenance
+identifiers, not a publicly distributed wavefunction dataset.
+
+A separate, approved energy-only CoPc benchmark optimizes an explicit
+Co 2p⁵/valence⁹ ORMAS space: 14 electrons in 9 orbitals, 270 triplets and
+210 singlets, with equal block weights and the original MR Hamiltonian.
+The damped optimization inspected on 2026-11-03 stopped without convergence.
+Its stored checkpoint reproduces all 480 states of completed macro 41 within 5.01e−10
+Hartree, but its gradient is 0.6967 against the required 2.5e−4. This qualifies
+only diagnostic reuse, not a relaxed energy or spectrum. Orbital-relaxation
+and intensity-model investigations remain separate. Independently optimized
+orbital sets cannot be passed to the existing common-orbital Dyson kernel.
+
+No relaxed multireference Co spectrum or Co-dcHp multiplet protocol is yet
+validated. The supported scalar/1s diagnostics do not establish a transferable
+Co/Fe/Zn active space. A new physical restriction, spin manifold or intensity
+treatment requires scientific review; failed convergence is not permission to
+weaken the original checks.

@@ -200,6 +200,16 @@ Require actual solver activation plus the unchanged physical/full-gradient
 and readback gates for any further reviewed comparison. No failed-checkpoint
 reuse or large Co retry follows.
 
+The separately reviewed Be `Parametrization ExpK` control activates native
+`EXP(K) SVD` but reproduces the same initial CI energy, inner Pople history
+and segmentation fault, with full gradient 0.4874879. Linked outcome
+`0d9ff81e-c6c5-4f9b-b976-2a1b51175a99` preserves the single-option comparison.
+The actual readback command rejects the failed candidate before input storage
+or submission. No readback, Ne or Co successor follows. The reviewed
+update-path test branch is stopped: do not extend this parameter sequence or
+reuse the failed checkpoint. This controlled failure does not establish the
+source-code cause or rule out every other numerical configuration/version.
+
 The native ORCA 6.1.1 TRAH output in this control omits the two-step solver's
 `CI-PROBLEM SOLVED` and `E(CAS)=` markers.
 Their absence alone is not a native convergence failure. A format-aware reader

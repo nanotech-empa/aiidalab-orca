@@ -648,6 +648,22 @@ establish a source-code cause. Any further numerical comparison must retain
 the physical model, demonstrate actual solver activation and pass every
 original convergence/identity/readback guard before a larger-system claim.
 
+The separately reviewed Be `Parametrization ExpK` comparison,
+`351e35cc-5935-4918-9140-a1052d185f24`, then changes only the orbital-update
+parametrization. Native startup confirms `EXP(K) SVD`, with iterative Pople
+and the submatrix default still active. The initial CI energy and entire
+inner-solver history match the Cayley control exactly, followed by the same
+segmentation fault and full gradient 0.4874879. The native-error guard records
+status 83; the actual readback command rejects the unqualified candidate before
+storing inputs or submitting a job. Outcome
+`0d9ff81e-c6c5-4f9b-b976-2a1b51175a99` links the comparison, exact review,
+approval and staged-input fingerprint. No readback, Ne or Co successor follows.
+The reviewed update-path test branch is stopped. ExpK is not a recovery for
+this reproduced failure; its native activation does not establish the
+source-code cause. Keep the small, forced-iterative numerical scope explicit
+and preserve the local reproducer for review instead of extending this
+parameter-test branch or reusing its failed checkpoint.
+
 No relaxed multireference Co spectrum or Co-dcHp multiplet protocol is yet
 validated. The supported scalar/1s diagnostics do not establish a transferable
 Co/Fe/Zn active space. A new physical restriction, spin manifold or intensity

@@ -527,6 +527,42 @@ changing a banner parser alone cannot qualify the result. A future accepted
 energy still requires equivalent full orbital-gradient evidence and the
 original independent readback/physical checks.
 
+The subsequent four-step diagnostic,
+`76e51be9-b812-4c6b-b14f-255ad76b3c60`, failed with a native convergence error.
+Its initial energy matches the qualified full-COSX source within 2.76e−9
+Hartree. The reported macro error nevertheless grows through 0.697, 7.38,
+13.28 and 15.30. The last printed state-average energy is much lower, but
+this is not a validated relaxation: two target orbitals have only 89.2% Co-p
+character against the unchanged 95% requirement, and the three-deepest-Co-p
+assignment fails. All 480 printed states retain the occupation-group count
+of five core-group electrons; that count does not identify the physical shell.
+Outcome `ccdb6857-c0a5-427b-ba92-8e9a23114096` retains native text, exact
+input/source links and the saved-GBW fingerprint. No checkpoint reuse, readback,
+energy acceptance or further optimization follows from this result.
+
+A separate submitted read-only snapshot inspection,
+`65833bb3-fdca-492d-822a-6785af9da358`, checks normalization and identical AO
+basis/geometry using native coefficient/overlap exports. Its squared principal
+overlaps with the qualified 2p reference subspace are 0.7812, 0.7546 and 0.7546,
+while its atomic Co-p projector eigenvalues remain 0.9915, 0.9751 and 0.9751.
+This shows why atomic-p purity alone does not resolve radial shell mixing.
+The snapshot is not assigned to a particular energy or macro; its core overlap
+is a diagnostic without a new rejection threshold. Source wavefunctions and
+the running optimizer were not modified. Only small reports/logs were retrieved.
+
+The [author manuscript of Valiev et al., Optimization of core-valence states
+of molecules](https://gup.ub.gu.se/file/206698)
+([published DOI](https://doi.org/10.1080/00268976.2016.1266054), section 2)
+discusses variational collapse of core-hole optimization even with an occupancy
+restriction and a frozen-core preoptimization/local Newton-Raphson strategy
+implemented in DALTON. This motivates validating core-hole state following;
+it does not establish an equivalent ORCA recipe or authorize a changed model.
+ORCA's documented conventional NR update also needs considerably more
+transformed integrals than AO-direct TRAH, so a large-system retry requires
+memory/disk feasibility checks. The failed trajectory is not evidence for a
+simple iteration extension, and a reduced-gradient freeze must not replace
+the required full-gradient check.
+
 No relaxed multireference Co spectrum or Co-dcHp multiplet protocol is yet
 validated. The supported scalar/1s diagnostics do not establish a transferable
 Co/Fe/Zn active space. A new physical restriction, spin manifold or intensity

@@ -146,6 +146,23 @@ comparison. Any subsequent compatibility/readback must use the same explicit
 numerical scheme and retain the all-state 1e−7 guard; a later binding energy
 also needs a consistently evaluated neutral reference.
 
+The bounded CoPc TRAH trial subsequently failed native convergence and the
+original core-identity checks. Its reported macro error grows from 0.697 to
+15.30; two target MOs fall to 89.2% Co-p character against the required 95%,
+and the three-deepest-Co-p assignment fails. The exact occupation-group count
+remains five electrons, which does not establish that those orbitals still
+represent the intended 2p shell. Do not increase the iteration cap or follow
+ORCA's generic restart suggestion without diagnosing this state change.
+The failed checkpoint is not qualified for reuse and no energy is accepted.
+
+The separate read-only snapshot inspection also measures substantial mixing
+with formerly inactive Co-p orbitals. Atomic Co-p purity alone cannot
+distinguish radial shell mixing. That overlap diagnostic introduces no new
+acceptance threshold and is not assigned to an iteration/energy. Distinguish
+energy minimization from finding the intended core-hole stationary point;
+core-hole state following needs method validation. The dated method guide
+records the native failure and relevant primary literature.
+
 The native ORCA 6.1.1 TRAH output in this control omits the two-step solver's
 `CI-PROBLEM SOLVED` and `E(CAS)=` markers.
 Their absence alone is not a native convergence failure. A format-aware reader

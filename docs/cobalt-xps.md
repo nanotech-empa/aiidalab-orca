@@ -580,10 +580,11 @@ orbital is doubly occupied MO 0, while the nominal core SOMO 4 has 0% native
 Ne-s population. The physical post-check rejects it. Pople actually activates
 in `20943781-a482-460b-808b-7c698f04c426` and converges its first inner linear
 solve, then the native CASSCF executable segfaults before a successful updated
-macro. The remaining full gradient is 6.928642. Its successful read-only
-post-inspection masks the native failure in the historical ShellJob status;
-native termination and gradient checks still reject it. The diagnostic
-coordinator now preserves the native exit status in any future submission.
+macro. The remaining full gradient is 6.928642. The historical driver and
+post-inspection sequence records a zero ShellJob status; native termination
+and gradient checks nevertheless reject it. Preserving the driver's exit
+status is useful but cannot replace these native checks, as the control below
+demonstrates.
 
 Outcome `9db5a180-a2dd-4c1e-99d2-445a6947c9c6` links both native failures,
 the common qualified source and actual staged-input/GBW fingerprints. Neither
@@ -596,6 +597,23 @@ spectroscopy benchmark or proof that every ORCA NR configuration is unusable.
 Diagnosing the small native crash and validating core-hole state following
 must precede any proposed large-system NR attempt. The original full-gradient,
 core/spin/norm and 1e−7-Hartree readback requirements remain unchanged.
+
+The separately reviewed equivalent full-CAS(1,1) control omits only the explicit
+one-configuration ORMAS block. Frozen CalcJob
+`8be1c3cb-c144-47ab-841f-f82026957b7a` preserves the same one-configuration,
+one-CSF doublet, core identity and normalization, and reproduces its energy
+exactly at printed precision. Compatibility
+`c51c5f14-692b-48a1-8f64-a3f5e28a0859` passes the unchanged 1e−7-Hartree gate.
+The conditional Pople run, `802ef09f-5717-4f62-b540-3839e8eba0eb`, then starts
+from the same original GBW and reproduces the same inner linear-solver history
+and native segmentation fault. The explicit ORMAS declaration is therefore
+not required to trigger this failure. Its actual batch script preserves the
+ORCA driver's exit status, yet the recorded status is zero; this implies that
+the driver itself returned zero despite its child CASSCF error. Native text
+remains decisive. Outcome `b480d6fe-cd48-4a12-9f92-d845e3eccc7a` preserves
+this comparison. No readback or Co successor follows. Both atomic inputs are
+identified natively as a ROHF-like one-configuration case; these controls do
+not diagnose Pople for every genuinely multiconfigurational CASSCF model.
 
 No relaxed multireference Co spectrum or Co-dcHp multiplet protocol is yet
 validated. The supported scalar/1s diagnostics do not establish a transferable

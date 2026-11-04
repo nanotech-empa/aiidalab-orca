@@ -175,6 +175,16 @@ The original full-gradient, core/spin/norm and 1e−7-Hartree readback gates sta
 unchanged. Do not extrapolate this atomic test to a Co recovery or launch a
 large NR calculation without a separate reviewed and validated path.
 
+The reviewed equivalent full-CAS(1,1) follow-up removes only the explicit
+ORMAS declaration. Its frozen state passes the original compatibility and
+physical checks, but Pople reproduces the same native crash and inner history.
+That declaration is not required to trigger the failure. Even the actual
+status-preserving batch script records zero, implying a zero ORCA-driver exit
+despite its child CASSCF error. Native normal-termination and gradient checks
+remain mandatory. Both cases are natively ROHF-like; do not generalize their
+failure to every multiconfigurational calculation. No readback, failed-GBW
+reuse or Co successor is qualified by this control.
+
 The native ORCA 6.1.1 TRAH output in this control omits the two-step solver's
 `CI-PROBLEM SOLVED` and `E(CAS)=` markers.
 Their absence alone is not a native convergence failure. A format-aware reader

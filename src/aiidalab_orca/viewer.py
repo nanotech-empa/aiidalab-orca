@@ -104,6 +104,8 @@ class ResultsView(ipw.VBox):
             ('overview', 'Overview', self._overview),
             ('orbitals', 'Orbitals & density', self._orbitals),
             ('active', 'Inspect orbitals / active space', self._active_space),
+            ('energy', 'Choose energy solver', self._energy_routes),
+            ('quantum_energy', 'Quantum-assisted energy levels', self._quantum_energy),
             ('states', 'CASCI, Dyson & Kondo', self._states),
             ('vibrations', 'Vibrations', self._vibrations),
             ('xps', 'XPS · Work in progress', self._xps),
@@ -112,10 +114,11 @@ class ResultsView(ipw.VBox):
         self.tabs.add_class('orca-workspace-body')
         views = [('Overview', 'overview'), ('Orbitals & density', 'orbitals'),
                  ('1. Prepare orbital reference', 'prepare'), ('2. Inspect / confirm active space', 'active'),
-                 ('3. CASCI states and multiplicities', 'casci'), ('4. Dyson spectrum', 'dyson'),
+                 ('3. Choose energy solver', 'energy'), ('ORCA CASCI states and multiplicities', 'casci'),
+                 ('Quantum-assisted energy levels', 'quantum_energy'), ('4. Dyson spectrum', 'dyson'),
                  ('Dyson orbitals & maps', 'maps'), ('5. Kondo orbitals & maps', 'kondo')]
         views += [(title, key) for key, title in zip(self.tabs.section_keys, self.tabs.titles)
-                  if key not in ('overview', 'orbitals', 'active', 'states')]
+                  if key not in ('overview', 'orbitals', 'active', 'states', 'energy', 'quantum_energy')]
         self.navigation = ipw.Dropdown(description='Analysis / results', options=views,
             style={'description_width': 'initial'}, layout=ipw.Layout(width='95%'))
         self._navigating = False
@@ -165,7 +168,7 @@ class ResultsView(ipw.VBox):
         if not self._space_ready(panel):
             return self.open_analysis('active')
         if not panel._datasets:
-            return self.open_analysis('casci')
+            return self.open_analysis('energy' if goal == 'casci' else 'casci')
         return self.open_analysis(goal)
 
     def _require(self, panel, message, task, label):
@@ -194,13 +197,15 @@ class ResultsView(ipw.VBox):
                 return self.tabs.show_section(task)
             labels = {key: title for title, key in self.navigation.options}
             stage_help = {
+                'energy': ('Choose the energy solver', 'Use the confirmed orbitals and active space with ORCA CASCI or the quantum-assisted workflow. Only the quantum route requires a separate Hamiltonian export.'),
+                'quantum_energy': ('Quantum-assisted energy levels', 'Export the Hamiltonian, prepare circuits, sample on a simulator or QPU, then extract and compare energy levels. Each stage requires review.'),
                 'prepare': ('Prepare the orbital reference', 'Start from the saved SCF wavefunction. Restricted orbitals are retained; unrestricted references produce QROs for CASCI and UNOs for inspection. Imported verified references can be reused.'),
                 'active': ('Inspect and confirm the active space', 'Read orbital information, inspect occupations and shapes, then explicitly choose the active electrons and orbitals. State counts and multiplicities come after this choice.'),
             }
             label, help_text = stage_help.get(task,ANALYSES.get(task, ANALYSES['dyson'] if task == 'maps' else (labels.get(task, task), '')))
             self.analysis_hint.value = f'<p><b>{html.escape(label)}:</b> {html.escape(help_text)}</p>'
             self.analysis_hint.layout.display = ''
-            if task in self.tabs.section_keys and task not in ('states','active'):
+            if task in self.tabs.section_keys and task not in ('states','active','energy','quantum_energy'):
                 return self.tabs.show_section(task)
             panel = self.tabs.show_section('states')
             if not hasattr(panel, 'analysis'):
@@ -211,17 +216,26 @@ class ResultsView(ipw.VBox):
                 panel.set_stage('prepare')
                 self._require_next_preparation(panel)
                 return panel
-            if task in ('active','casci','dyson','maps','kondo') and not panel.reference.value:
+            if task in ('active','casci','dyson','maps','kondo','energy','quantum_energy') and not panel.reference.value:
                 self._require(panel, 'First prepare an orbital reference from the saved SCF wavefunction.',
                               'prepare','Prepare orbital reference')
                 return panel
             if task == 'active':
                 self._refresh_selection(panel)
                 return self.tabs.show_section('active')
-            if task == 'casci' and not self._space_ready(panel):
+            if task in ('casci','energy','quantum_energy') and not self._space_ready(panel):
                 self._require(panel, 'Inspect the orbitals and confirm the active space before choosing multiplicities and electronic states.',
                               'active','Inspect and choose active orbitals')
                 return panel
+            if task in ('energy','quantum_energy'):
+                signature = self._space_signature(panel)
+                if getattr(self, '_energy_signature', None) != signature:
+                    for key in ('energy','quantum_energy'):
+                        old = self.tabs.panels.pop(key, None)
+                        if old:
+                            old.close()
+                    self._energy_signature = signature
+                return self.tabs.show_section(task)
             mode = {'casci': 'states', 'dyson': 'spectrum'}.get(task, task)
             if hasattr(panel,'set_stage'):
                 panel.set_stage('states' if task in ('casci','dyson','maps','kondo') else 'legacy')
@@ -285,7 +299,27 @@ class ResultsView(ipw.VBox):
             raise ValueError('The orbital reference changed; inspect the selected reference again.')
         panel._apply_orbital_window(space['orbitals'])
         self.confirmed_space = self._space_signature(panel)
-        self.open_analysis('casci')
+        self.open_analysis('casci' if self.goal in ('dyson','kondo') else 'energy')
+
+    def _energy_context(self):
+        from . import casci_services
+        panel = self.tabs.panels['states']
+        reference = casci_services.reference_data(panel.reference.value)
+        start = (reference['n_electrons']-panel.electrons.value)//2
+        space = {'electrons': panel.electrons.value,
+                 'orbitals': list(range(start,start+panel.norb.value))}
+        return str(panel.reference.value), reference, space
+
+    def _energy_routes(self):
+        from .energy_view import EnergyRoutes
+        uid, reference, space = self._energy_context()
+        return EnergyRoutes(uid, reference, space,
+            lambda: self.open_analysis('casci'), lambda: self.open_analysis('quantum_energy'))
+
+    def _quantum_energy(self):
+        from .quantum_energy import QuantumEnergy
+        uid, _, space = self._energy_context()
+        return QuantumEnergy(uid, space)
 
     def _overview(self):
         data = self.data

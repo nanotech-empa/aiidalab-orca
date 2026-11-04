@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.entry-points."aiidalab_assistant.workflow_guides"]
-orca = "aiidalab_orca.guidance:workflow_guides"
+orca = "aiidalab_orca.energy_guidance:combined_workflow_guides"
 
 [project.urls]
 Home = "https://github.com/nanotech-empa/aiidalab-orca"

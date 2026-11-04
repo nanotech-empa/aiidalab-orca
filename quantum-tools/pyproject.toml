@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantum-orbital-tools"
+version = "0.2.0.dev1"
+description = "Portable fixed-orbital Hamiltonian and quantum-assisted energy workers"
+requires-python = ">=3.12"
+dependencies = ["numpy", "scipy", "pyscf"]
+
+[project.optional-dependencies]
+quantum = ["qiskit", "qiskit-fermions"]
+hardware = ["qiskit-ibm-runtime"]
+
+[project.scripts]
+quantum-energy = "quantum_orbital_tools.energy:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

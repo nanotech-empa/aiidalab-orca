@@ -484,13 +484,38 @@ required `11` occupations. Controls `862664a3-40d2-4173-9945-ae5c3d7cb903`
 and `de7c4377-6581-484b-8cf9-fc05d231eb9f`, with qualification
 `f1f5ce96-2036-46f0-b506-f54c0b99cf7e`, establish this implementation feature,
 not Co core-hole convergence, large-job memory requirements or XPS accuracy.
-They do not remove the incomplete-space limitation. A CoPc TRAH diagnostic is
-prepared but unsubmitted pending review of the active-orbital representation.
-Its frozen compatibility stage must reproduce all 480 source-state energies
-before an optimization trial. TRAH reports convergence differently from the
-two-step solver; a future accepted energy still requires equivalent full
-orbital-gradient evidence and the original independent readback/physical
-checks, rather than substituting a different convergence banner.
+They do not remove the incomplete-space limitation.
+
+Following scientific review, the CoPc frozen TRAH control
+`b80f3e08-ea83-4bfa-a9b4-e29552083fdb` completed normally, with no printed
+orbital update or TRAH microiteration. Its target-orbital populations and
+generated COSX grids match the qualified frozen source at printed precision.
+Nevertheless, all 480 final state energies differ by more than the original
+1e−7 Hartree guard; the largest absolute difference is 3.7585e−6 Hartree
+(0.0001023 eV). Diagnostic `14bfb866-8925-4ff6-80b4-5a8acc39323c` preserves
+the comparison. No four-step optimization or accepted relaxed energy follows
+from this failed compatibility test.
+
+The native warning identifies a concrete numerical difference: TRAH enables
+`COSX_IntSymmetry Full` automatically, while the earlier two-step frozen input
+did not request it. The [ORCA COSX documentation](https://orca-manual.mpi-muelheim.mpg.de/contents/essentialelements/RI.html)
+describes full integral permutation symmetry as a distinct treatment that can
+improve multireference convergence. Identical grids alone therefore do not
+establish identical COSX evaluation. Its quantitative contribution to the
+observed energy difference remains unisolated. A frozen two-step input with
+only this setting added is prepared for scientific review. Any use of a
+matched-symmetry compatibility reference must preserve the historical
+difference and require all 480 states to agree within the unchanged guard.
+A later accepted XPS energy also requires a consistently evaluated neutral
+reference; the approximation difference is not an empirical energy shift.
+
+This TRAH output also omits the legacy two-step `CI-PROBLEM SOLVED` and
+`E(CAS)=` markers.
+The first validator therefore reports a format failure despite native normal
+termination. This is separate from the actual all-state energy failure above;
+changing a banner parser alone cannot qualify the result. A future accepted
+energy still requires equivalent full orbital-gradient evidence and the
+original independent readback/physical checks.
 
 No relaxed multireference Co spectrum or Co-dcHp multiplet protocol is yet
 validated. The supported scalar/1s diagnostics do not establish a transferable

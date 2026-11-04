@@ -502,12 +502,22 @@ did not request it. The [ORCA COSX documentation](https://orca-manual.mpi-muelhe
 describes full integral permutation symmetry as a distinct treatment that can
 improve multireference convergence. Identical grids alone therefore do not
 establish identical COSX evaluation. Its quantitative contribution to the
-observed energy difference remains unisolated. A frozen two-step input with
-only this setting added is prepared for scientific review. Any use of a
-matched-symmetry compatibility reference must preserve the historical
-difference and require all 480 states to agree within the unchanged guard.
-A later accepted XPS energy also requires a consistently evaluated neutral
-reference; the approximation difference is not an empirical energy shift.
+observed energy difference was subsequently isolated by an explicitly reviewed
+frozen control with only this option added.
+
+That matched-COSX two-step control,
+`3d60cc77-3a72-4aa2-9c3a-2d746136871b`, terminated normally in about eight
+minutes. All 480 state energies match the frozen TRAH values within
+1.01e−10 Hartree. The actual staged input hash, native state-space dimensions,
+deep-Co2p/valence identities and occupations, normalization and generated-grid
+checks pass. Compatibility record `ce1be4a2-5345-4339-901d-27d83c74bb07`
+retains the historical standard-versus-full differences separately. The
+original 1e−7 guard is unchanged. This qualifies the matched numerical scheme,
+not a relaxed energy. The approved four-step TRAH diagnostic was submitted
+only after this gate passed; no convergence or spectrum follows from that
+submission alone. A later accepted XPS energy also requires a consistently
+evaluated neutral reference; the approximation difference is not an empirical
+energy shift.
 
 This TRAH output also omits the legacy two-step `CI-PROBLEM SOLVED` and
 `E(CAS)=` markers.

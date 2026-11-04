@@ -129,19 +129,22 @@ full-gradient evidence before accepting a solver with different native
 convergence reporting. The reviewed CoPc frozen TRAH control subsequently
 terminated normally without an orbital update, but all 480 state energies
 failed the unchanged 1e−7 Hartree compatibility guard (largest difference
-3.76e−6 Hartree). No four-step optimization was submitted from that result.
+3.76e−6 Hartree). That failed comparison did not authorize an optimization.
 
 Identical COSX grids do not establish identical integral evaluation. Native
 ORCA warns that TRAH-CASSCF automatically enables `COSX_IntSymmetry Full`;
 the earlier two-step control did not request that treatment. The manual
 documents full integral permutation symmetry as a distinct COSX option. Record
-it separately from angular/radial grid parameters. A prepared, unsubmitted
-control adds only that option to the frozen two-step input. Its quantitative
-effect must be isolated before using a matched-scheme compatibility reference;
-that changed numerical treatment requires scientific review. Preserve the
-historical failed comparison. Any subsequent compatibility/readback must use
-the same explicit numerical scheme and retain the all-state 1e−7 guard; a later
-binding energy also needs a consistently evaluated neutral reference.
+it separately from angular/radial grid parameters. After explicit scientific
+review, a frozen two-step control added only that option and passed all physical
+checks. Its 480 state energies match the frozen TRAH output within 1.01e−10
+Hartree. This isolates the historical mismatch to the COSX treatment without
+relaxing the guard. The conditional four-step TRAH diagnostic was submitted
+only after that matched-scheme check passed; compatibility does not establish
+orbital convergence or accept an XPS energy. Preserve the historical failed
+comparison. Any subsequent compatibility/readback must use the same explicit
+numerical scheme and retain the all-state 1e−7 guard; a later binding energy
+also needs a consistently evaluated neutral reference.
 
 The native ORCA 6.1.1 TRAH output in this control omits the two-step solver's
 `CI-PROBLEM SOLVED` and `E(CAS)=` markers.
@@ -149,8 +152,10 @@ Their absence alone is not a native convergence failure. A format-aware reader
 must instead verify the actual TRAH stage, termination, complete state tables,
 state-average consistency and all existing physical checks. Do not insert fake
 legacy markers or relax the numerical guard to make a new solver pass. In the
-CoPc control, the independent state comparison fails even after separating
-this format mismatch from the numerical difference.
+original CoPc control, the independent comparison still fails after separating
+this format mismatch from the numerical difference. The separately reviewed
+matched-COSX control passes the original energy guard; no fake marker or
+post-hoc tolerance change is used.
 
 Select CI states by their native multiplicity and root headers, not by the
 position of a printed block. ORCA can print the lower quartet before the

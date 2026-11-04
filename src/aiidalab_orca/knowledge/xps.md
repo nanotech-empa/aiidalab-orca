@@ -118,6 +118,16 @@ converger. ORCA's documented omission of active-active rotations in incomplete
 spaces and its canonicalization dependence need consideration; changing a
 solver does not establish a fully variational RASSCF treatment.
 
+Inspect the whole numerical history before proposing another solver. The
+earlier CoPc SuperCI→DIIS attempt actually executed 43 DIIS updates and became
+unstable; the later damped run never reaching DIIS does not make it untested.
+Native H2 controls now establish that TRAH can retain a small explicit ORMAS
+space and both spin blocks, using `ActConstraints Unchanged`. They do not
+qualify that representation for the Co core hole. Review a changed active-MO
+convention, require all-state frozen compatibility, and establish equivalent
+full-gradient evidence before accepting a solver with different native
+convergence reporting. The Co TRAH draft remains unsubmitted pending review.
+
 Select CI states by their native multiplicity and root headers, not by the
 position of a printed block. ORCA can print the lower quartet before the
 doublet. Check a selected configuration's associated energy against the

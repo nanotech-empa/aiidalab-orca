@@ -462,13 +462,35 @@ or spectrum propagation. Diagnostic `66964df4-e239-45cc-8808-763b13f9eede`
 preserves the native trajectory and its source links; it accepts no energy.
 Increasing the iteration cap alone is not supported by that trajectory.
 
+The wider history includes an earlier SuperCI→DIIS attempt,
+`a8f10b9b-5b6c-4ddd-913d-b779cb21007c`: its native output records 14 SuperCI
+and 43 DIIS updates, with large gradient excursions and no normal termination.
+Thus the fact that the later damped run never reached its gradient-triggered
+DIIS switch is not a reason to repeat the earlier unstable DIIS strategy.
+
 The [ORCA 6.1 manual](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/CASSCF.html#model-spaces-cas-ras-and-ormas)
 also warns that incomplete-space orbital optimization omits active-active
 rotations and can depend on canonicalization choices. That is a method
 limitation to assess, not evidence that this specific failure has been fully
-diagnosed. TRAH support for this exact occupation-restricted model remains
-unqualified; a different converger must not silently change the reviewed
-orbital groups, state average or physical acceptance conditions.
+diagnosed. A different converger must not silently change the reviewed orbital
+groups, state average or physical acceptance conditions.
+
+Two small native TRAH feature controls have now passed on tigu: full CAS(2,2)
+and `ORMAS(2: 1 1 1 / 1 1 1)` for fixed H2, both with one triplet and one
+singlet root and `ActConstraints Unchanged`. Both use the actual TRAH
+optimizer and terminate normally. The full-CAS singlet space contains three
+configurations, whereas the restricted case contains one and prints only the
+required `11` occupations. Controls `862664a3-40d2-4173-9945-ae5c3d7cb903`
+and `de7c4377-6581-484b-8cf9-fc05d231eb9f`, with qualification
+`f1f5ce96-2036-46f0-b506-f54c0b99cf7e`, establish this implementation feature,
+not Co core-hole convergence, large-job memory requirements or XPS accuracy.
+They do not remove the incomplete-space limitation. A CoPc TRAH diagnostic is
+prepared but unsubmitted pending review of the active-orbital representation.
+Its frozen compatibility stage must reproduce all 480 source-state energies
+before an optimization trial. TRAH reports convergence differently from the
+two-step solver; a future accepted energy still requires equivalent full
+orbital-gradient evidence and the original independent readback/physical
+checks, rather than substituting a different convergence banner.
 
 No relaxed multireference Co spectrum or Co-dcHp multiplet protocol is yet
 validated. The supported scalar/1s diagnostics do not establish a transferable

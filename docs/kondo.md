@@ -1,6 +1,6 @@
 # Kondo orbitals and individual channel maps (draft)
 
-The **States & Dyson → Kondo orbitals & maps** view starts from a completed
+The **Analysis / results → Kondo orbitals & maps** view starts from a completed
 fixed-orbital CASCI Dyson calculation. It runs three independent stages:
 
 1. `empa_orca.kondo`: exchange matrix, eigenvalues and active-orbital eigenvectors.
@@ -27,7 +27,7 @@ phase fitting or numerical grid renormalization is performed during combination.
 
 ## Validation and guided recovery
 
-The collapsed **Quick guide** is available at the start of **States & Dyson**
+The collapsed **Quick guide** is available in **CASCI states**
 and in the Kondo panel, before expensive steps are submitted. It describes
 preparation and recovery. A successful process is a necessary check; it does not establish that
 the selected orbitals, molecular charge or number of roots describe the experiment.

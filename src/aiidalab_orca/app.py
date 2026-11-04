@@ -9,6 +9,7 @@ from .configuration import GeometrySettings
 from . import services, structure_io
 from .history import HistoryWidget, inspect_run
 from .viewer import show_result
+from .analysis_navigation import ANALYSES, AnalysisChooser, goal_path
 
 
 # Classic Notebook auto-scrolls tall outputs as widgets expand. Scope this to
@@ -36,6 +37,8 @@ class OrcaApp(ipw.VBox):
         self._settings_confirmed = False
         self._submitted = False
         self.review = None
+        self._requested_analysis = None
+        self.analysis_hint = ipw.HTML(layout=ipw.Layout(display='none'))
         self.process_uuid = None
         self._poll_task = None
         style = {"description_width": "150px"}
@@ -103,7 +106,12 @@ class OrcaApp(ipw.VBox):
         self.submitted_notice = ipw.VBox([
             ipw.HTML("<p>These inputs have been submitted. Follow progress in <b>Results</b>, or edit a copy to prepare another calculation.</p>"), edit_copy,
         ])
-        self.draft_panel = ipw.VBox([self.steps])
+        self.analysis_chooser = AnalysisChooser(self.choose_analysis)
+        self.open_existing = ipw.Button(description='Open an existing reference instead', icon='folder-open',
+                                        layout=ipw.Layout(width='auto'))
+        self.open_existing.on_click(lambda _: setattr(self.pages, 'selected_index', 1))
+        self.calculation_start = ipw.VBox([self.analysis_chooser, self.analysis_hint, self.open_existing])
+        self.draft_panel = ipw.VBox([self.calculation_start, self.steps])
         self.history = HistoryWidget(self.load_run, self.use_geometry, self.copy_settings)
         self.pages = ipw.Tab(children=[self.draft_panel, self.history,
                                       ipw.VBox([ipw.HBox([refresh, self.use_final, self.copy]), self.status,
@@ -125,6 +133,20 @@ class OrcaApp(ipw.VBox):
         self.wavefunction_storage.observe(self._invalidate, names="revision")
         self.optimize.observe(self._optimization_changed, names="value")
         self._update_steps()
+
+    def choose_analysis(self, task):
+        self._requested_analysis = task
+        if task is None:
+            self.analysis_hint.layout.display = 'none'
+            return
+        label, help_text = ANALYSES[task]
+        self.analysis_hint.value = (f'<p><b>{html.escape(label)}:</b> {html.escape(help_text)}</p>'
+            '<p><b>First step:</b> prepare the molecule and review its geometry/SCF calculation below. '
+            'After it finishes, the requested analysis opens with guidance for the next step. '
+            'No later calculation is submitted automatically.</p>')
+        if goal_path(task):
+            self.analysis_hint.value += '<p><b>Your path:</b> '+goal_path(task)+'</p>'
+        self.analysis_hint.layout.display = ''
 
     def _settings(self):
         values = self.science.values()
@@ -205,7 +227,7 @@ class OrcaApp(ipw.VBox):
 
     def _edit_copy(self, _=None):
         self._submitted = False
-        self.draft_panel.children = [self.steps]
+        self.draft_panel.children = [self.calculation_start, self.steps]
         self._structure_changed()
         self.pages.selected_index = 0
         self.steps.selected_index = 0
@@ -281,6 +303,7 @@ class OrcaApp(ipw.VBox):
         self.submit_button.disabled = True
         try:
             self.process_uuid = services.submit_plan(self.review, self.label.value)
+            self._requested_analysis = self.analysis_chooser.choice.value
             self.review = None
             self._submitted = True
             self._update_steps()
@@ -296,6 +319,7 @@ class OrcaApp(ipw.VBox):
     def load_run(self, uuid):
         try:
             inspect_run(uuid)
+            self._requested_analysis = self.analysis_chooser.choice.value
             self.process_uuid = uuid
             self.pages.selected_index = 2
             self.refresh_status()
@@ -326,7 +350,11 @@ class OrcaApp(ipw.VBox):
                 widget.set_active(False)
         if data["finished"]:
             if data.get("scientific_success", data["successful"]):
+                data = dict(data, requested_analysis=self.analysis_chooser.choice.value)
                 self.result_box.children = [show_result(data)]
+                if self._requested_analysis:
+                    self.result_box.children[0].open_goal(self._requested_analysis)
+                    self._requested_analysis = None
                 self.result_box.children[0].set_active(self.pages.selected_index == 2)
             else:
                 message = data["exit_message"] or "Workflow did not finish successfully"

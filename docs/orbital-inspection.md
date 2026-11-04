@@ -1,7 +1,9 @@
 # QRO and UNO inspection
 
-Open a completed SCF/geometry result, expand **CASCI states · fixed geometry
-(draft)**, and open **Inspect QRO / UNO orbitals**.
+Follow [the CAS preparation workflow](cas-workflow.md): prepare/reuse the
+orbital reference in **Analysis / results → 1. Prepare orbital reference**,
+then choose **2. Inspect / confirm active space**. The independent
+**Orbitals & density → QRO / UNO inspection** view remains available too.
 
 1. **Read orbital information** submits a small AiiDA workflow. It preserves
    available orbital files and exports metadata using the registered
@@ -10,7 +12,20 @@ Open a completed SCF/geometry result, expand **CASCI states · fixed geometry
 2. Choose **QRO** or **UNO**. The list, occupation plot and expandable table
    show the zero-based indices of that particular set. The JSON download
    records the original occupations, source file digest and reference UUID.
-3. Select one or more orbitals, review the cube request, and submit it.
+3. Select one or more orbitals in the list, or type their **Orbital indices**.
+   Spaces and commas separate zero-based indices, and `3..10` selects every
+   index from 3 through 10, inclusive. Mix them as `1 3..10 14, 18..21`;
+   spaces around `..` are accepted too. The field and highlighted rows update
+   each other. Duplicate indices are counted once. Invalid text preserves the
+   previous highlights and blocks review/submission until corrected; clicking
+   rows also replaces the invalid text. Switching orbital sets resets the
+   field to that set's highlighted selection. Noncontiguous selections work
+   for previews; the current general CASCI path still needs a contiguous window.
+   Click **Review orbital visualization**, then
+   **Generate orbital previews**. These actions are visible beside the orbital
+   list; **Preview settings and file storage…** holds the optional grid/code
+   and retention controls. Once the job finishes, choose **Orbital to display**
+   to show its shape in the 3D viewer.
    The configured `orca_plot` and cubehandler run through a CalcJob on the
    reference computer. The EMPA cube viewer provides isosurfaces, slices,
    saved visualizations and subsequent CalcJob rendering.
@@ -19,7 +34,9 @@ Open a completed SCF/geometry result, expand **CASCI states · fixed geometry
    cubehandler-reduced previews are retrieved into AiiDA. Retained full cubes
    can be used for subsequent high-quality rendering.
 
-This is orbital inspection and review of the current CASCI active window.
+Use the selected-window button to confirm the active space and open the CASCI
+state requests. The manual count controls in the active-space stage offer the
+same explicit confirmation. This is orbital inspection and review of the CASCI active window.
 Selecting UNOs for inspection does not change the orbital reference used by
 existing or new CASCI sectors. A later preparation component can make an
 explicit choice of another shared orbital reference.

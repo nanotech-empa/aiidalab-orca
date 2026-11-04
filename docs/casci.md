@@ -4,8 +4,10 @@ This milestone adds common spatial-orbital preparation and independent CASCI
 charge/spin calculations. It does not optimize atomic positions or CAS orbitals.
 It is a pipeline prototype, not a validated spectroscopy protocol.
 
-Open a completed SCF/geometry calculation, then expand **CASCI states · fixed
-geometry (draft)** in Results:
+Open a completed SCF/geometry calculation, then choose
+the preparation and active-space stages described in
+[the guided CAS workflow](cas-workflow.md). **3. CASCI states and multiplicities**
+is available once the orbital reference and active space are established:
 
 1. Review and prepare common orbitals. Restricted SCF orbitals are read without
    iteration; unrestricted orbitals are converted to QROs with ORCA's `UNO`
@@ -13,12 +15,12 @@ geometry (draft)** in Results:
    nonzero limit overrides `NoIter`. The parser requires ORCA's confirmation
    that SCF was skipped, that the geometry/basis match, and (for unrestricted
    input) that a QRO file was written.
-2. Select the active electron count **in the reference charge state** and the
+2. Inspect and explicitly confirm the active electron count **in the reference charge state** and the
    number of spatial orbitals. Review the displayed zero-based ORCA indices.
    The initial small values are illustrative and must be chosen for the molecule.
    [Inspect QRO/UNO orbitals](orbital-inspection.md) to examine their shapes and
    occupations; selected contiguous QRO windows can be transferred to the CASCI controls.
-3. Select charge, multiplicity and number of roots, review the generated input,
+3. Select charge, multiplicity and **Electronic states**, review the generated input,
    and submit. Repeat for additional charge/spin sectors. Each is a separate
    WorkChain. A change of charge adjusts active electrons while preserving the
    exact same inactive and active orbital indices.
@@ -30,6 +32,12 @@ geometry (draft)** in Results:
 The reference is associated with the existing SCF result. Geometry optimization
 may have used a different method earlier, but all compared CASCI states use the
 same final fixed geometry and common orbitals.
+
+**Common orbitals** are the shared spatial-orbital basis, not electronic states.
+An electronic state from the CASCI calculation is also called a **root**.
+Requesting one state gives the lowest-energy CASCI state in the selected
+charge/spin sector; requesting two also gives the next state. This count is
+independent of the number of active orbitals.
 
 ## Components and provenance
 

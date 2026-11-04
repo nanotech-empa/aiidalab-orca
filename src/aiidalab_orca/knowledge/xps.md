@@ -187,11 +187,18 @@ reuse or Co successor is qualified by this control.
 
 A subsequent Be CAS(2,4) control has ten singlet CSFs and genuinely mixed
 initial CI weights, yet Pople segfaults at the same post-step location. The
-native-error guard rejects it and prevents a readback. All reproduced crashes
-still share the nondefault `UseSubMatrixGuess false`; the documented `true`
-default has not been qualified. Keep that numerical scope explicit, and
-require actual Pople activation plus the unchanged physical/full-gradient
-and readback gates for any reviewed comparison. No large Co retry follows.
+native-error guard rejects it and prevents a readback. A separately reviewed
+single-option Be comparison restores `UseSubMatrixGuess true`; native startup
+confirms it is on and Pople executes. It reproduces the same initial CI energy,
+inner history and segmentation fault, with full gradient 0.4874879. Outcome
+`f6c34c5d-f38c-45b0-8dd6-65114094abd2` records this failure. The conditional
+commands reject the Be readback and dependent Ne submission before storing
+inputs or launching jobs. Restoring this default is therefore not a recovery.
+All these controls still force iterative Pople through `ExactDiagSwitch 0`;
+they do not diagnose every numerical path or establish a source-code cause.
+Require actual solver activation plus the unchanged physical/full-gradient
+and readback gates for any further reviewed comparison. No failed-checkpoint
+reuse or large Co retry follows.
 
 The native ORCA 6.1.1 TRAH output in this control omits the two-step solver's
 `CI-PROBLEM SOLVED` and `E(CAS)=` markers.

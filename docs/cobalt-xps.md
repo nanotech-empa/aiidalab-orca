@@ -627,14 +627,26 @@ status 83 and prevents post-crash wavefunction export. Outcome
 successor follows.
 
 Thus the reproduced failure is not limited to the one-configuration Ne case.
-All these Pople controls nevertheless share `UseSubMatrixGuess false`, with
-`ExactDiagSwitch 0` to force the iterative solver. Native startup confirms
-that submatrix initial guess/update is off. The manual's documented default
-is `UseSubMatrixGuess true`; that combination remains unqualified by these
-controls. A single-option comparison must retain the same physical model,
-actually execute Pople and pass every original convergence/identity/readback
-guard before any larger-system claim. Do not call this evidence a general
-failure of every Pople configuration.
+These initial Pople controls used `UseSubMatrixGuess false`, with
+`ExactDiagSwitch 0` to force the iterative solver. A separately reviewed
+single-option Be comparison restores the documented `UseSubMatrixGuess true`
+default. Native startup in `a4a5f22e-079e-4a00-a8e3-f5d508800351` confirms that
+submatrix initial guess/update is on and that Pople actually executes. Its
+initial CI energy and complete inner-solver history are identical to the
+preceding Be control, followed by the same segmentation fault. The full
+orbital gradient remains 0.4874879; inner convergence does not qualify the
+orbitals. Outcome `f6c34c5d-f38c-45b0-8dd6-65114094abd2` preserves this comparison.
+The native-error guard records status 83 and prevents post-crash export.
+The actual conditional submission commands reject both a Be readback and the
+dependent Ne run before storing inputs or submitting jobs, with the execution
+journal unchanged. No failed checkpoint or Co successor is qualified.
+
+Restoring the submatrix default therefore does not remove this reproduced Be
+failure. This still tests forced iterative Pople, not every Pople configuration
+or ORCA execution path. The observed post-solve/update location does not
+establish a source-code cause. Any further numerical comparison must retain
+the physical model, demonstrate actual solver activation and pass every
+original convergence/identity/readback guard before a larger-system claim.
 
 No relaxed multireference Co spectrum or Co-dcHp multiplet protocol is yet
 validated. The supported scalar/1s diagnostics do not establish a transferable

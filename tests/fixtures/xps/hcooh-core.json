@@ -1,0 +1,51 @@
+{
+  "method": "canonical",
+  "filename": "aiida.gbw",
+  "assignments": [
+    {
+      "index": 0,
+      "atom_index": 2,
+      "occupation": 2.0,
+      "population": 0.998,
+      "energy_hartree": -18.815521,
+      "atomic_populations": [
+        0.002,
+        0.0,
+        0.998,
+        0.0,
+        0.001
+      ]
+    },
+    {
+      "index": 1,
+      "atom_index": 1,
+      "occupation": 2.0,
+      "population": 0.996,
+      "energy_hartree": -18.757602,
+      "atomic_populations": [
+        0.004,
+        0.996,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "index": 2,
+      "atom_index": 0,
+      "occupation": 2.0,
+      "population": 0.992,
+      "energy_hartree": -10.017567,
+      "atomic_populations": [
+        0.992,
+        0.006,
+        0.002,
+        0.001,
+        0.0
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "population_method": "ORCA Loewdin atomic populations per MO",
+  "minimum_population": 0.95
+}

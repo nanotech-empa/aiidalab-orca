@@ -11,6 +11,7 @@ steps of a single workflow.
 | Orbitals & density | SCF orbital levels and optional cubes/spin density; a separate QRO/UNO inspection view |
 | States & Dyson | CASCI state energies, with separate views for optional Dyson spectra and orbital/maps results |
 | Vibrations | Stored IR/Raman spectra and animated modes, plus an optional frequency-calculation form |
+| XPS | C/O 1s binding energies and chemical shifts for selected atoms, with an optional ionization-calculation form |
 | Calculation details | Effective reference inputs, electronic-file storage status and provenance identifiers |
 
 For example, a researcher can inspect ordinary DFT orbitals without preparing
@@ -19,6 +20,9 @@ analysis; or compute CASCI states without requesting Dyson transitions. Resonanc
 Raman belongs to the vibrational-analysis family, but its separate workflow is
 not implemented yet. The current frequency workflow still requires a completed
 ORCA optimization; the interface explains that prerequisite for SCF-only runs.
+XPS accepts a fixed-geometry SCF reference and does not optimize the geometry.
+Its first implementation requires a closed-shell RKS singlet; see
+[the XPS guide](xps.md) for core assignment, spin and reuse conventions.
 
 ## Existing results first
 
@@ -57,5 +61,5 @@ tab is hidden, then resume only if the user had left them playing. A deliberate
 manual pause is retained. Replacing the loaded reference disposes its viewers
 and polling tasks once.
 
-The backend workflows, scientific parameters, physical conventions and package
-pins are unchanged by this presentation refactor.
+Opening a workspace does not change its stored scientific parameters or
+physical conventions. Each analysis uses its own independent backend workflow.

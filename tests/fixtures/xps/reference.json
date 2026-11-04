@@ -1,0 +1,60 @@
+{
+  "numbers": [
+    6,
+    8,
+    8,
+    1,
+    1
+  ],
+  "positions": [
+    [
+      5.0701926173938,
+      4.9264718492284,
+      5.0000000002355
+    ],
+    [
+      6.2769302497594,
+      4.9583792001891,
+      4.999999999995
+    ],
+    [
+      4.2578246728105,
+      6.0095221548276,
+      5.000000000238
+    ],
+    [
+      4.4512336332664,
+      4.0081169591558,
+      4.999999999778
+    ],
+    [
+      4.84381882677,
+      6.7975098365991,
+      4.9999999997534
+    ]
+  ],
+  "settings": {
+    "grid": "default",
+    "basis": "def2-TZVP",
+    "charge": 0,
+    "method": "PBE",
+    "nprocs": 4,
+    "protocol": "pbe-v1",
+    "memory_mb": 4096,
+    "reference": "auto",
+    "dispersion": "default",
+    "constraints": [],
+    "multiplicity": 1,
+    "optimization": "TightOpt",
+    "approximation": "auto",
+    "max_scf_steps": 200,
+    "schema_version": 2,
+    "auxiliary_basis": "def2/J",
+    "scf_convergence": "TightSCF",
+    "block_parameters": {},
+    "element_settings": {},
+    "wallclock_seconds": 1800,
+    "max_geometry_steps": 100
+  },
+  "ground_energy_hartree": -189.64578865045
+}

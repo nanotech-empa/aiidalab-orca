@@ -66,7 +66,7 @@ def test_unoptimized_reference_explains_vibration_prerequisite(monkeypatch):
         panel = result.tabs.show_section('vibrations')
         assert 'geometry optimization' in panel.value
         assert result.tabs.titles == ('Overview', 'Orbitals & density', 'States & Dyson',
-                                     'Vibrations', 'Calculation details')
+                                     'Vibrations', 'XPS', 'Calculation details')
     finally:
         close_widget_tree(result)
 

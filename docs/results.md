@@ -43,6 +43,7 @@ different spin or submits a prerequisite calculation automatically.
 | 2. Inspect / confirm active space | Inspect occupations/shapes and explicitly select the CAS input orbitals/electrons |
 | 3. CASCI states and multiplicities; Dyson; Kondo | Request states only after preparation, then continue to compatible transitions and channels |
 | Vibrations | Stored IR/Raman spectra and animated modes, plus an optional frequency-calculation form |
+| XPS · Work in progress | Informational placeholder; XPS calculation controls are unavailable |
 | Calculation details | Effective reference inputs, electronic-file storage status and provenance identifiers |
 
 For example, a researcher can inspect ordinary DFT orbitals without preparing

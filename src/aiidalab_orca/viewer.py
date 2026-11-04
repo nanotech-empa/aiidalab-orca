@@ -106,6 +106,7 @@ class ResultsView(ipw.VBox):
             ('active', 'Inspect orbitals / active space', self._active_space),
             ('states', 'CASCI, Dyson & Kondo', self._states),
             ('vibrations', 'Vibrations', self._vibrations),
+            ('xps', 'XPS · Work in progress', self._xps),
             ('details', 'Calculation details', self._details),
         ])
         self.tabs.add_class('orca-workspace-body')
@@ -360,6 +361,10 @@ class ResultsView(ipw.VBox):
                                   + input_details(data.get('input_files', {}))))
         items.append(ipw.HTML('<h4>Provenance and identifiers</h4>'+provenance))
         return ipw.VBox(items)
+
+    def _xps(self):
+        return ipw.HTML('<h3>XPS · Work in progress</h3>'
+                        '<p class="orca-notice">XPS calculations are not available in the app yet.</p>')
 
     def _prepare_common(self):
         self.open_analysis('prepare')

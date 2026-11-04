@@ -163,6 +163,18 @@ energy minimization from finding the intended core-hole stationary point;
 core-hole state following needs method validation. The dated method guide
 records the native failure and relevant primary literature.
 
+The subsequent small Ne/cc-pCVDZ CAS(1,1) test does not qualify a new NR
+recovery. Both reviewed runs start from the same validated 1s-hole source.
+The augmented-Hessian solver reaches a small full gradient and normal native
+termination but refills the 1s shell, leaving a valence hole; the core check
+rejects it. Pure-NR Pople actually activates, then native ORCA 6.1.1 segfaults
+after its first inner linear solve. Inner convergence is not orbital
+convergence, and successful inspection of a saved GBW cannot accept a crashed
+native run. Neither candidate receives a readback or checkpoint qualification.
+The original full-gradient, core/spin/norm and 1e−7-Hartree readback gates stay
+unchanged. Do not extrapolate this atomic test to a Co recovery or launch a
+large NR calculation without a separate reviewed and validated path.
+
 The native ORCA 6.1.1 TRAH output in this control omits the two-step solver's
 `CI-PROBLEM SOLVED` and `E(CAS)=` markers.
 Their absence alone is not a native convergence failure. A format-aware reader

@@ -563,6 +563,40 @@ memory/disk feasibility checks. The failed trajectory is not evidence for a
 simple iteration extension, and a reduced-gradient freeze must not replace
 the required full-gradient check.
 
+A subsequently reviewed atomic capability test used fixed Ne/cc-pCVDZ,
+finite nuclei and exact HF/CASSCF integrals in ORCA 6.1.1. A normally converged
+neutral and a frozen CAS(1,1) cation establish the one-electron 1s vacancy;
+native coefficient/overlap exports verify normalization and the deepest Ne-s
+SOMO before two independent NR runs. Each submitted calculation was capped
+at one core, 2 GiB and ten minutes, with full electronic files retained remotely.
+The only electronic-input difference between those runs is augmented-Hessian
+`Solver 0` versus pure-NR `Solver 1` (Pople). Both reproduce the same frozen
+starting energy within 3.01e−10 Hartree.
+
+The augmented-Hessian run, `2b19a104-83fe-4b72-8351-2077f84190ac`, terminates
+normally and reports a full gradient of 1.57247e−4, below the unchanged 2.5e−4
+threshold. It nevertheless converges to a valence-hole state: the deepest Ne-s
+orbital is doubly occupied MO 0, while the nominal core SOMO 4 has 0% native
+Ne-s population. The physical post-check rejects it. Pople actually activates
+in `20943781-a482-460b-808b-7c698f04c426` and converges its first inner linear
+solve, then the native CASSCF executable segfaults before a successful updated
+macro. The remaining full gradient is 6.928642. Its successful read-only
+post-inspection masks the native failure in the historical ShellJob status;
+native termination and gradient checks still reject it. The diagnostic
+coordinator now preserves the native exit status in any future submission.
+
+Outcome `9db5a180-a2dd-4c1e-99d2-445a6947c9c6` links both native failures,
+the common qualified source and actual staged-input/GBW fingerprints. Neither
+candidate receives a readback or checkpoint qualification, and this test
+launches no Co successor. An earlier inspection-only attempt stopped before
+ORCA because the configured Python package path was omitted; its unchanged
+input was retried with the existing configured runtime setup and the failed
+node retained. These are method-specific capability failures, not a Ne
+spectroscopy benchmark or proof that every ORCA NR configuration is unusable.
+Diagnosing the small native crash and validating core-hole state following
+must precede any proposed large-system NR attempt. The original full-gradient,
+core/spin/norm and 1e−7-Hartree readback requirements remain unchanged.
+
 No relaxed multireference Co spectrum or Co-dcHp multiplet protocol is yet
 validated. The supported scalar/1s diagnostics do not establish a transferable
 Co/Fe/Zn active space. A new physical restriction, spin manifold or intensity

@@ -5,11 +5,30 @@ Raman**. The section is independent of orbital cubes and CASCI. Review the
 inherited method, basis, charge, spin and resources in the generated ORCA input,
 then submit. Existing calculations can be reopened from the same section.
 
-The initial implementation requires a converged ORCA geometry optimization.
-An SCF calculation alone does not establish a stationary geometry. A constrained
-optimization is accepted with a warning: free-molecule normal modes at that
-geometry may not describe a minimum. Imported optimized geometries and partial
-Hessians will need explicit preparation/validation interfaces in a later step.
+When the reference is a single-point SCF, the section offers three routes:
+
+- **Use a matching saved optimization** is the default when one has exactly
+  matching coordinates, electronic settings and ORCA code. Open it directly;
+  no duplicate SCF or optimization is submitted. Resource counts may differ.
+- **Prepare a geometry optimization** opens the existing wizard with this
+  reference's coordinates and settings, for explicit review and submission.
+- **Use this geometry without optimization (advanced)** requires an explicit
+  acknowledgement before exposing frequency review/submission controls.
+
+An SCF calculation alone does not establish a stationary geometry. A geometry
+uploaded from another computer can use the advanced route after preparing its
+SCF reference: choose IR/Raman in New calculation and uncheck **Optimize geometry**.
+The frequency calculation then keeps all coordinates fixed. Its warning explains
+that stationarity at the selected method, basis, charge and spin has not been
+verified; no gradient check or optimization is performed. The acknowledgement is
+stored as a WorkChain input, and a new summary records the warning without
+modifying the original results, including when existing vibrational data are reused.
+Inspect imaginary modes before interpreting the spectra. A constrained
+optimization is also accepted with a warning: free-molecule normal modes at that
+geometry may not describe a minimum. Partial Hessians remain a future extension.
+
+With the IR/Raman goal selected, **Use final geometry** now opens these analysis
+routes instead of silently configuring another single-point SCF calculation.
 
 ## Small workflow and retained data
 

@@ -41,7 +41,14 @@ def compatible(node, structure, settings, code_uuid, raman):
             and (not raman or node.outputs.summary.get_dict().get('raman', False)))
 
 
-def optimized_source(structure, settings, code, retrieved):
+UNVERIFIED_GEOMETRY_WARNING = (
+    'Computed at the supplied fixed geometry without verified optimization provenance. '
+    'Stationarity has not been checked. Harmonic IR/Raman spectra may be unreliable '
+    'away from a stationary point; inspect imaginary modes before interpretation.'
+)
+
+
+def optimized_source(structure, settings, code, retrieved, *, allow_unverified_geometry=False):
     """Check actual optimized-geometry provenance without requiring a live WFN."""
     producer = retrieved.creator
     if producer is None or 'remote_folder' not in producer.outputs:
@@ -54,8 +61,21 @@ def optimized_source(structure, settings, code, retrieved):
                 and 'structure' in source.outputs and source.outputs.structure.uuid == structure.uuid
                 and 'optimization_summary' in source.outputs
                 and source.outputs.optimization_summary.get_dict().get('converged')):
-            return
+            return True
+    if allow_unverified_geometry:
+        return False
     raise ValueError('Select a converged optimized geometry before harmonic spectroscopy')
+
+
+@engine.calcfunction
+def unverified_geometry_summary(summary):
+    """Add the acknowledged assumption without changing existing scientific data."""
+    values = summary.get_dict()
+    values['geometry_optimization_verified'] = False
+    values['warnings'] = list(values.get('warnings', []))
+    if UNVERIFIED_GEOMETRY_WARNING not in values['warnings']:
+        values['warnings'].append(UNVERIFIED_GEOMETRY_WARNING)
+    return orm.Dict(dict=values)
 
 
 def hessian_sections(text):
@@ -258,6 +278,7 @@ class VibrationsWorkChain(engine.WorkChain):
         spec.input('source_retrieved', valid_type=orm.FolderData)
         spec.input('code', valid_type=orm.AbstractCode)
         spec.input('raman', valid_type=orm.Bool, default=lambda: orm.Bool(True))
+        spec.input('allow_unverified_geometry', valid_type=orm.Bool, default=lambda: orm.Bool(False))
         spec.input('reuse_uuid', valid_type=orm.Str, required=False)
         for name, kind in OUTPUTS.items():
             spec.input('reuse.' + name, valid_type=kind, required=False)
@@ -269,7 +290,10 @@ class VibrationsWorkChain(engine.WorkChain):
 
     def setup(self):
         try:
-            optimized_source(self.inputs.structure, self.inputs.settings.get_dict(), self.inputs.code, self.inputs.source_retrieved)
+            self.ctx.geometry_verified = optimized_source(
+                self.inputs.structure, self.inputs.settings.get_dict(), self.inputs.code,
+                self.inputs.source_retrieved,
+                allow_unverified_geometry=self.inputs.allow_unverified_geometry.value)
             if 'reuse_uuid' in self.inputs:
                 previous = orm.load_node(self.inputs.reuse_uuid.value)
                 validate_result(previous)
@@ -306,4 +330,7 @@ class VibrationsWorkChain(engine.WorkChain):
     def results(self):
         outputs = self.ctx.calculation.outputs if self.needs_calculation() else self.inputs.reuse
         for name in OUTPUTS:
-            self.out(name, outputs[name])
+            value = outputs[name]
+            if name == 'summary' and not self.ctx.geometry_verified:
+                value = unverified_geometry_summary(value)
+            self.out(name, value)

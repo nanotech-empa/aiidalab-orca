@@ -143,7 +143,8 @@ def test_frequency_submission_does_not_optimize_or_retrieve_wfn(aiida_profile, a
         process.close()
 
 
-def test_reuse_survives_scratch_loss_and_force_recompute(aiida_profile_clean, aiida_localhost, tmp_path):
+@pytest.mark.parametrize('verified', [True, False])
+def test_reuse_survives_scratch_loss_and_force_recompute(aiida_profile_clean, aiida_localhost, tmp_path, verified):
     from aiidalab_orca import vibration_services as service
     from aiida_empa_orca.reuse import PROCESS_TYPE as GEO
     atoms, arrays, summary = data()
@@ -151,7 +152,7 @@ def test_reuse_survives_scratch_loss_and_force_recompute(aiida_profile_clean, ai
     settings = orm.Dict(dict=protocol_settings(overrides={'charge': 0, 'multiplicity': 1})).store()
     code = orm.InstalledCode(computer=aiida_localhost, filepath_executable='/bin/true').store()
     source = orm.WorkChainNode(process_type=GEO)
-    for name, value in {'structure': structure, 'settings': settings, 'code': code, 'optimize': orm.Bool(True).store()}.items():
+    for name, value in {'structure': structure, 'settings': settings, 'code': code, 'optimize': orm.Bool(verified).store()}.items():
         source.base.links.add_incoming(value, link_type=LinkType.INPUT_WORK, link_label=name)
     source.store()
     calc = orm.CalcJobNode().store()
@@ -166,7 +167,11 @@ def test_reuse_survives_scratch_loss_and_force_recompute(aiida_profile_clean, ai
     structure.base.links.add_incoming(source, link_type=LinkType.RETURN, link_label='structure')
     source.set_process_state(ProcessState.FINISHED)
     source.set_exit_status(0)
-    initial = service.prepare(str(source.uuid))
+    if not verified:
+        with pytest.raises(ValueError, match='optimized geometry'):
+            service.prepare(str(source.uuid))
+    kwargs = {'allow_unverified_geometry': not verified}
+    initial = service.prepare(str(source.uuid), **kwargs)
     assert initial['reuse_uuid'] is None
     previous = orm.WorkChainNode(process_type=backend.PROCESS_TYPE)
     for name, value in {'structure': structure, 'settings': settings, 'code': code, 'raman': orm.Bool(True).store(),
@@ -186,15 +191,23 @@ def test_reuse_survives_scratch_loss_and_force_recompute(aiida_profile_clean, ai
         value.base.links.add_incoming(previous, link_type=LinkType.RETURN, link_label=name)
     previous.set_process_state(ProcessState.FINISHED)
     previous.set_exit_status(0)
-    plan = service.prepare(str(source.uuid))
+    plan = service.prepare(str(source.uuid), **kwargs)
     assert plan['reuse_uuid'] == str(previous.uuid)
-    assert service.prepare(str(source.uuid), force_recompute=True)['reuse_uuid'] is None
-    assert service.prepare(str(source.uuid), raman=False)['reuse_uuid'] == str(previous.uuid)
+    assert service.prepare(str(source.uuid), force_recompute=True, **kwargs)['reuse_uuid'] is None
+    assert service.prepare(str(source.uuid), raman=False, **kwargs)['reuse_uuid'] == str(previous.uuid)
     builder = backend.VibrationsWorkChain.get_builder()
     builder.structure, builder.settings, builder.code = structure, settings, code
     builder.source_retrieved, builder.reuse_uuid = retrieved, orm.Str(previous.uuid)
+    builder.allow_unverified_geometry = orm.Bool(not verified)
     for name in backend.OUTPUTS:
         builder.reuse[name] = previous.outputs[name]
     outputs, reused = run_get_node(builder)
-    assert reused.is_finished_ok and not reused.called_descendants
+    assert reused.is_finished_ok
+    if verified:
+        assert not reused.called_descendants
+    else:
+        assert all(isinstance(child, orm.CalcFunctionNode) for child in reused.called_descendants)
+        assert outputs['summary'].get_dict()['geometry_optimization_verified'] is False
+        assert backend.UNVERIFIED_GEOMETRY_WARNING in outputs['summary'].get_dict()['warnings']
+        assert 'geometry_optimization_verified' not in previous.outputs.summary.get_dict()
     assert outputs['hessian'].uuid == hessian.uuid

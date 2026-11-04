@@ -56,12 +56,14 @@ def test_vibrations_and_dft_do_not_construct_casci(monkeypatch):
 
 
 def test_unoptimized_reference_explains_vibration_prerequisite(monkeypatch):
-    from aiidalab_orca import viewer, vibrations
+    from aiidalab_orca import viewer, vibrations, vibration_entry
     from aiidalab_orca.app import close_widget_tree
     monkeypatch.setattr(viewer, 'molecule', lambda *args: ipw.Label('Geometry'))
     def unwanted(*args):
         raise AssertionError('Vibrations cannot be created for an unoptimized reference')
     monkeypatch.setattr(vibrations, 'VibrationalSpectroscopy', unwanted)
+    monkeypatch.setattr(vibration_entry, 'VibrationEntry', lambda *args, **kwargs:
+                        ipw.HTML('Choose a saved geometry optimization or explicitly use supplied coordinates.'))
     result = viewer.show_result(reference_data(optimized=False))
     try:
         panel = result.tabs.show_section('vibrations')

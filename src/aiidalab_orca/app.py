@@ -392,6 +392,9 @@ class OrcaApp(ipw.VBox):
             if data.get("scientific_success", data["successful"]):
                 data = dict(data, requested_analysis=self.analysis_chooser.choice.value)
                 self.result_box.children = [show_result(data)]
+                if hasattr(self.result_box.children[0], 'set_reference_actions'):
+                    self.result_box.children[0].set_reference_actions(
+                        self._open_vibration_reference, self._prepare_vibration_optimization)
                 if self._requested_analysis:
                     self.result_box.children[0].open_goal(self._requested_analysis)
                     self._requested_analysis = None
@@ -425,8 +428,22 @@ class OrcaApp(ipw.VBox):
                 return
             await asyncio.sleep(5)
 
-    def use_geometry(self, uuid):
+    def _open_vibration_reference(self, uuid):
+        self.analysis_chooser.choice.value = 'vibrations'
+        self.load_run(uuid)
+
+    def _prepare_vibration_optimization(self, uuid):
+        self.use_geometry(uuid, optimize=True)
+        self.copy_settings(uuid)
+        self.optimize.value = True
+        self.steps.selected_index = 0
+        self.error.value = '<p>Optimization prepared from the selected reference. Review structure, settings and resources before submitting.</p>'
+
+    def use_geometry(self, uuid, *, optimize=False):
         try:
+            if self.analysis_chooser.choice.value == 'vibrations' and not optimize:
+                self._open_vibration_reference(uuid)
+                return
             data = inspect_run(uuid)
             if not data["structure_uuid"]:
                 raise ValueError(data["geometry_status"])
@@ -437,7 +454,7 @@ class OrcaApp(ipw.VBox):
             self.pages.selected_index = 0
             self.steps.selected_index = 0
             self.structure.set_atoms(atoms, source_uuid=data["structure_uuid"])
-            self.optimize.value = False
+            self.optimize.value = bool(optimize)
             self.error.value = "<p>Geometry loaded. Review charge and multiplicity in Calculation settings.</p>"
         except Exception as exc:
             self._show_error(exc)

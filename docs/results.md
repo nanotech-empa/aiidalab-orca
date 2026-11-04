@@ -58,8 +58,10 @@ For example, a researcher can inspect ordinary DFT orbitals without preparing
 common orbitals or CASCI; inspect IR/Raman without opening electronic-state
 analysis; or compute CASCI states without requesting Dyson transitions. Resonance
 Raman belongs to the vibrational-analysis family, but its separate workflow is
-not implemented yet. The current frequency workflow still requires a completed
-ORCA optimization; the interface explains that prerequisite for SCF-only runs.
+not implemented yet. SCF-only references offer a matching saved optimization,
+preparation of an optimization, or an explicitly acknowledged fixed-geometry
+frequency calculation. The advanced route does not establish stationarity and
+runs no gradient check; see [the vibrational spectroscopy guide](vibrations.md).
 
 ## Existing results first
 

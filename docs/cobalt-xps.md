@@ -178,6 +178,14 @@ Relative intensities use the paper's **bound 1s←2p transition approximation**
 to XPS. No continuum photoelectron or absolute photoionization cross section is
 computed. This approximation and its fixed-valence-orbital limitations must be
 considered before interpreting satellite weights or comparing with experiment.
+The existing valence-Dyson export and contraction path requires spin-free,
+fixed-orbital CASCI states; it cannot directly consume these RAS-CI/SOC results.
+A direct core-photoemission route would require signed determinant amplitudes,
+the coherent complex SOC transformation and consistent orbital/spin phases.
+Printed SOC component weights and the existing highest-M_S multiplicity factors
+cannot supply that information. Such a route needs separate method review,
+completeness/normalization and spin-average checks, and phase/degeneracy tests.
+Changing the intensity model alone does not validate the absolute energies.
 The 1s ΔSCF spin-projection formula is not applied to Co 2p.
 
 ## Provenance, reuse and storage

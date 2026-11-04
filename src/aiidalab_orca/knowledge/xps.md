@@ -247,6 +247,17 @@ elements and nonorthogonal Dyson approximations require scientific review.
 Do not silently combine these methods or reuse a common-orbital Dyson kernel
 for separately optimized orbital sets.
 
+The current general Dyson exporter/kernel also requires spin-free fixed-orbital
+CASCI states. It does not support these core RAS-CI/SOC results. The current Co
+SOC reader retains energy/spectator-character information, not a complete
+coherent SOC/CI amplitude export. A direct core-photoemission route would need
+signed determinants, the complex SOC transformation, consistent basis/phases,
+an explicit initial-spin average, norm/completeness checks and phase/degeneracy
+tests. Do not substitute printed SOC component weights or apply the spin-free
+highest-M_S multiplicity factors to SOC states. Any such intensity-method
+extension requires scientific review and leaves absolute-energy validation
+as a separate requirement.
+
 For the bound-transition model, distinguish requested roots from the native
 configuration and CSF dimensions in every multiplicity block. Matching the
 paper's 376/316 Co root counts does not prove the same CI space was used.

@@ -1,5 +1,9 @@
 # AiiDAlab ORCA: molecular spectroscopy
 
+For AI chat and external-agent help, start with the [agent workflow guide](docs/agents/README.md).
+It documents the standard-app preview and links to official ORCA references;
+check the installed version before following steps for an unmerged feature.
+
 **Independent analysis workspaces:** Results now opens with the geometry and
 offers separate **Orbitals & density**, **States & Dyson**, **Vibrations** and
 **Calculation details** sections. Use just the analyses needed for a molecule;

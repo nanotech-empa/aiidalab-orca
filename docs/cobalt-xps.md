@@ -386,7 +386,23 @@ at most 2.01e−10 Hartree, below the unchanged 1e−7 guard. Both datasets are
 available through **Scalar Co 2p energy checks**. The completed CoPc selected
 four-carbon dataset and Co-dcHp one-carbon pilot have also passed actual
 browser checks of the raw spin branches, QE overlay, readback notices and
-provenance downloads. The full 28-carbon Co-dcHp campaign remains in progress.
+provenance downloads. On 2026-11-04, the full 28-carbon Co-dcHp campaign
+completed both raw spin branches: all 56 accepted branches pass native
+core/spin/normalization and independent saved-wavefunction checks. The largest
+readback energy difference is 1.09e−11 Hartree. The immutable same-geometry QE
+comparison is `731e7c2c-2ba8-4991-9263-915fe0bea969`. Without fitted alignment,
+the mean ORCA−QE binding-energy differences are −0.6348 eV (MS=0) and
+−0.6264 eV (MS=1); the largest differences between C1-referenced chemical
+shifts are 0.0798 and 0.0551 eV respectively. These are raw determinant energy
+comparisons, not validated relative photoionization intensities. CoPc still
+contains only the four selected carbon atoms.
+
+The complete Co-dcHp dataset has also passed an authenticated app browser
+check: 56 raw branch curves, ORCA/QE totals, all 56 table rows, and exact
+CSV/JSON provenance exports. Reviewing the same 28 sites reuses both accepted
+branches for every atom and requests no new native calculation. All 56
+electronic-file manifests specify remote retention, with their current file
+sizes verified on tigu; full files were neither retrieved nor stashed.
 
 The earlier frozen CoPc RAS-CI/SOC output contains low-energy core-hole
 states that do not carry the reported bright spectrum's weight:
@@ -433,6 +449,26 @@ Hartree, but its gradient is 0.6967 against the required 2.5e−4. This qualifie
 only diagnostic reuse, not a relaxed energy or spectrum. Orbital-relaxation
 and intensity-model investigations remain separate. Independently optimized
 orbital sets cannot be passed to the existing common-orbital Dyson kernel.
+
+A bounded perturbative-SuperCI recovery of that qualified checkpoint also
+failed on 2026-11-04. CalcJob `4328b388-d97d-4d14-bc6f-77ab41080977`
+used the same 480 states, Hamiltonian, geometry and checks, with `MaxRot 0.01`,
+`GradScaling 0.5` and a 40-macroiteration limit. Its first energy reproduces
+the qualified source within 1.01e−10 Hartree. The last ten gradient norms
+range from about 0.4003 to 0.4237, far above 2.5e−4, and native ORCA ends
+with a CASSCF convergence failure. The batch/ShellJob exit status is zero;
+the native-output guard nevertheless rejects the result and prevents readback
+or spectrum propagation. Diagnostic `66964df4-e239-45cc-8808-763b13f9eede`
+preserves the native trajectory and its source links; it accepts no energy.
+Increasing the iteration cap alone is not supported by that trajectory.
+
+The [ORCA 6.1 manual](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/CASSCF.html#model-spaces-cas-ras-and-ormas)
+also warns that incomplete-space orbital optimization omits active-active
+rotations and can depend on canonicalization choices. That is a method
+limitation to assess, not evidence that this specific failure has been fully
+diagnosed. TRAH support for this exact occupation-restricted model remains
+unqualified; a different converger must not silently change the reviewed
+orbital groups, state average or physical acceptance conditions.
 
 No relaxed multireference Co spectrum or Co-dcHp multiplet protocol is yet
 validated. The supported scalar/1s diagnostics do not establish a transferable

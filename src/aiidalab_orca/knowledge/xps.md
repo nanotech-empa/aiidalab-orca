@@ -108,6 +108,16 @@ native gradient convergence and final readback remain separate requirements.
 Finite orbital-rotation probes are diagnostics inside the reviewed model,
 not a convergence test or permission to change occupation restrictions.
 
+The current CoPc energy-only benchmark has now failed both its damped-SuperCI
+and bounded perturbative-SuperCI attempts. The latter reproduces its qualified
+starting energy but stalls near a gradient norm of 0.4, against 2.5e−4. Its
+native convergence failure is preserved even though the ShellJob exits zero.
+Do not extend that same trajectory automatically or use it as a relaxed
+spectrum. Consult the dated method-guide evidence before choosing another
+converger. ORCA's documented omission of active-active rotations in incomplete
+spaces and its canonicalization dependence need consideration; changing a
+solver does not establish a fully variational RASSCF treatment.
+
 Select CI states by their native multiplicity and root headers, not by the
 position of a printed block. ORCA can print the lower quartet before the
 doublet. Check a selected configuration's associated energy against the

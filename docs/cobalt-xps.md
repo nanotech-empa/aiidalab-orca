@@ -672,6 +672,36 @@ source-code cause. Keep the small, forced-iterative numerical scope explicit
 and preserve the local reproducer for review instead of extending this
 parameter-test branch or reusing its failed checkpoint.
 
+### User-requested platform and reference controls
+
+An explicitly requested same-input test reproduces the observed post-solve
+segfault with native ORCA 6.1.1 in the Linux AArch64 container on the user's Mac.
+This is a Linux ARM64 result, not a native macOS test. The x86-64 and ARM64
+initial CI energies match at printed precision; their last inner iterations
+differ slightly. Comparison `ca578403-c0aa-4729-9d5e-f0628a6e0e71` preserves
+that distinction. The failure is therefore not confined to the tigu/x86-64
+execution environment, without identifying an instruction-level cause.
+
+Two separately approved local baseline CalcJobs then terminate normally. The
+[manual's Be example](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/CASSCF.html#a-simple-example-be-ground-state),
+with only a MaxCore resource cap added, gives −14.605381529866 Hartree and a
+full gradient of 2.86e−5. The modified recipe with only `ExactDiagSwitch 0`
+changed to `512` gives a full gradient of 5.32e−5, with no Pople inner iterations
+printed. Both pass the original core/spin/electron and normalization checks.
+Comparison `72622074-fb53-43df-8993-2d1f9b851317` verifies the exact single-option
+change and unchanged initial CI energy for the modified pair. No independent
+readback was approved, so these are capability controls, not accepted reusable
+production wavefunctions. The manual and modified recipes have different
+defaults; their final energies are not an identical-Hamiltonian comparison.
+
+Be has 49 orbital-rotation variables, below the documented default threshold
+of 512. Zero was our deliberate way to force the iterative diagnostic path;
+it was not copied from the manual's Be example. Ordinary Be CASSCF succeeds
+in the tested local installation. Any support report must state this scope
+and include the passing controls. The successful small exact-diagonalization
+path does not qualify iterative Pople for the much larger Co orbital problem,
+and no new Co run or failed-checkpoint reuse follows.
+
 No relaxed multireference Co spectrum or Co-dcHp multiplet protocol is yet
 validated. The supported scalar/1s diagnostics do not establish a transferable
 Co/Fe/Zn active space. A new physical restriction, spin manifold or intensity

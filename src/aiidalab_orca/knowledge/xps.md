@@ -210,6 +210,20 @@ update-path test branch is stopped: do not extend this parameter sequence or
 reuse the failed checkpoint. This controlled failure does not establish the
 source-code cause or rule out every other numerical configuration/version.
 
+The user-requested same-input Linux ARM64 comparison on the Mac reproduces the
+observed failure with native ORCA 6.1.1; this is not a native macOS test. Initial
+CI energies match x86-64, while the last inner residuals differ. Linked outcome
+`ca578403-c0aa-4729-9d5e-f0628a6e0e71` preserves that evidence. The later approved
+local manual-settings and single-option `0 → 512` controls both terminate
+normally, pass core/spin/electron/norm checks, and reach full gradients below
+2.5e−4. Outcome `72622074-fb53-43df-8993-2d1f9b851317` records both. No readback
+was approved; do not reuse those wavefunctions as accepted production results.
+Zero was our forcing choice for this diagnostic, not the manual's Be input.
+Do not report a failure of ordinary Be CASSCF: the manual control works.
+The 512 control prints no Pople inner iterations and does not qualify the
+large-Co iterative solver. Include these controls and numerical scope in any
+reviewed support report; no new native successor is authorized by this note.
+
 The native ORCA 6.1.1 TRAH output in this control omits the two-step solver's
 `CI-PROBLEM SOLVED` and `E(CAS)=` markers.
 Their absence alone is not a native convergence failure. A format-aware reader

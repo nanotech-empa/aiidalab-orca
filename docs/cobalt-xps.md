@@ -615,6 +615,27 @@ this comparison. No readback or Co successor follows. Both atomic inputs are
 identified natively as a ROHF-like one-configuration case; these controls do
 not diagnose Pople for every genuinely multiconfigurational CASSCF model.
 
+A subsequent neutral Be/TZVPP CAS(2,4) control,
+`ad12b74c-5b11-46d6-b594-52c8d3bb0036`, establishes genuine initial CI mixing:
+ten singlet CSFs, with printed weights 0.90388 and three times 0.03204. Native
+ORCA proceeds from its model-potential orbital guess to CASSCF; this does not
+claim a separately converged RHF initialization. Pople converges its first
+inner solve, then segfaults at the same post-rotation-norm location. The full
+orbital gradient is still 0.4874879. The in-job native-error guard records
+status 83 and prevents post-crash wavefunction export. Outcome
+`c1763b09-b397-43ca-8b95-d0cc980ea713` retains the failure; no readback or Co
+successor follows.
+
+Thus the reproduced failure is not limited to the one-configuration Ne case.
+All these Pople controls nevertheless share `UseSubMatrixGuess false`, with
+`ExactDiagSwitch 0` to force the iterative solver. Native startup confirms
+that submatrix initial guess/update is off. The manual's documented default
+is `UseSubMatrixGuess true`; that combination remains unqualified by these
+controls. A single-option comparison must retain the same physical model,
+actually execute Pople and pass every original convergence/identity/readback
+guard before any larger-system claim. Do not call this evidence a general
+failure of every Pople configuration.
+
 No relaxed multireference Co spectrum or Co-dcHp multiplet protocol is yet
 validated. The supported scalar/1s diagnostics do not establish a transferable
 Co/Fe/Zn active space. A new physical restriction, spin manifold or intensity

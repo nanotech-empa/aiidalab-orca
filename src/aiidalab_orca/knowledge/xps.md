@@ -185,6 +185,14 @@ remain mandatory. Both cases are natively ROHF-like; do not generalize their
 failure to every multiconfigurational calculation. No readback, failed-GBW
 reuse or Co successor is qualified by this control.
 
+A subsequent Be CAS(2,4) control has ten singlet CSFs and genuinely mixed
+initial CI weights, yet Pople segfaults at the same post-step location. The
+native-error guard rejects it and prevents a readback. All reproduced crashes
+still share the nondefault `UseSubMatrixGuess false`; the documented `true`
+default has not been qualified. Keep that numerical scope explicit, and
+require actual Pople activation plus the unchanged physical/full-gradient
+and readback gates for any reviewed comparison. No large Co retry follows.
+
 The native ORCA 6.1.1 TRAH output in this control omits the two-step solver's
 `CI-PROBLEM SOLVED` and `E(CAS)=` markers.
 Their absence alone is not a native convergence failure. A format-aware reader

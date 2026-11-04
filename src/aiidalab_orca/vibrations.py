@@ -11,8 +11,9 @@ from .casci_services import progress
 
 
 class VibrationalSpectroscopy(ipw.VBox):
-    def __init__(self, source_uuid):
+    def __init__(self, source_uuid, *, allow_unverified_geometry=False):
         self.source_uuid = str(source_uuid)
+        self.allow_unverified_geometry = bool(allow_unverified_geometry)
         self.plan, self._poll_task, self._running_uuid, self._shown_uuid = None, None, None, None
         self.raman = ipw.Checkbox(value=True, description='Also compute Raman activities and polarizability derivatives', indent=False,
                                  layout=ipw.Layout(width='auto'))
@@ -32,7 +33,7 @@ class VibrationalSpectroscopy(ipw.VBox):
             control.observe(self._invalidate, names='value')
         from .presentation import ComputePanel
         self.calculation = ComputePanel('Compute / extend vibrational spectroscopy…', [
-            ipw.HTML('<p>Compute harmonic normal modes and IR intensities at this optimized geometry, '
+            ipw.HTML('<p>Compute harmonic normal modes and IR intensities at this fixed geometry, '
             'optionally with Raman activities. Method, basis, charge, multiplicity and resources are inherited from the reference. '
             'The Hessian and derivatives are retained in AiiDA.</p>'),
             self.raman, self.force, self.review, self.submit])
@@ -56,9 +57,10 @@ class VibrationalSpectroscopy(ipw.VBox):
     def _review(self, event=None):
         self._invalidate()
         try:
-            self.plan = service.prepare(self.source_uuid, raman=self.raman.value, force_recompute=self.force.value)
+            self.plan = service.prepare(self.source_uuid, raman=self.raman.value, force_recompute=self.force.value,
+                                        allow_unverified_geometry=self.allow_unverified_geometry)
             action = ('Reuse verified vibrational data; no ORCA calculation is needed.' if self.plan['reuse_uuid'] else
-                      'Submit an independent ORCA analytical-frequency calculation at the selected optimized geometry.')
+                      'Submit an independent ORCA analytical-frequency calculation. Atomic coordinates remain fixed.')
             warnings = ''.join('<p style="color:#a02020">'+html.escape(w)+'</p>' for w in self.plan['warnings'])
             self.message.value = '<p><b>'+action+'</b></p>'+warnings+'<details><summary>ORCA input</summary><pre>'+html.escape(self.plan['input_preview'])+'</pre></details>'
             self.submit.disabled = self._running_uuid is not None

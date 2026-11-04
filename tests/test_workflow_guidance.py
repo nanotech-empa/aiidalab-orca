@@ -7,7 +7,7 @@ from aiidalab_orca.guidance import workflow_guides
 
 def test_packaged_agent_guide_is_the_declared_chat_resource():
     guides = workflow_guides()
-    assert len(guides) == 1
+    assert len(guides) == 2
     guide = guides[0]
     assert guide['id'] == 'orca.casci-kondo'
     assert guide['text'] == files('aiidalab_orca').joinpath('knowledge/casci-kondo.md').read_text()

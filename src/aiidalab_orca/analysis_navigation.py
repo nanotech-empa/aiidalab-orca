@@ -8,7 +8,7 @@ ANALYSES = {
     'casci': ('CASCI states', 'Prepare common spatial orbitals, choose the active space, then review charge/spin sectors and roots. CASCI holds the orbitals fixed; it does not optimize them as CASSCF would.'),
     'dyson': ('Dyson spectra & maps', 'Use compatible CASCI states for the initial system and its N−1/N+1 electron sectors, then review Dyson transitions. Cubes and maps are separate optional calculations.'),
     'kondo': ('Kondo orbitals & maps', 'Use Dyson transitions for a spin-pure local moment with S > 0, review the charged states and chemical potential, then compute exchange channels and optional maps.'),
-    'vibrations': ('IR / Raman', 'Start from a completed geometry optimization, then review the frequency calculation. Electronic-state calculations are independent.'),
+    'vibrations': ('IR / Raman', 'Use a saved optimization, prepare an optimization, or explicitly use supplied coordinates without optimization. Each calculation requires review.'),
 }
 
 

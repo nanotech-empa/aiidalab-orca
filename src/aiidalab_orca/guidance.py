@@ -35,4 +35,10 @@ def workflow_guides():
         'topics': ['orca', 'casci', 'casscf', 'dyson', 'kondo', 'qro', 'uno'],
         'source': 'aiidalab_orca/knowledge/casci-kondo.md',
         'text': files('aiidalab_orca').joinpath('knowledge/casci-kondo.md').read_text(),
+    }, {
+        'id': 'orca.vibrations',
+        'title': 'ORCA harmonic IR/Raman geometry selection',
+        'topics': ['orca', 'ir', 'raman', 'vibrations', 'frequencies', 'hessian'],
+        'source': 'aiidalab_orca/knowledge/vibrations.md',
+        'text': files('aiidalab_orca').joinpath('knowledge/vibrations.md').read_text(),
     }]

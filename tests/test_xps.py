@@ -75,8 +75,7 @@ def test_core_projection_and_incompatible_spin_are_rejected(aiida_profile):
     with pytest.raises(ValueError, match='CMatrix'):
         assignments(text+'\nUsing GuessMode=CMatrix for the initial guess\n', REFERENCE['numbers'])
     oh = orm.StructureData(ase=Atoms('OH', positions=[[0, 0, 0], [0, 0, 1]]))
-    with pytest.raises(ValueError, match='closed-shell'):
-        xps.validate_reference(oh, protocol_settings(overrides={'multiplicity': 2}))
+    assert xps.validate_reference(oh, protocol_settings(overrides={'multiplicity': 2}))['multiplicity'] == 2
     molecule = orm.StructureData(ase=Atoms(numbers=REFERENCE['numbers'], positions=REFERENCE['positions']))
     with pytest.raises(ValueError, match='closed-shell'):
         xps.validate_reference(molecule, protocol_settings(overrides={'multiplicity': 1, 'reference': 'UKS'}))

@@ -9,6 +9,7 @@ from aiida_empa_orca.xps import (
     PROCESS_TYPE, XpsWorkChain, core_runs, matching_sites, site_signature, validated_site, validate_reference,
 )
 from .property_services import helper_code, source_node, source_remote, wavefunction_status
+from aiida_empa_orca.xps_multiplets import PROCESS_TYPE as MULTIPLET_PROCESS, XpsMultipletsWorkChain
 
 
 def reference_info(source_uuid):
@@ -17,37 +18,62 @@ def reference_info(source_uuid):
     atoms = source.outputs.structure.get_ase()
     return {'settings': settings, 'atoms': [
         {'index': i, 'symbol': symbol, 'position': atoms.positions[i].tolist()}
-        for i, symbol in enumerate(atoms.get_chemical_symbols()) if symbol in ('C', 'O')]}
+        for i, symbol in enumerate(atoms.get_chemical_symbols()) if symbol in ('C', 'N', 'O', 'F', 'Co')]}
 
 
 def runs(source_uuid):
     source = source_node(source_uuid)
     query = orm.QueryBuilder().append(orm.FolderData, filters={'uuid': source.outputs.retrieved.uuid}, tag='source').append(
         orm.WorkChainNode, with_incoming='source', edge_filters={'label': 'source_retrieved'}, tag='run',
-        filters={'process_type': PROCESS_TYPE}, project=['uuid', 'label', 'ctime', 'attributes.process_state'])
-    return [{'uuid': str(u), 'label': label, 'date': date.isoformat(), 'state': state}
-            for u, label, date, state in query.order_by({'run': {'ctime': 'desc'}}).all()]
+        filters={'process_type': {'in': [PROCESS_TYPE, MULTIPLET_PROCESS]}}, project=['uuid', 'label', 'ctime', 'attributes.process_state', 'attributes.exit_status'])
+    result=[]
+    for u,label,date,state,exit_status in query.order_by({'run':{'ctime':'desc'}}).all():
+        node=orm.load_node(u)
+        caller=node.caller
+        if caller is not None and caller.process_type==MULTIPLET_PROCESS:
+            continue  # The two spin branches belong to one app-level calculation.
+        result.append({'uuid':str(u),'label':label,'date':date.isoformat(),'state':f'failed ({exit_status})' if state=='finished' and exit_status else state})
+    return result
 
 
-def prepare(source_uuid, atom_indices, *, force_recompute=False):
+def prepare(source_uuid, atom_indices, *, force_recompute=False, solver='auto'):
     info = reference_info(source_uuid)
     allowed = {a['index'] for a in info['atoms']}
     selected = list(atom_indices)
     if not selected or len(set(selected)) != len(selected) or any(type(i) is not int or i not in allowed for i in selected):
-        raise ValueError('Select one or more C/O atoms for 1s ionization')
+        raise ValueError('Select one or more C/N/O/F/Co atoms for 1s ionization')
     source = source_node(source_uuid)
+    if solver == 'auto':
+        solver = 'freeze_release' if info['settings']['multiplicity'] == 2 else 'standard'
+    if solver not in ('standard', 'freeze_release'):
+        raise ValueError('Choose a supported DeltaSCF convergence strategy')
     previous = {} if force_recompute else matching_sites(source.outputs.structure, info['settings'],
-                                                         source.inputs.code.uuid, source.outputs.retrieved.uuid)
-    plan = {'source_uuid': str(source_uuid), 'atom_indices': selected, 'force_recompute': bool(force_recompute),
+        source.inputs.code.uuid, source.outputs.retrieved.uuid,
+        require_readback=info['settings']['multiplicity'] == 2)
+    plan = {'source_uuid': str(source_uuid), 'atom_indices': selected, 'force_recompute': bool(force_recompute), 'solver':solver,
             'signatures': [site_signature(source.outputs.structure, info['settings'], source.inputs.code.uuid,
                                          source.outputs.retrieved.uuid, i) for i in selected],
             'reuse': {str(i): previous[i] for i in selected if i in previous},
             'missing': [i for i in selected if i not in previous], 'warnings': [], 'regenerate_reference': False}
+    plan['open_shell'] = info['settings']['multiplicity'] == 2
+    if plan['open_shell']:
+        beta = {} if force_recompute else matching_sites(source.outputs.structure, info['settings'],
+            source.inputs.code.uuid, source.outputs.retrieved.uuid, 'beta', require_readback=True)
+        plan['beta_signatures'] = [site_signature(source.outputs.structure, info['settings'], source.inputs.code.uuid,
+            source.outputs.retrieved.uuid, i, 'beta') for i in selected]
+        plan['branch_reuse'] = {'alpha': {str(i): previous[i] for i in selected if i in previous},
+                               'beta': {str(i): beta[i] for i in selected if i in beta}}
+        plan['reuse'] = {str(i): previous[i] for i in selected if i in previous and i in beta}
+        plan['missing'] = [i for i in selected if i not in previous or i not in beta]
+        plan['warnings'].append('Two raw UKS branches per atom; the singlet energy is an approximate two-state spin-projection estimate. Intensities are schematic.')
+        plan['validation'] = ('Core-hole preserving optimization, precision refinement and a saved-wavefunction '
+                              'energy/core/spin check run automatically. Older unaudited branches are recomputed.')
     plan['helper_uuid'] = helper_code(source.inputs.code.computer.uuid)
     plan['storage_policy'] = wavefunction_status(source_uuid)['policy']
     if plan['missing']:
         prepared = False
-        for uuid in core_runs(source.outputs.retrieved.uuid, source.inputs.code.uuid):
+        for uuid in core_runs(source.outputs.retrieved.uuid, source.inputs.code.uuid,
+                              require_energy_audit=plan['open_shell']):
             try:
                 resolve_electronic(orm.load_node(uuid).outputs.remote_folder, names=['aiida.gbw'])
                 prepared = True
@@ -72,11 +98,20 @@ def submit_plan(plan):
                                source.outputs.retrieved.uuid, i) for i in plan['atom_indices']]
     if expected != plan['signatures']:
         raise ValueError('The reviewed XPS reference has changed')
-    b = XpsWorkChain.get_builder()
+    open_shell = source.inputs.settings.get_dict()['multiplicity'] == 2
+    if bool(plan.get('open_shell')) != open_shell:
+        raise ValueError('The reviewed spin protocol changed')
+    if open_shell:
+        beta = [site_signature(source.outputs.structure, source.inputs.settings.get_dict(), source.inputs.code.uuid,
+            source.outputs.retrieved.uuid, i, 'beta') for i in plan['atom_indices']]
+        if beta != plan['beta_signatures']:
+            raise ValueError('The reviewed beta branch changed')
+    b = (XpsMultipletsWorkChain if open_shell else XpsWorkChain).get_builder()
     b.structure, b.settings, b.code = source.outputs.structure, source.inputs.settings, source.inputs.code
     b.source_retrieved, b.source_remote = source.outputs.retrieved, source_remote(source)
     b.helper_code, b.storage_policy = orm.load_code(plan['helper_uuid']), orm.Dict(dict=plan['storage_policy'])
     b.atom_indices, b.force_recompute = orm.List(list=plan['atom_indices']), orm.Bool(plan['force_recompute'])
+    b.solver = orm.Str(plan.get('solver','standard'))
     b.metadata.label = source.outputs.structure.get_formula() + ' · XPS · atoms ' + ', '.join(str(i+1) for i in plan['atom_indices'])
     node = submit(b)
     node.base.extras.set('aiidalab_orca', {'version': '0.1.0', 'view': 'xps', 'source_uuid': str(source.uuid)})
@@ -85,19 +120,25 @@ def submit_plan(plan):
 
 def result(uuid):
     node = orm.load_node(uuid)
-    if node.process_type != PROCESS_TYPE:
+    if node.process_type not in (PROCESS_TYPE, MULTIPLET_PROCESS):
         raise ValueError('Select an XPS workflow')
     atoms = node.inputs.structure.get_ase()
     sites = []
     for data in (node.outputs.sites.values() if 'sites' in node.outputs else []):
         site = validated_site(data.creator)
         i = site['atom_index']
-        sites.append(site | {'symbol': atoms[i].symbol, 'label': f'{atoms[i].symbol}{i+1} · 1s',
+        component = {'triplet_ms1': 'MS=1 (HS)', 'broken_symmetry_ms0': 'MS=0 (BS)'}.get(site.get('spin_assignment'))
+        label = f'{atoms[i].symbol}{i+1} · 1s' + (' · '+component if component else '')
+        sites.append(site | {'symbol': atoms[i].symbol, 'label': label,
                              'data_uuid': str(data.uuid), 'calculation_uuid': str(data.creator.uuid)})
     return {'uuid': str(uuid), 'sites': sorted(sites, key=lambda s: s['atom_index']),
             'settings': node.inputs.settings.get_dict(), 'structure_uuid': str(node.inputs.structure.uuid),
             'source_uuid': node.base.extras.get('aiidalab_orca', {}).get('source_uuid'),
-            'complete': node.is_finished_ok}
+            'complete': node.is_finished_ok,
+            'diagnostics': [data.get_dict() for data in node.outputs.diagnostics.values()]
+                if 'diagnostics' in node.outputs else [],
+            'multiplets': [data.get_dict() | {'data_uuid': str(data.uuid)} for data in node.outputs.multiplets.values()]
+                if 'multiplets' in node.outputs else []}
 
 
 def qe_comparisons(source_uuid):

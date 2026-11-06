@@ -1,7 +1,23 @@
-# Site-resolved XPS draft
+# Site-resolved XPS · experimental
+
+## Availability
+
+The standard molecular-analysis app currently shows **XPS · Work in progress**.
+It does not expose XPS calculation controls. The instructions below describe
+the experimental XPS workspace on the XPS component branches; they are not a
+claim that these controls are available in the standard release. Verify the
+installed revision and visible workspace before following them.
+
+Accepted 1s results, scalar Co diagnostics and the frozen Co multiplet draft
+have different validation limits, described below. A completed experimental
+calculation does not make the whole XPS method release-ready. The
+[agent operating guide](agents/xps.md) records the corresponding checks and
+recovery boundaries.
+
+## Using the experimental workspace
 
 Open a completed SCF or geometry reference, choose **Results → XPS**, and expand
-**Compute / extend XPS…**. Select the C/O atoms to ionize. Atom numbers start at
+**Compute / extend XPS…**. Select the C/N/O/F/Co atoms to ionize. Atom numbers start at
 1 and match the geometry viewer; the atom list also gives Cartesian positions.
 Review the execution plan and submit. Only missing selected sites are computed,
 sequentially. Existing results appear above the calculation form.
@@ -11,6 +27,25 @@ calculation. This prepares its SCF reference. Every subsequent XPS calculation
 uses those exact atomic positions; XPS does not invoke geometry optimization.
 An already optimized reference can also be used.
 
+## Choosing a result and the next step
+
+The XPS workspace contains different methods with different acceptance limits:
+
+| Result | What it supports | How to continue |
+| --- | --- | --- |
+| Accepted 1s ΔSCF branches | Vertical site binding energies with the recorded spin and saved-wavefunction checks. An MS=0 UKS branch remains spin mixed. | Inspect the branch details and S², compare matching sites, or select additional atoms under **Compute / extend XPS…**. Compatible accepted sites are reused. |
+| **Scalar Co 2p energy checks** | Energy-only diagnostics for the recorded DFT determinant, basis and scalar-relativistic model. | Use the downloaded provenance when comparing the same scalar observable with QE. This is not a SOC-resolved 2p₃/₂ energy or a calibration of the multireference spectrum. |
+| **Co 2p · multiplets** draft | The existing frozen-orbital RAS-CI/SOC model and its stated bound-transition approximation. Absolute binding energies and peak weights remain unvalidated. | Inspect the method notice and configuration character before interpreting a spectrum. A display shift changes alignment only. |
+| **Multireference Co 2p energy checks** | Spin-free energy diagnostics only after native convergence, physical identity and all-state readback have passed. | These checks do not supply SOC or photoionization intensities. The section remains hidden when no accepted record is available. |
+
+The energy-check sections read independently qualified records; they do not
+submit orbital relaxation or change the scientific model. A failed relaxation
+does not qualify its saved orbitals or unlock a relaxed spectrum. Accepted
+earlier SCF and 1s results remain available. Inspect the failure before another
+attempt, and consult the [Co method guide](cobalt-xps.md) for the tested solver
+limits and the remaining energy/intensity questions. The CoPc multiplet model
+is not automatically transferable to Co-dcHp, Fe or Zn complexes.
+
 ## Scientific model and spin
 
 The observable is a vertical core binding energy of the isolated molecule,
@@ -19,36 +54,90 @@ The functional and orbital basis are inherited from the reference. This is
 neither a negative KS orbital energy nor an automatically aligned substrate
 binding energy. The conversion uses 27.211386245988 eV per Hartree.
 
-The first implementation accepts closed-shell **RKS singlets**, molecules
-containing H/C/N/O/F, and **C or O 1s** ionization. Each ionized state is a UKS
-doublet. ORCA `IonizeAlpha` adjusts the charge and spin internally, so the
-input XYZ declaration retains the **reference** charge and multiplicity. The
-final alpha/beta occupations must sum to N−1 and differ by one electron.
-The native UKS ⟨S²⟩ diagnostic is retained and displayed; it is not a proof of
-spin purity. A deviation above 0.1 from the doublet value 0.75 is reported.
+The 1s implementation accepts closed-shell **RKS singlets** and **UKS
+doublets**, with H/C/N/O/F and at most one all-electron Co atom. ECPs,
+broken-symmetry singlet references, higher initial multiplicities, custom
+scientific-block overrides and XAS remain outside this draft. Co 2p is a
+[separate multireference method](cobalt-xps.md), not a 1s ΔSCF extension.
 
-Open-shell references, broken-symmetry singlets, ECPs, custom scientific-block
-overrides, other shells and XAS are rejected or outside this draft. A future
-open-shell extension needs a validated treatment of the `S_i ± 1/2` final
-multiplets. Alpha/beta removal alone does not identify pure low-spin states.
-No spin statistical factors or Clebsch–Gordan weights are inferred from these
-single-determinant ΔSCF energies.
+For a singlet reference, `IonizeAlpha` produces a UKS doublet. For a doublet
+reference both channels are computed: beta removal gives an MS=1 high-spin
+determinant; alpha removal gives an MS=0 **spin-mixed broken-symmetry
+determinant**, not a pure singlet. Neither branch is assumed spin-pure: inspect
+its reported S². The final occupations independently verify N−1 and the
+requested spin projection.
+
+The two-state Yamaguchi energy estimate is
+`E_S ≈ E_BS + S²_BS/(S²_HS − S²_BS) × (E_BS − E_HS)`.
+It is accepted only for HS S² in [1.8, 2.2], BS S² in [0.5, 1.5], and a
+separation of at least 0.5 in S². These diagnostics are necessary checks, not
+proof of the two-state model. The approximation follows the
+[NO core-ionization study](https://doi.org/10.1016/j.cplett.2019.136617).
+It provides an **energy estimate**, with no spin-pure singlet wavefunction.
+Raw energies and S² remain available. No Clebsch–Gordan, multiplicity or
+photoionization intensity factors are inferred from ΔSCF energies.
+
+For UKS doublet references the default convergence strategy is ORCA's
+[freeze-and-release](https://www.faccts.de/docs/orca/6.1/manual/contents/spectroscopyproperties/deltascf.html):
+constrain the target non-Aufbau orbitals initially, then release them for full
+orbital relaxation. MOM is disabled for this strategy. Final hole/electron/spin
+checks apply unchanged; a failed or collapsed solution is not accepted.
+In ORCA 6.1.1, `IonizeAlpha`/`IonizeBeta` can leave this strategy inactive
+("No orbitals to constrain!"). The doublet protocol therefore uses an
+equivalent compact configuration: swap the target occupied MO with the last
+occupied MO of the ionized spin channel, declare the cation charge and spin,
+and set `AlphaConf 0,1` or `BetaConf 0,1`. Frozen-density controls must verify
+this equivalence when qualifying another ORCA version or reference type.
+The actual constraint activation and release are checked in the native output.
+The legacy singlet route retains the original XYZ declaration and lets ORCA
+perform `IonizeAlpha` internally.
+
+### Automatic checks for doublet references
+
+Each site CalcJob performs three native ORCA runs in one allocation:
+
+1. Core-hole preserving optimization, with the requested final gradient
+   tolerance. Both constrained and released phases must finish successfully.
+2. A numerical precision refinement of that same cation, without another
+   ionization or configuration reset. It rebuilds the Fock matrix each cycle
+   and requires an orbital gradient of 1e−6 or the stricter reference value.
+3. `NoIter CalcGuessEnergy` reads the final GBW and independently evaluates its
+   density. Energy must agree within 1e−7 Hartree, with unchanged electron
+   counts and S² within 1e−5. The hole and normalization checks apply again.
+
+All stages must terminate normally, preserve geometry/basis, and retain one
+localized hole on the selected atom and shell. A final "SCF CONVERGED" banner
+does not override a failed final gradient. Poor-normalization warnings stop
+acceptance. The final 1s check also rejects transfer into a higher shell of the
+same atom, which matters for cobalt. The parser independently recomputes the
+checks from the retrieved native outputs. Large electronic files stay under
+the selected storage policy; the checks themselves retrieve text and JSON.
+
+These steps are automatic: users do not need to configure a Python code or
+manually select validation switches. A failed site displays its reason and
+inspection guidance. Increase the SCF iteration limit only when its convergence
+trace is still improving; a collapsed hole, damaged GBW or incompatible spin
+requires inspection rather than another identical submission. Older unaudited
+branches remain viewable but are not reused by the new doublet protocol.
+See the [agent operating guide](agents/xps.md) for recovery and provenance rules.
 
 ## Core assignment and localization
 
 An independent `CoreOrbitalsWorkChain` reads the supplied GBW at the matching
-geometry and basis, without SCF iterations. For the supported first-row
-molecules, the first occupied orbitals must form a separated 1s core subspace
-(one per non-hydrogen atom, below −5 Hartree; the next orbital must lie above
-that boundary). ORCA's native Löwdin atomic populations assign each core MO to
+geometry and basis, without SCF iterations. The separated deep-core subspace contains one 1s orbital per first-row heavy
+atom and, when present, Co 1s/2s/three 2p orbitals. All lie below −5 Hartree;
+the next orbital must lie above that boundary. Co shells are assigned separately
+and never included in the ligand 1s localization window. ORCA's native Löwdin atomic populations assign each core MO to
 an atom. Each atom must have one unique core MO with at least 95% population.
 This is an operational assignment criterion, not a measurable probability.
 
 If that criterion fails, `orca_loc` applies Pipek–Mezey localization **only to
 the fully occupied 1s subspace**, with a fixed seed and 1e−8 localization
-tolerance. It never mixes occupied and virtual orbitals. Such an occupied
-rotation preserves the closed-shell determinant and ground-state density.
+tolerance. It never mixes occupied and virtual orbitals. For UKS, localization acts independently in each fully occupied spin subspace.
+These rotations preserve the reference determinant and its density.
 A second native population analysis verifies the resulting atom assignment.
+New core preparations also evaluate the neutral density before and after
+localization and require its energy to match the reference within 1e−7 Hartree.
 Localized orbital energies are not presented as canonical eigenvalues.
 Ambiguous assignments stop the workflow.
 
@@ -72,6 +161,8 @@ populations can slightly exceed 100% and are not probabilities.
 - `empa_orca.xps_core`: shared core preparation and preservation.
 - `empa_orca.xps_site`: one independently reusable native ORCA ionization
   CalcJob, retaining the binding energy and validation data as a `Dict`.
+- `empa_orca.xps_multiplets`: composes alpha/beta workflows and links the
+  approximate singlet energy to both raw results through a calcfunction.
 - `empa_orca.xps`: a small collection workflow for selected sites, reusing
   verified site results and submitting new sites serially.
 
@@ -107,7 +198,7 @@ inside CalcJobs and uses AiiDA transports.
 
 The viewer offers per-edge binding energies or chemical shifts, adjustable
 Gaussian FWHM, site curves and their sum, spin diagnostics, and core-hole
-assignment data. Every selected atom contributes **equal integrated area**:
+assignment data. Every displayed component contributes **equal integrated area**:
 these are schematic line shapes, not calculated photoionization cross sections
 or satellite intensities. Downloadable CSV and view JSON include the scientific
 node identifiers.
@@ -121,11 +212,35 @@ subtracts the lowest displayed energy per edge and method. QE absolute energies
 include its stored pseudopotential corrections. A different functional or
 spin/core-hole model must be documented when interpreting the comparison.
 
-The planned user benchmark is **QE through the QE app on Daint versus ORCA
-locally**, at the supplied geometry, **without relaxation**. No QE benchmark
-has yet been run for the new supplied geometry.
+### Completed CoPc and Co-dcHp comparisons
 
-### Comparison with existing QE results at their stored geometry
+The fixed-geometry carbon comparisons for both molecules have completed through
+the QE app on Daint and the experimental ORCA workflows on tigu. They use the
+existing PBE/def2-TZVP optimized molecular geometries, with matching atom order
+and relative positions; the XPS calculations do not relax them again.
+
+| Molecule | Accepted ORCA C 1s coverage | Same-geometry QE XPS workflow |
+| --- | --- | --- |
+| CoPc, C32H16CoN8 | Four selected atoms: viewer numbers 1, 14, 15 and 17; eight raw alpha/beta branches | `9695515a-c3db-4036-8c1b-5d47f6286e30` |
+| Co-dcHp, C28H16CoN6 | All 28 carbon atoms; 56 raw alpha/beta branches | `f05c4b19-6ef8-488d-9202-ac2de6cd4407` |
+
+CoPc coverage is limited to those four selected atoms, not all 32 carbons; no
+symmetry-based extension is assumed. The comparison datasets are
+`148aeb42-1018-4f4d-9af0-171f17467ddc` (CoPc) and
+`731e7c2c-2ba8-4991-9263-915fe0bea969` (Co-dcHp). Their linked native outputs
+pass the recorded branch checks, including independent saved-wavefunction
+readback. Comparisons retain raw spin labels and stored QE corrections, with
+no fitted energy shift. They do not establish photoionization intensities or
+experimental energy alignment.
+
+Each geometry also has a separately qualified scalar Co 2p energy diagnostic;
+neither has an accepted relaxed multireference Co 2p result. The frozen CoPc
+RAS-CI/SOC spectrum remains an experimental model with unvalidated absolute
+energies and photoemission weights. See the [Co method guide](cobalt-xps.md).
+Nitrogen is excluded from these two-molecule comparisons. This status was
+checked against the saved results on 2026-11-06; it requires no repeat QE run.
+
+### Earlier formic-acid comparison at its stored geometry
 
 The existing QE-app formic-acid run covered only the carbonyl oxygen at a
 hand-built geometry. The optimized ORCA example below uses a different
@@ -190,3 +305,23 @@ wrong-site/collapsed holes, incompatible spins and stored-float rounding.
 References: [ORCA ΔSCF and core ionization](https://www.faccts.de/docs/orca/6.1/manual/contents/spectroscopyproperties/deltascf.html#core-ionized-states),
 [native population analyses](https://www.faccts.de/docs/orca/6.1/manual/contents/spectroscopyproperties/population.html),
 [localization utilities](https://www.faccts.de/docs/orca/6.1/manual/contents/utilitiesvisualization/utilities.html#orca-loc).
+
+### Open-shell NO validation
+
+Native ORCA 6.1.1 ARM64, PBE/def2-TZVP, neutral doublet, fixed bond length
+1.151 Å. All four atom/spin CalcJobs passed core identity and occupation checks.
+
+| Site | Triplet BE (eV) | Raw BS BE (eV) | Estimated singlet BE (eV) | Estimated splitting (eV) | Published PBE splitting (eV) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| N 1s | 409.86273 | 410.40054 | 410.95389 | 1.09116 | 1.16 |
+| O 1s | 542.51782 | 542.73552 | 542.95804 | 0.44022 | 0.45 |
+
+The paper uses a different, core-flexible uncontracted basis. This checks the
+spin-branch/projection implementation; it does not establish converged absolute
+binding energies. Our absolute PBE values are roughly 0.5–0.6 eV above its
+uncorrected values. Atomic relativistic corrections are not applied here.
+
+Reference SCF: `6df5b64d-a57e-4330-991a-f865379d1547`.
+XPS workflow: `78919f42-4f70-406e-ba0f-f0a68392f125`.
+The app selector displays raw HS/BS or triplet/estimated singlet; its history
+contains the parent result rather than duplicate internal spin workflows.

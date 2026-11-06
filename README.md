@@ -6,11 +6,12 @@ offers separate **Orbitals & density**, **States & Dyson**, **Vibrations**, **XP
 CASCI does not require Dyson, and vibrations do not require either. Saved results
 appear before optional calculation forms. See [the results guide](docs/results.md).
 
-**Site-resolved XPS draft:** select C/O atoms in the XPS results workspace to
-compute vertical 1s ΔSCF binding energies at the reference geometry. Core
-assignment/localization, final core-hole checks, doublet spin diagnostics,
-per-site reuse and inherited wavefunction preservation are included. The first
-version requires a closed-shell RKS singlet. See [the XPS guide](docs/xps.md).
+**XPS draft:** site-resolved 1s ΔSCF now accepts RKS singlets and UKS
+doublets, with independently reusable spin branches, explicit core-hole checks
+and approximate singlet-energy estimates. Co-containing references expose a
+separate **Co 2p · multiplets** workspace for CoPc SA-CASSCF → RAS-CI/SOC;
+its core-transition approximation to XPS intensities is stated explicitly.
+See [the XPS guide](docs/xps.md) and [Co 2p protocol](docs/cobalt-xps.md).
 
 **Harmonic IR and Raman draft:** a separate section on optimized-geometry results
 now submits an independent frequency workflow, retains the Hessian and

@@ -48,7 +48,12 @@ def input_details(files, title="Submitted ORCA input"):
     return f"<details><summary>{html.escape(title)}</summary>{''.join(entries)}</details>"
 
 
-def molecule(symbols, frames):
+def molecule(symbols, frames, final_positions=None):
+    from .geometry_viewer import GeometryInspection
+    return GeometryInspection(symbols, frames, frames[-1] if final_positions is None else final_positions, _trajectory)
+
+
+def _trajectory(symbols, frames):
     trajectory = [Atoms(symbols, positions=positions) for positions in frames]
     view = nv.show_asetraj(trajectory)
     view.clear_representations()
@@ -113,6 +118,7 @@ class ResultsView(ipw.VBox):
         ])
         self.tabs.add_class('orca-workspace-body')
         views = [('Overview', 'overview'), ('Orbitals & density', 'orbitals'),
+                 ('PDOS & orbital character', 'pdos'),
                  ('1. Prepare orbital reference', 'prepare'), ('2. Inspect / confirm active space', 'active'),
                  ('3. Choose energy solver', 'energy'), ('ORCA CASCI states and multiplicities', 'casci'),
                  ('Quantum-assisted energy levels', 'quantum_energy'), ('4. Dyson spectrum', 'dyson'),
@@ -195,6 +201,11 @@ class ResultsView(ipw.VBox):
             if task in ('overview', 'details'):
                 self.analysis_hint.layout.display = 'none'
                 return self.tabs.show_section(task)
+            if task == 'pdos':
+                panel = self.tabs.show_section('orbitals')
+                if hasattr(panel, 'tabs'):
+                    panel.tabs.show_section('pdos')
+                return panel
             labels = {key: title for title, key in self.navigation.options}
             stage_help = {
                 'energy': ('Choose the energy solver', 'Use the confirmed orbitals and active space with ORCA CASCI or the quantum-assisted workflow. Only the quantum route requires a separate Hamiltonian export.'),
@@ -325,7 +336,7 @@ class ResultsView(ipw.VBox):
         data = self.data
         items = []
         if 'positions' in data:
-            items.append(molecule(data['symbols'], data.get('frames', [data['positions']])))
+            items.append(molecule(data['symbols'], data.get('frames', [data['positions']]), data['positions']))
             encoded = base64.b64encode(data['xyz'].encode()).decode()
             items.append(ipw.HTML(f'<a download="geometry.xyz" href="data:text/plain;base64,{encoded}">'
                                   '<i class="fa fa-download"></i> Download final XYZ</a>'))
@@ -349,7 +360,8 @@ class ResultsView(ipw.VBox):
             convergence = ipw.Accordion(children=[ipw.Image(value=stream.getvalue(), format='png')], selected_index=None)
             convergence.set_title(0, 'Geometry optimization · energy convergence')
             items.append(convergence)
-        return ipw.VBox(items)
+        from .geometry_viewer import GeometryOverview
+        return GeometryOverview(items)
 
     def _orbitals(self):
         if not self.data.get('levels'):

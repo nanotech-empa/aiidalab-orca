@@ -56,6 +56,12 @@ class OrcaApp(ipw.VBox):
         self.wallclock = ipw.BoundedIntText(value=30, min=1, max=10080, description="Wall time (minutes)", style=style, layout=width)
         self.code = ipw.Dropdown(options=services.codes(), description="ORCA code", style=style, layout=width)
         self.force = ipw.Checkbox(value=False, description="Recompute even if a compatible result is available", layout=ipw.Layout(width="auto"))
+        self.pdos_enabled = ipw.Checkbox(value=True, description="Compute PDOS / orbital character", indent=False)
+        self.pdos_memory = ipw.BoundedIntText(value=8, min=1, max=64, description="PDOS memory (GiB)", style=style)
+        pdos_options = ipw.Accordion(children=[ipw.VBox([self.pdos_memory,
+            ipw.HTML('<p>One serial postprocessing job after a new electronic calculation; no extra SCF. '
+                     'Compact results are stored in AiiDA. Existing references are not backfilled.</p>')])], selected_index=None)
+        pdos_options.set_title(0, 'PDOS resources')
         self.label = ipw.Text(value="Molecular calculation", description="Run label", style=style, layout=width)
         self.review_button = ipw.Button(description="Review calculation", button_style="primary", icon="list", disabled=True, layout=ipw.Layout(width="auto"))
         self.review_button.on_click(self._review)
@@ -87,7 +93,8 @@ class OrcaApp(ipw.VBox):
         self.wavefunction_storage = WavefunctionStorage()
         storage_panel = ipw.Accordion(children=[self.wavefunction_storage], selected_index=0)
         storage_panel.set_title(0, "Wavefunction storage")
-        self.resource_controls = ipw.VBox([self.code, self.nprocs, self.memory, self.wallclock, self.force, storage_panel])
+        self.resource_controls = ipw.VBox([self.code, self.nprocs, self.memory, self.wallclock, self.force,
+                                          self.pdos_enabled, pdos_options, storage_panel])
         self.structure_step = GeometryStep([self.structure, self.next_step], "Select a molecule to begin.")
         self.settings_step = GeometryStep([
             self.settings_summary, self.optimize, self.mode_hint, self.science, self.science_message,
@@ -129,7 +136,8 @@ class OrcaApp(ipw.VBox):
         self.optimize.observe(self._settings_changed, names="value")
         self.science.observe(self._settings_changed, names="revision")
         self.structure.constraints.observe(self._settings_changed, names="revision")
-        for widget in [self.nprocs, self.memory, self.wallclock, self.code, self.force, self.label]:
+        for widget in [self.nprocs, self.memory, self.wallclock, self.code, self.force, self.label,
+                       self.pdos_enabled, self.pdos_memory]:
             widget.observe(self._invalidate, names="value")
         self.wavefunction_storage.observe(self._invalidate, names="revision")
         self.optimize.observe(self._optimization_changed, names="value")
@@ -144,7 +152,8 @@ class OrcaApp(ipw.VBox):
         self.analysis_hint.value = (f'<p><b>{html.escape(label)}:</b> {html.escape(help_text)}</p>'
             '<p><b>First step:</b> prepare the molecule and review its geometry/SCF calculation below. '
             'After it finishes, the requested analysis opens with guidance for the next step. '
-            'No later calculation is submitted automatically.</p>')
+            'PDOS postprocessing is included by default for new calculations. '
+            'Other property calculations require their own submission.</p>')
         if goal_path(task):
             self.analysis_hint.value += '<p><b>Your path:</b> '+goal_path(task)+'</p>'
         self.analysis_hint.layout.display = ''
@@ -258,6 +267,7 @@ class OrcaApp(ipw.VBox):
                 self.structure.xyz_text(), self.structure.source_uuid, self._settings(),
                 self.code.value, self.optimize.value, self.force.value,
                 atoms=self.structure.atoms, imported=self.structure.imported, storage=self.wavefunction_storage.values(self.code.value),
+                pdos=self.pdos_enabled.value, pdos_memory_gib=self.pdos_memory.value,
             )
             self.structure.mark_stored(self.review["structure_uuid"])
             plan = self.review["plan"]
@@ -268,6 +278,18 @@ class OrcaApp(ipw.VBox):
             s = self.review["settings"]
             body = f"<h3>{action}</h3>"
             body += f"<p>{self.review['formula']} · charge {s['charge']} · multiplicity {s['multiplicity']}</p>"
+            character = self.review['pdos']
+            if plan['action'] == 'reuse':
+                body += '<p>Reusing an existing reference: no automatic PDOS backfill.</p>'
+            elif character['enabled'] and character['ready']:
+                body += (f"<p>PDOS included: one serial postprocessing CalcJob, {character['memory_gib']} GiB, "
+                         'up to 30 minutes. No extra SCF or cubes.</p>')
+            elif character['enabled']:
+                body += ('<p class="orca-notice">PDOS is enabled, but its native exporter or analysis worker is '
+                         'not configured on this computer. The electronic calculation can run; PDOS will be '
+                         'reported as unavailable until these tools are configured.</p>')
+            else:
+                body += '<p>Automatic PDOS is disabled for this submission.</p>'
             from .viewer import settings_details, input_details
             if self.review.get("storage"):
                 policy = self.review["storage"]["policy"]

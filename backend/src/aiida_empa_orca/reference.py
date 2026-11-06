@@ -13,6 +13,7 @@ from aiida_orca.workchains.base import OrcaBaseWorkChain
 
 from .artifacts import ElectronicStorageMixin
 from .calculation import SinglePointCalculation
+from .pdos_workflow import OrbitalCharacterMixin
 from .choices import OPTIMIZATION
 from .parser import reference_summary
 from .protocols import editable_settings
@@ -173,7 +174,7 @@ class ReferenceBaseWorkChain(OrcaBaseWorkChain):
         self.ctx.inputs = AttributeDict(self.exposed_inputs(self._process_class, "orca"))
 
 
-class ReferenceWorkChain(ElectronicStorageMixin, WorkChain):
+class ReferenceWorkChain(OrbitalCharacterMixin, ElectronicStorageMixin, WorkChain):
     """One SCF reference step, independent of geometry optimization and viewers."""
 
     @classmethod
@@ -191,9 +192,11 @@ class ReferenceWorkChain(ElectronicStorageMixin, WorkChain):
             spec.output(name, valid_type=cls_)
         spec.output("structure", valid_type=orm.StructureData)
         cls.storage_spec(spec)
+        cls.character_spec(spec)
         spec.outline(cls.setup, if_(cls.needs_calculation)(
             cls.run_scf, cls.inspect_scf,
             if_(cls.needs_regeneration)(cls.run_scf, cls.inspect_scf)), cls.results,
+                     cls.run_orbital_character, cls.inspect_orbital_character,
                      if_(cls.should_preserve)(cls.preserve_electronic, cls.inspect_preservation))
         spec.exit_code(400, "ERROR_INVALID_INPUT", message="Invalid SCF settings; see workflow report.")
         spec.exit_code(401, "ERROR_REUSE_UNAVAILABLE", message="The reviewed electronic state is unavailable. Review a new plan.")

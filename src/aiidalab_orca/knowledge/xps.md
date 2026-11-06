@@ -18,6 +18,40 @@ installed revision, canonical component branches and active calculations first.
 This guide applies to agents assisting inside AiiDAlab as well as repository
 development. It does not authorize additional calculations or physical changes.
 
+## Operational decision path
+
+1. **For 1s site energies**, load the accepted branches through
+   `xps_services` and the backend `validated_site` reader. Reuse passing sites
+   and compute only the selected missing ones. Preserve raw MS=0/MS=1 labels,
+   S² and the guarded status of any projected energy estimate.
+2. **For a scalar Co/QE energy comparison**, use `core_benchmark_services`.
+   Its accepted determinant has its own model and neutral reference. Do not
+   label it 2p₃/₂ or apply its relaxation lowering to frozen MR sticks.
+3. **For the existing CoPc RAS-CI/SOC spectrum**, retain the frozen-orbital and
+   bound-transition warnings. Native numerical completion does not validate
+   absolute binding energies, the 1s spectator choice or photoemission weights.
+   Do not infer a Co-dcHp or other-metal protocol from the CoPc formula.
+4. **For a proposed relaxed MR candidate**, require the original complete
+   native convergence, physical core/valence/spin, normalization and all-state
+   1e−7-Hartree saved-GBW readback contract before exposing it through
+   `mr_core_benchmark_services`. A diagnostic stopped checkpoint, an inner
+   solver convergence message or a passing small capability test is not such
+   a candidate. A qualified spin-free energy still needs separately reviewed
+   SOC and intensity treatment; the current reader submits neither.
+5. **If a scientific route is awaiting review**, hold that route and its
+   dependent submissions. Continue independent work already authorized, such
+   as inspecting accepted results, fixing defensive software or improving the
+   operating guide. Do not treat a pending optional benchmark as a blanket
+   block on the whole XPS task. Preserve the original objective and identify
+   the specific missing evidence, rather than substituting a smaller passing
+   test for the requested molecular result.
+
+Before reporting completion, audit the requested molecules and selected sites
+against actual result provenance and the host app. State explicitly which
+method could not be validated and why. A negative method result is not a claim
+that every ORCA solver or future physical model is unusable. The dated method
+guide separates the tested failures from remaining untested routes.
+
 ## Required evidence
 
 Record the reference UUID, optimized/fixed geometry, charge, spin projection,

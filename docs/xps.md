@@ -11,6 +11,25 @@ calculation. This prepares its SCF reference. Every subsequent XPS calculation
 uses those exact atomic positions; XPS does not invoke geometry optimization.
 An already optimized reference can also be used.
 
+## Choosing a result and the next step
+
+The XPS workspace contains different methods with different acceptance limits:
+
+| Result | What it supports | How to continue |
+| --- | --- | --- |
+| Accepted 1s ΔSCF branches | Vertical site binding energies with the recorded spin and saved-wavefunction checks. An MS=0 UKS branch remains spin mixed. | Inspect the branch details and S², compare matching sites, or select additional atoms under **Compute / extend XPS…**. Compatible accepted sites are reused. |
+| **Scalar Co 2p energy checks** | Energy-only diagnostics for the recorded DFT determinant, basis and scalar-relativistic model. | Use the downloaded provenance when comparing the same scalar observable with QE. This is not a SOC-resolved 2p₃/₂ energy or a calibration of the multireference spectrum. |
+| **Co 2p · multiplets** draft | The existing frozen-orbital RAS-CI/SOC model and its stated bound-transition approximation. Absolute binding energies and peak weights remain unvalidated. | Inspect the method notice and configuration character before interpreting a spectrum. A display shift changes alignment only. |
+| **Multireference Co 2p energy checks** | Spin-free energy diagnostics only after native convergence, physical identity and all-state readback have passed. | These checks do not supply SOC or photoionization intensities. The section remains hidden when no accepted record is available. |
+
+The energy-check sections read independently qualified records; they do not
+submit orbital relaxation or change the scientific model. A failed relaxation
+does not qualify its saved orbitals or unlock a relaxed spectrum. Accepted
+earlier SCF and 1s results remain available. Inspect the failure before another
+attempt, and consult the [Co method guide](cobalt-xps.md) for the tested solver
+limits and the remaining energy/intensity questions. The CoPc multiplet model
+is not automatically transferable to Co-dcHp, Fe or Zn complexes.
+
 ## Scientific model and spin
 
 The observable is a vertical core binding energy of the isolated molecule,

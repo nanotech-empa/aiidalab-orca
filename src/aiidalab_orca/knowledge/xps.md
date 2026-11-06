@@ -7,8 +7,14 @@ interpreting XPS. Reopen it with `read_workflow_guide` and ID `orca.xps` after
 switching topics or when the current procedure is uncertain. Inspect the live
 reference, outputs and visible app errors as well. This guide is not permission
 to submit, invent capabilities, override user choices or bypass action review.
-The current ORCA chat form adapter does not expose the XPS submission controls;
-use the app's XPS panel rather than claiming a chat-form action submitted XPS.
+The standard molecular-analysis app intentionally shows **XPS · Work in
+progress**, without XPS submission controls. The workspace described by this
+guide belongs to the experimental XPS component branches. Verify the installed
+revision and visible controls before directing a user to an XPS panel. Do not
+activate or replace the standard placeholder as a workaround. The chat form
+adapter also does not expose XPS submission controls; do not claim that a
+chat-form action submitted XPS. Already authorized research workflows and saved
+results can be inspected independently of the standard release.
 If this guide cannot be loaded, report that limitation and do not improvise a
 specialized recovery protocol.
 
@@ -51,6 +57,13 @@ against actual result provenance and the host app. State explicitly which
 method could not be validated and why. A negative method result is not a claim
 that every ORCA solver or future physical model is unusable. The dated method
 guide separates the tested failures from remaining untested routes.
+
+The completed two-molecule carbon comparison covers four selected CoPc atoms
+and all 28 Co-dcHp carbon atoms. A completed selected-site parent does not prove
+coverage of every atom or symmetry equivalence. The user guide records the
+matching completed QE workflows and comparison provenance. Reuse those results
+rather than treating the historical formic-acid pilot or an old benchmark plan
+as the current campaign. Neither molecule has an accepted relaxed MR Co result.
 
 ## Required evidence
 

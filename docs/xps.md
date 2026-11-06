@@ -1,4 +1,20 @@
-# Site-resolved XPS draft
+# Site-resolved XPS · experimental
+
+## Availability
+
+The standard molecular-analysis app currently shows **XPS · Work in progress**.
+It does not expose XPS calculation controls. The instructions below describe
+the experimental XPS workspace on the XPS component branches; they are not a
+claim that these controls are available in the standard release. Verify the
+installed revision and visible workspace before following them.
+
+Accepted 1s results, scalar Co diagnostics and the frozen Co multiplet draft
+have different validation limits, described below. A completed experimental
+calculation does not make the whole XPS method release-ready. The
+[agent operating guide](agents/xps.md) records the corresponding checks and
+recovery boundaries.
+
+## Using the experimental workspace
 
 Open a completed SCF or geometry reference, choose **Results → XPS**, and expand
 **Compute / extend XPS…**. Select the C/N/O/F/Co atoms to ionize. Atom numbers start at
@@ -196,11 +212,35 @@ subtracts the lowest displayed energy per edge and method. QE absolute energies
 include its stored pseudopotential corrections. A different functional or
 spin/core-hole model must be documented when interpreting the comparison.
 
-The planned user benchmark is **QE through the QE app on Daint versus ORCA
-locally**, at the supplied geometry, **without relaxation**. No QE benchmark
-has yet been run for the new supplied geometry.
+### Completed CoPc and Co-dcHp comparisons
 
-### Comparison with existing QE results at their stored geometry
+The fixed-geometry carbon comparisons for both molecules have completed through
+the QE app on Daint and the experimental ORCA workflows on tigu. They use the
+existing PBE/def2-TZVP optimized molecular geometries, with matching atom order
+and relative positions; the XPS calculations do not relax them again.
+
+| Molecule | Accepted ORCA C 1s coverage | Same-geometry QE XPS workflow |
+| --- | --- | --- |
+| CoPc, C32H16CoN8 | Four selected atoms: viewer numbers 1, 14, 15 and 17; eight raw alpha/beta branches | `9695515a-c3db-4036-8c1b-5d47f6286e30` |
+| Co-dcHp, C28H16CoN6 | All 28 carbon atoms; 56 raw alpha/beta branches | `f05c4b19-6ef8-488d-9202-ac2de6cd4407` |
+
+CoPc coverage is limited to those four selected atoms, not all 32 carbons; no
+symmetry-based extension is assumed. The comparison datasets are
+`148aeb42-1018-4f4d-9af0-171f17467ddc` (CoPc) and
+`731e7c2c-2ba8-4991-9263-915fe0bea969` (Co-dcHp). Their linked native outputs
+pass the recorded branch checks, including independent saved-wavefunction
+readback. Comparisons retain raw spin labels and stored QE corrections, with
+no fitted energy shift. They do not establish photoionization intensities or
+experimental energy alignment.
+
+Each geometry also has a separately qualified scalar Co 2p energy diagnostic;
+neither has an accepted relaxed multireference Co 2p result. The frozen CoPc
+RAS-CI/SOC spectrum remains an experimental model with unvalidated absolute
+energies and photoemission weights. See the [Co method guide](cobalt-xps.md).
+Nitrogen is excluded from these two-molecule comparisons. This status was
+checked against the saved results on 2026-11-06; it requires no repeat QE run.
+
+### Earlier formic-acid comparison at its stored geometry
 
 The existing QE-app formic-acid run covered only the carbonyl oxygen at a
 hand-built geometry. The optimized ORCA example below uses a different

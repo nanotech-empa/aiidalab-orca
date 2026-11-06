@@ -1,5 +1,13 @@
 # Co 2p multiplet draft
 
+This is the experimental workspace described in the
+[XPS availability notice](xps.md#availability). The standard molecular-analysis
+app retains an XPS work-in-progress placeholder. The frozen CoPc spectrum's
+absolute energies and photoemission weights remain unvalidated, and no relaxed
+multireference Co result has passed the complete acceptance contract. A
+Co-dcHp multiplet protocol has not been qualified. The instructions below do
+not change that release status or authorize another calculation.
+
 At a completed neutral-doublet CoPc geometry, open **Results → XPS →
 Co 2p · multiplets**. The orbital preparation and the spectrum are separate
 submissions. Review each stage before submitting it. The automatic active-space
@@ -99,8 +107,12 @@ independently; the paper and SI are not redistributed here.
    from the computed many-electron Hamiltonian, not an empirical split doublet.
 
 Basis: cc-pwCVTZ on Co, cc-pVTZ on H/C/N, cc-pVTZ/C correlation fitting,
-SARC/J, RIJCOSX, finite Gaussian nuclei and no frozen core. Initial local
-resources: eight processes and 12 GiB memory budget. The existing PBE/def2-TZVP
+SARC/J, RIJCOSX, finite Gaussian nuclei and no frozen core. The initial local
+pilot used eight processes and a 12 GiB memory budget. The current two-molecule
+campaign uses tigu with at most 12 cores per submitted CalcJob, retaining full
+electronic files remotely without stashing. Keep each stage's reviewed memory
+and wall-time limits; these historical pilot values are not universal defaults.
+The existing PBE/def2-TZVP
 optimized geometry is retained; the paper instead optimized at B3LYP/cc-pVTZ.
 No hybrid geometry calculation is introduced here.
 

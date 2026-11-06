@@ -176,7 +176,10 @@ class XpsSpectroscopy(ipw.VBox):
                 self.message.value += '<p class="orca-notice">'+html.escape(self.plan['validation'])+'</p>'
             self.message.value += '<p>Final core-hole location, electron count and spin are checked before a binding energy is accepted.</p>'
             policy = self.plan['storage_policy']
-            self.message.value += f"<p>Wavefunctions follow the reference storage policy: retrieve bundles up to {policy['threshold_mb']:g} MiB; stash larger bundles in <code>{html.escape(policy['stash_directory'])}</code>.</p>"
+            if policy.get('mode') == 'remote':
+                self.message.value += '<p>Wavefunctions remain in their original calculation directories. Only file manifests and scientific results are retrieved.</p>'
+            else:
+                self.message.value += f"<p>Wavefunctions follow the reference storage policy: retrieve bundles up to {policy['threshold_mb']:g} MiB; stash larger bundles in <code>{html.escape(policy['stash_directory'])}</code>.</p>"
             self.submit.disabled = self._running_uuid is not None
         except Exception as exc:
             self._error(exc)

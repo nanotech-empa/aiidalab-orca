@@ -1,13 +1,17 @@
 """State compatibility, spin-component conventions and explicit durable reuse."""
 from copy import deepcopy
+import io
 import itertools
+import json
 import math
 
 import numpy as np
 import pytest
 from aiida import orm
-from aiida.common import LinkType
+from aiida.common import LinkType,StashMode
+from aiida.common.folders import SandboxFolder
 from aiida.engine import ProcessState,run_get_node
+from aiida.engine.utils import instantiate_process
 
 from aiida_empa_orca import dyson
 from aiida_empa_orca.dyson_data import (compatible,selection,checked_ci,spectrum,spin_factor,
@@ -153,6 +157,7 @@ def casci_state(common_reference,charge=0,mult=2):
     ref,remote = orm.load_node(ref_uuid),orm.load_node(remote_uuid)
     calc = orm.CalcJobNode(process_type='aiida.calculations:empa_orca.casci',computer=remote.computer)
     calc.base.links.add_incoming(ref,link_type=LinkType.INPUT_CALC,link_label='orbital_reference')
+    calc.base.links.add_incoming(ref.creator.inputs.structure,link_type=LinkType.INPUT_CALC,link_label='structure')
     calc.store()
     data = dataset(charge,mult)
     data['orbital_reference_uuid'] = ref_uuid
@@ -175,6 +180,69 @@ def test_lost_casci_wavefunction_reports_recovery_and_does_not_submit_scf(common
     _,run = run_get_node(b)
     assert run.exit_status == 400 and not run.called_descendants
     assert any('explicitly recompute this CASCI sector' in entry.message for entry in orm.Log.collection.get_logs_for(run))
+
+
+@pytest.mark.parametrize('mode', ['auto','remote'])
+def test_export_honours_remote_only_policy_through_workchain_and_calcjob(common_reference,aiida_manager,mode):
+    state,code_uuid = casci_state(common_reference)
+    remote = orm.load_node(common_reference[1])
+    b = dyson.StateExportWorkChain.get_builder()
+    b.state_energies = state
+    b.code = b.helper_code = orm.load_code(code_uuid)
+    b.storage_policy = orm.Dict(dict={'mode':mode,'threshold_mb':100,
+                                    'stash_directory':'' if mode == 'remote' else '/tmp/dyson-stash'})
+    process = instantiate_process(aiida_manager.get_runner(),b)
+    captured = []
+    try:
+        process.ctx.location = {'kind':'remote','uuid':str(remote.uuid),
+                                'files':[{'name':'aiida.gbw','size_bytes':14}]}
+        def submit(child):
+            captured.append(child)
+            return orm.CalcJobNode().store()
+        process.submit = submit
+        process.run_export()
+        child = instantiate_process(aiida_manager.get_runner(),captured[0])
+        try:
+            with SandboxFolder() as folder:
+                info = child.prepare_for_submission(folder)
+                request = json.loads(open(folder.get_abs_path('request.json')).read())
+                assert request['threshold_mb'] == (0 if mode == 'remote' else 100)
+                assert bool(child.inputs.metadata.options.get('stash')) == (mode == 'auto')
+                assert 'exports' not in info.retrieve_list
+                assert info.remote_copy_list == [(remote.computer.uuid,remote.get_remote_path()+'/aiida.gbw','aiida.gbw')]
+        finally:
+            child.close()
+    finally:
+        process.close()
+
+
+@pytest.mark.parametrize('mode,retrieved_copy,stash,success', [
+    ('remote',False,False,True),('remote',True,False,False),('remote',False,True,False),
+    ('auto',False,False,False),('auto',False,True,True),('auto',True,True,True)])
+def test_export_parser_checks_selected_preservation_policy(common_reference,mode,retrieved_copy,stash,success):
+    state,_ = casci_state(common_reference)
+    calc = orm.CalcJobNode(process_type='aiida.calculations:empa_orca.dyson_export')
+    policy = orm.Dict(dict={'mode':mode,'threshold_mb':100,
+                           'stash_directory':'' if mode == 'remote' else '/tmp/dyson-stash'}).store()
+    for key,value in {'state_energies':state,'storage_policy':policy}.items():
+        calc.base.links.add_incoming(value,link_type=LinkType.INPUT_CALC,link_label=key)
+    calc.store()
+    artifact = {'state_uuid':str(state.uuid),'size_bytes':100,'sha256':'a'*64,
+                'ci_norms':{'0':1.},'retrieved_copy':retrieved_copy}
+    folder = orm.FolderData()
+    folder.base.repository.put_object_from_filelike(io.StringIO(json.dumps(artifact)),'artifact.json')
+    folder.base.links.add_incoming(calc,link_type=LinkType.CREATE,link_label='retrieved');folder.store()
+    if stash:
+        node = orm.RemoteStashFolderData(computer=state.creator.computer,
+            target_basepath='/tmp/dyson-stash/export',source_list=['exports'],stash_mode=StashMode.COPY)
+        node.base.links.add_incoming(calc,link_type=LinkType.CREATE,link_label='remote_stash');node.store()
+    parser = dyson.StateExportParser(calc)
+    result = parser.parse()
+    assert (result is None) == success
+    if success:
+        assert parser.outputs['artifact'].get_dict() == artifact
+    else:
+        assert result.status == 310
 
 
 @pytest.mark.parametrize("cache_enabled",[False,True])

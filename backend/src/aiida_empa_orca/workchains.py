@@ -64,9 +64,8 @@ class GeometryWorkChain(ElectronicStorageMixin, WorkChain):
                 validate_molecule(self.inputs.structure, self.ctx.settings)
                 if "code" not in self.inputs:
                     raise ValueError("Optimization requires an ORCA code")
-                if (self.inputs.code.computer.scheduler_type != "core.direct"
-                        or self.inputs.code.computer.transport_type != "core.local"):
-                    raise ValueError("This first milestone supports the local direct scheduler only")
+                from .execution import validate_computer
+                validate_computer(self.inputs.code.computer)
             if self.inputs.force_recompute.value and "reuse_source" in self.inputs:
                 raise ValueError("Cannot force recomputation and reuse a result simultaneously")
         except ValueError as exc:

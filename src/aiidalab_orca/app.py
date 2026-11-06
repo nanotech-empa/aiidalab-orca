@@ -248,8 +248,11 @@ class OrcaApp(ipw.VBox):
             from .viewer import settings_details, input_details
             if self.review.get("storage"):
                 policy = self.review["storage"]["policy"]
-                body += (f"<p>Wavefunction preservation: retrieve bundles up to {policy['threshold_mb']:g} MiB; "
-                         f"stash larger bundles under <code>{html.escape(policy['stash_directory'])}</code>.</p>")
+                if policy.get('mode') == 'remote':
+                    body += '<p>Wavefunctions stay in their original calculation directories; only the file manifest is retrieved.</p>'
+                else:
+                    body += (f"<p>Wavefunction preservation: retrieve bundles up to {policy['threshold_mb']:g} MiB; "
+                             f"stash larger bundles under <code>{html.escape(policy['stash_directory'])}</code>.</p>")
             body += settings_details(s, single_point=not self.optimize.value)
             body += input_details(self.review["input_files"], "Review generated ORCA input")
             if plan["source_uuid"]:

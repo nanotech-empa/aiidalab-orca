@@ -25,15 +25,27 @@ def electronic_names(names):
 
 def storage_policy(values):
     values = dict(values)
-    if set(values)-{'threshold_mb', 'stash_directory'}:
+    if set(values)-{'mode', 'threshold_mb', 'stash_directory'}:
         raise ValueError('Unknown wavefunction storage option')
+    mode = values.get('mode', 'auto')
+    if mode not in ('auto', 'remote'):
+        raise ValueError('Choose automatic preservation or remote working-directory storage')
     threshold = values.get('threshold_mb', 100)
     if not isinstance(threshold, (int, float)) or not 0 <= threshold <= 10000:
         raise ValueError('Wavefunction retrieval threshold must be between 0 and 10000 MiB')
     path = values.get('stash_directory', '')
+    if mode == 'remote' and path == '':
+        return {'mode': 'remote', 'threshold_mb': threshold, 'stash_directory': ''}
     if not isinstance(path, str) or not PurePosixPath(path).is_absolute() or '..' in PurePosixPath(path).parts or path == '/':
         raise ValueError('Choose an absolute stash directory, without .. components')
-    return {'threshold_mb': threshold, 'stash_directory': path}
+    result = {'threshold_mb': threshold, 'stash_directory': path}
+    return result | {'mode': mode} if mode == 'remote' else result
+
+
+def storage_mode(policy, total_bytes):
+    if policy.get('mode') == 'remote':
+        return 'remote'
+    return 'repository' if total_bytes <= policy['threshold_mb']*1024**2 else 'stash'
 
 
 def remote_files(computer, basepath, names=ELECTRONIC_FILES, expected=None):
@@ -78,6 +90,12 @@ def stored_location(node, names=None):
         repository_files(node.outputs.retrieved, manifest)
         return {'kind': 'repository', 'uuid': str(node.outputs.retrieved.uuid), 'files': manifest['files'],
                 'storage_uuid': str(node.uuid)}
+    if manifest['storage'] == 'remote':
+        remote = node.inputs.source_folder
+        remote_files(remote.computer, remote.get_remote_path(), names=[f['name'] for f in manifest['files']],
+                     expected={f['name']: f['size_bytes'] for f in manifest['files']})
+        return {'kind': 'remote', 'uuid': str(remote.uuid), 'path': remote.get_remote_path(),
+                'files': manifest['files'], 'storage_uuid': str(node.uuid)}
     if 'remote_stash' not in node.outputs:
         raise ValueError('The electronic stash is missing')
     stash = node.outputs.remote_stash
@@ -137,7 +155,7 @@ class ElectronicStorageCalculation(engine.CalcJob):
         policy = storage_policy(self.inputs.policy.get_dict())
         names = electronic_names(self.inputs.filenames.get_list()) if 'filenames' in self.inputs else ELECTRONIC_FILES
         sizes = remote_files(source.computer, source.get_remote_path(), names=names)
-        storage = 'repository' if sum(x['size_bytes'] for x in sizes) <= policy['threshold_mb']*1024**2 else 'stash'
+        storage = storage_mode(policy, sum(x['size_bytes'] for x in sizes))
         request = {'files': list(names), 'threshold_bytes': policy['threshold_mb']*1024**2, 'storage': storage}
         with folder.open('request.json', 'w') as handle:
             json.dump(request, handle)
@@ -168,6 +186,12 @@ class ElectronicStorageParser(Parser):
                 raise ValueError('Incomplete electronic bundle')
             if manifest['storage'] == 'repository':
                 repository_files(self.retrieved, manifest)
+            elif manifest['storage'] == 'remote':
+                if storage_policy(self.node.inputs.policy.get_dict()).get('mode') != 'remote':
+                    raise ValueError('Remote retention was not requested')
+                source = self.node.inputs.source_folder
+                remote_files(source.computer, source.get_remote_path(), names=names,
+                             expected={f['name']: f['size_bytes'] for f in manifest['files']})
             elif manifest['storage'] != 'stash' or 'remote_stash' not in self.node.outputs:
                 raise ValueError('No verified stash result')
             self.out('manifest', orm.Dict(dict=manifest))
@@ -191,7 +215,7 @@ def storage_builder(remote, code, policy, names=ELECTRONIC_FILES):
     from .rendering import calcjob_options
     builder.metadata.options = calcjob_options(remote)
     sizes = remote_files(remote.computer, remote.get_remote_path(), names=names)
-    if sum(item['size_bytes'] for item in sizes) > policy['threshold_mb']*1024**2:
+    if storage_mode(policy, sum(item['size_bytes'] for item in sizes)) == 'stash':
         builder.metadata.options.stash = stash_options(policy['stash_directory'], 'electronic')
     # Reuse is explicit and availability-checked; a cached missing stash must not win.
     builder.metadata.disable_cache = True
@@ -207,6 +231,7 @@ class ElectronicStorageMixin:
         spec.output('electronic_manifest', valid_type=orm.Dict, required=False)
         spec.output('electronic_repository', valid_type=orm.FolderData, required=False)
         spec.output('electronic_stash', valid_type=orm.RemoteStashFolderData, required=False)
+        spec.output('electronic_remote', valid_type=orm.RemoteData, required=False)
         spec.exit_code(405, 'ERROR_ELECTRONIC_STORAGE', message='Scientific results are available, but electronic-file preservation failed.')
 
     def validate_storage_inputs(self):
@@ -227,6 +252,8 @@ class ElectronicStorageMixin:
             for uuid in storage_nodes(remote):
                 source = orm.load_node(uuid)
                 if source.is_finished_ok:
+                    if (source.outputs.manifest.get_dict()['storage'] == 'remote') != (policy.get('mode') == 'remote'):
+                        continue
                     try:
                         stored_location(source)
                         self.ctx.electronic_storage_uuid = str(uuid)
@@ -248,5 +275,8 @@ class ElectronicStorageMixin:
             self.report(str(exc))
             return self.exit_codes.ERROR_ELECTRONIC_STORAGE
         self.out('electronic_manifest', node.outputs.manifest)
-        self.out('electronic_repository' if location['kind'] == 'repository' else 'electronic_stash',
-                 node.outputs.retrieved if location['kind'] == 'repository' else node.outputs.remote_stash)
+        if location['kind'] == 'remote':
+            self.out('electronic_remote', node.inputs.source_folder)
+        else:
+            self.out('electronic_repository' if location['kind'] == 'repository' else 'electronic_stash',
+                     node.outputs.retrieved if location['kind'] == 'repository' else node.outputs.remote_stash)

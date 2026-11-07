@@ -25,8 +25,14 @@ preparation, then prepare or reuse the common spatial-orbital reference.
 | Unrestricted SCF | Generate/preserve QROs for the shared CAS input and UNOs for inspection |
 | Verified imported reference | Reuse its fixed spatial orbitals and recorded provenance |
 
-Preparation reads the saved wavefunction without SCF iterations. A new orbital
-reference has a new identity; existing CASCI states remain tied to their
+Preparation reads the saved wavefunction without SCF iterations. It
+inherits the SCF calculation's ORCA code, computer and resource
+limits; its execution summary shows these settings. Remote/stashed wavefunctions
+are accessed on that computer. Subsequent CASCI keeps the orbital reference's
+computer, while its processes, memory and wall time are editable under
+**CASCI resources and advanced settings**.
+
+A new orbital reference has a new identity; existing CASCI states remain tied to their
 original reference. If the reference already exists, reuse it. Click
 **View orbitals and choose active space** beneath the preparation controls when
 it is available. The selected common-orbital reference is the input file set;
@@ -62,11 +68,20 @@ CASSCF need separate implementations; they are not implicit options here.
 
 ## 3. Request CASCI states and multiplicities
 
-After confirmation, choose charge, multiplicity and the number of electronic
-states for each request. Repeat for the spin/charge sectors needed by your
-goal, keeping the same orbital reference and active space. The number of
-available states depends on that space and multiplicity. Read the generated
-input and reuse/new-calculation decision before submission.
+After confirmation, enter one charge/multiplicity or lists such as charges
+`0 +1 -1 +2 -2` and multiplicities `1 2 3 4` (spaces or commas). Charges are
+absolute molecular charges. Set **Electronic states** per allowed sector.
+**Review charge / spin combinations** lists every pair, active electron count,
+requested/available states, new/reused/running action and any skip/block reason.
+Impossible spin pairs are skipped; execution errors block submission. A smaller
+valid sector proposes its available state count explicitly. Read the inputs and
+per-job resources, then **Submit reviewed calculations**. Each allowed pair is
+independent and keeps the same orbital reference and active orbital partition.
+The energy diagram shows all compatible completed sectors. **Calculation
+history and status** is collapsed below it; its charge/calculation selectors
+inspect individual runs without filtering the diagram, changing its energy
+zero/limits, or editing the submission lists.
+See [the batch rules](casci.md#request-several-chargespin-sectors).
 
 CASCI keeps orbitals fixed; CASSCF would optimize them. The current general
 app path implements CASCI. [The CASCI guide](casci.md) details its validation,

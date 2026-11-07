@@ -5,6 +5,29 @@ import html
 import ipywidgets as ipw
 
 
+def data_table(headers, rows, *, numeric_columns=(), label='Calculation details'):
+    """Readable, scoped HTML tables that do not depend on notebook theme CSS."""
+    numeric_columns = set(numeric_columns)
+    def cell(value, index, *, heading=False):
+        tag = 'th' if heading else 'td'
+        alignment = 'right' if index in numeric_columns else 'left'
+        style = (f'padding:10px 14px;text-align:{alignment};vertical-align:top;'
+                 'border-bottom:1px solid var(--jp-border-color2,#d8dee6);'
+                 'line-height:1.45;overflow-wrap:break-word;')
+        if heading:
+            style += 'font-weight:600;'
+        elif index in numeric_columns:
+            style += 'font-variant-numeric:tabular-nums;white-space:nowrap;'
+        scope = ' scope="col"' if heading else ''
+        return f'<{tag}{scope} style="{style}">{html.escape(str(value))}</{tag}>'
+    head = '<tr>'+''.join(cell(value,index,heading=True) for index,value in enumerate(headers))+'</tr>'
+    body = ''.join('<tr>'+''.join(cell(value,index) for index,value in enumerate(row))+'</tr>' for row in rows)
+    return ('<div style="max-width:100%;overflow-x:auto;">'
+            f'<table aria-label="{html.escape(label)}" style="width:100%;border-collapse:collapse;'
+            'border-spacing:0;font-size:inherit;margin:12px 0;">'
+            '<thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>')
+
+
 class ComputePanel(ipw.VBox):
     """Keep optional calculation inputs behind an explicit action."""
 

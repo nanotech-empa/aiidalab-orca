@@ -41,14 +41,14 @@ FINAL ORBITALS:
 def test_input_keeps_orbitals_and_parity_with_changing_charge():
     ref = reference_data()
     space = casci.active_space({'electrons':3,'orbitals':[6,7]},ref)
-    for charge, mult, nel in [(0,2,3),(1,1,2),(1,3,2),(-1,1,4)]:
+    for charge, mult, nel in [(0,2,3),(1,1,2),(1,3,2),(-1,1,4),(2,2,1),(3,1,0)]:
         text = casci.casci_input(ref,space,{'charge':charge,'multiplicity':mult})
         assert f'nel {nel}\n' in text
         assert 'ActOrbs unchanged' in text and 'IntOrbs unchanged' in text and 'ExtOrbs unchanged' in text
         assert 'maxiter 1' in text and f'* xyzfile {charge} {mult}' in text
         assert 'PBE ' not in text and 'Opt ' not in text
     for values in ({'charge':0,'multiplicity':1}, {'charge':-1,'multiplicity':3},
-                   {'charge':1,'multiplicity':3,'nroots':2}, {'charge':2}):
+                   {'charge':1,'multiplicity':3,'nroots':2}, {'charge':4}):
         with pytest.raises(ValueError):
             casci.casci_settings(values,ref,space)
     for values in ({'electrons':2,'orbitals':[6,7]}, {'electrons':3,'orbitals':[5,7]},
@@ -134,6 +134,17 @@ def common_reference(electronic_source):
     calc.set_process_state(ProcessState.FINISHED)
     calc.set_exit_status(0)
     return str(ref.uuid),str(remote.uuid),str(source.inputs.code.uuid),directory
+
+
+def test_execution_summary_reads_the_prepared_reference_code_and_resources(common_reference):
+    from aiidalab_orca.casci_services import execution_details
+    reference=orm.load_node(common_reference[0])
+    expected=reference.get_dict()['settings']
+    code=orm.load_code(common_reference[2])
+    details=execution_details(reference.creator.uuid)
+    assert details=={'code':code.label,'computer':code.computer.label,
+                    **{key:expected[key] for key in ('nprocs','memory_mb','wallclock_seconds')}}
+    assert all(isinstance(value,(str,int)) for value in details.values())
 
 
 def test_calcjob_stages_shared_reference_and_never_retrieves_large_orbitals(common_reference,aiida_manager):

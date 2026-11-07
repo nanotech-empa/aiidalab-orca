@@ -20,24 +20,65 @@ is available once the orbital reference and active space are established:
    The initial small values are illustrative and must be chosen for the molecule.
    [Inspect QRO/UNO orbitals](orbital-inspection.md) to examine their shapes and
    occupations; selected contiguous QRO windows can be transferred to the CASCI controls.
-3. Select charge, multiplicity and **Electronic states**, review the generated input,
-   and submit. Repeat for additional charge/spin sectors. Each is a separate
-   WorkChain. A change of charge adjusts active electrons while preserving the
-   exact same inactive and active orbital indices.
+3. Enter one or more **Charges** and **Multiplicities (2S+1)**, separated by
+   spaces or commas, and choose **Electronic states** per allowed sector.
+   Review the charge/spin combinations and inputs, then submit the reviewed
+   calculations. Each allowed pair is a separate WorkChain. A change of charge
+   adjusts active electrons while preserving the exact same inactive and active
+   orbital indices. See the batch rules below.
 4. Inspect all compatible completed sectors in the common energy diagram.
-   Choose the energy-zero state and plot limits. The calculation selector
-   reopens previous active spaces; JSON export includes unshifted energies,
+   Choose the energy-zero state and plot limits. The collapsed **Calculation
+   history and status** section below the diagram inspects individual runs;
+   its charge/calculation selectors do not filter the plotted energies or
+   change submission settings. JSON export includes unshifted energies,
    state identities, model settings and workflow UUIDs.
 
 The reference is associated with the existing SCF result. Geometry optimization
 may have used a different method earlier, but all compared CASCI states use the
 same final fixed geometry and common orbitals.
 
+Orbital preparation inherits the original SCF's ORCA code, computer, process
+count, memory and wall-time limit. The preparation panel displays those actual
+settings. Saved remote/stashed wavefunctions are accessed on that computer.
+CASCI uses the orbital reference's computer and displays the execution target
+in its review. Edit CASCI processes, memory and wall time in **CASCI resources
+and advanced settings** before reviewing a new request.
+
 **Common orbitals** are the shared spatial-orbital basis, not electronic states.
 An electronic state from the CASCI calculation is also called a **root**.
 Requesting one state gives the lowest-energy CASCI state in the selected
 charge/spin sector; requesting two also gives the next state. This count is
 independent of the number of active orbitals.
+
+## Request several charge/spin sectors
+
+For example, enter charges `0 +1 -1 +2 -2` and multiplicities `1 2 3 4`.
+Charges are **absolute molecular charges**, not changes from the selected
+reference. Positive charge removes electrons. With reference charge q₀ and
+reference active electron count n₀, a sector at charge q has n₀ − (q − q₀)
+active electrons. The spatial orbital reference and inactive partition stay fixed.
+
+The review table lists the Cartesian product, including skipped pairs and their
+reasons. An even electron count requires odd multiplicity; an odd count requires
+even multiplicity. The active-space capacity also limits the spin. No different
+spin is silently substituted. Charges beyond N±1 are allowed when they fit the
+same active space. This does not change Dyson's one-electron N±1 selection rule.
+
+**Electronic states** is a per-sector request. If a valid sector has fewer
+spin-adapted states, the table explicitly proposes its available count beside
+the requested count. Confirm that reduction before submission. Saved matching
+calculations are reused, and matching running requests are not submitted again
+unless explicit recomputation was selected. Missing wavefunctions, invalid
+resources and other execution errors block the batch rather than masquerading
+as forbidden spin combinations.
+
+The summary includes each generated ORCA input, job count and per-job resources.
+Jobs may run concurrently. Submission starts only after the reviewed action is
+clicked. If one submission fails, the remaining requests stop; accepted UUIDs
+remain visible and those calculations continue. Closing the page stops its
+status polling, not the AiiDA calculations. Browsing saved charges/calculations
+does not overwrite the draft request lists or confirmed active space.
+History browsing also preserves the diagram's selected energy zero and limits.
 
 ## Components and provenance
 

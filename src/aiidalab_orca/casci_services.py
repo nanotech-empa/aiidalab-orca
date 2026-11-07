@@ -24,6 +24,19 @@ def reference_runs(source_uuid):
     return choices
 
 
+def execution_details(uuid):
+    """Return the inherited execution target and resources as plain values."""
+    node = orm.load_node(uuid)
+    if 'orbital_reference' in node.outputs:
+        settings = node.outputs.orbital_reference.get_dict()['settings']
+    else:
+        node = source_node(uuid)
+        settings = node.inputs.settings.get_dict()
+    code = orm.load_code(node.inputs.code.uuid)
+    return {'code':code.label,'computer':code.computer.label,
+            **{key:settings[key] for key in ('nprocs','memory_mb','wallclock_seconds')}}
+
+
 def prepare_common(source_uuid, force=False):
     source = source_node(source_uuid)
     unavailable = []

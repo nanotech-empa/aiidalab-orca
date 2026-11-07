@@ -8,6 +8,8 @@ import ipywidgets as ipw
 from . import casci_services as service
 from .state_levels import StateEnergyLevels
 from .guidance import kondo_preparation_guide
+from . import casci_batch
+from .presentation import data_table
 
 
 class CasciStates(ipw.VBox):
@@ -16,6 +18,9 @@ class CasciStates(ipw.VBox):
         self.process_uuid = None
         self.plan = None
         self._poll_task = None
+        self._batch_task = None
+        self._batch_jobs = []
+        self._execution_context = None
         self._diagram = None
         self._inspection = None
         self._dyson = None
@@ -45,11 +50,10 @@ class CasciStates(ipw.VBox):
         self.electrons = ipw.BoundedIntText(value=3 if s['multiplicity']%2==0 else 2,min=0,max=100,
                                            description='Active electrons (N)',style=style)
         self.norb = ipw.BoundedIntText(value=2,min=1,max=50,description='Active orbitals',style=style)
-        self.charge = ipw.Dropdown(options=[(f"N−1 electrons · charge {s['charge']+1:+d}",s['charge']+1),
-                (f"N electrons · charge {s['charge']:+d}",s['charge']),
-                (f"N+1 electrons · charge {s['charge']-1:+d}",s['charge']-1)],value=s['charge'],
-                description='Charge sector',style=style,layout=wide)
-        self.mult = ipw.BoundedIntText(value=s['multiplicity'],min=1,max=99,description='Multiplicity (2S+1)',style=style)
+        self.charge = ipw.Text(value=str(s['charge']),description='Charges',style=style,layout=wide,
+                               placeholder='e.g. 0 +1 -1 +2 -2')
+        self.mult = ipw.Text(value=str(s['multiplicity']),description='Multiplicities (2S+1)',style=style,
+                             layout=wide,placeholder='e.g. 1 2 3 4')
         self.roots = ipw.BoundedIntText(value=1,min=1,max=100,description='Electronic states',style=style)
         self.roots.tooltip = 'Number of CASCI states (roots) in this charge/spin sector: 1 requests its lowest-energy state; 2 also requests the next state.'
         basis = s['basis']
@@ -60,17 +64,29 @@ class CasciStates(ipw.VBox):
         self.memory = ipw.BoundedIntText(value=s['memory_mb'],min=256,max=1048576,description='Total memory (MiB)',style=style)
         self.walltime = ipw.BoundedIntText(value=s['wallclock_seconds']//60,min=1,max=10080,description='Wall time (minutes)',style=style)
         self.threshold = ipw.FloatText(value=1e-6,description='CI print threshold',style=style)
-        self.force = ipw.Checkbox(value=False,description='Recompute this CASCI sector',layout=ipw.Layout(width='auto'))
+        self.force = ipw.Checkbox(value=False,description='Recompute requested CASCI sectors',layout=ipw.Layout(width='auto'))
         self.space_info = ipw.HTML()
         advanced = ipw.Accordion(children=[ipw.VBox([self.aux,self.threshold,self.nprocs,self.memory,self.walltime,self.force])],selected_index=None)
         advanced.set_title(0,'CASCI resources and advanced settings')
-        self.review = ipw.Button(description='Review CASCI calculation',icon='list',button_style='primary',layout=ipw.Layout(width='auto'))
+        self.review = ipw.Button(description='Review charge / spin combinations',icon='list',button_style='primary',layout=ipw.Layout(width='auto'))
         self.review.on_click(self._review_casci)
-        self.submit = ipw.Button(description='Compute states',icon='play',button_style='success',disabled=True)
+        self.submit = ipw.Button(description='Submit reviewed calculations',icon='play',button_style='success',disabled=True,
+                                 layout=ipw.Layout(width='auto'))
         self.submit.on_click(self._submit_casci)
         self.message, self.status = ipw.HTML(), ipw.HTML()
-        self.previous = ipw.Dropdown(description='CASCI calculations',style=style,layout=wide)
+        self.batch_review, self.batch_status = ipw.HTML(), ipw.HTML()
+        self.execution_info, self.history_status = ipw.HTML(), ipw.HTML()
+        self.result_charge = ipw.Dropdown(options=[('All available charges',None)],
+            description='Available charge',style=style,layout=wide)
+        self.result_charge.observe(self._filter_runs,names='value')
+        self.previous = ipw.Dropdown(description='Calculation to inspect',style=style,layout=wide)
         self.previous.observe(self._open_previous,names='value')
+        self.history = ipw.Accordion(children=[ipw.VBox([
+            ipw.HTML('<p>Inspect the status of individual saved calculations here. '
+                'The energy diagram above always includes all compatible completed charge/spin sectors. '
+                'This selection does not filter the diagram or change submission settings.</p>'),
+            self.result_charge,self.previous,self.history_status])],selected_index=None)
+        self.history.set_title(0,'Calculation history and status')
         self.diagram_box = ipw.VBox()
         self.empty = ipw.HTML()
         self.analysis = ipw.ToggleButtons(options=[('Many-electron states', 'states'),
@@ -89,24 +105,34 @@ class CasciStates(ipw.VBox):
         self.common_preparation = ipw.VBox([
             ipw.HTML('<h4>Common spatial-orbital reference</h4><p>One shared set of spatial orbitals is used for all CASCI states and charge/spin sectors. '
                 'Preparing it reads the saved wavefunction without running a new SCF calculation.</p>'),
-            self.prepare,self.common_submit,self.preparation_actions,common_options])
+            self.execution_info,self.prepare,self.common_submit,self.preparation_actions,common_options])
         self.active_controls = ipw.HBox([self.electrons,self.norb],layout=ipw.Layout(flex_flow='row wrap'))
         self.sector_preparation = ipw.VBox([
-            ipw.HTML('<h4>Add a charge / spin sector</h4>'),
-            ipw.HTML('<p>Each request computes one charge and multiplicity. To add another spin sector, '
-                'review and submit another request with the same confirmed active space. '
-                'Compatible saved sectors appear together in the energy diagram.</p>'),
+            ipw.HTML('<h4>Add charge / spin sectors</h4>'),
+            ipw.HTML('<p>Request one combination or a list of charges and multiplicities. Review all pairs '
+                'below before submitting. Each allowed pair is an independent AiiDA calculation; '
+                'incompatible pairs are listed with reasons and skipped. Compatible saved sectors '
+                'appear together in the energy diagram.</p>'),
             ipw.HTML('<p><b>Choose the active space explicitly.</b> The small initial values are a starting example, not a validated '
-            'choice for your molecule. The same spatial orbitals are used for N and N±1; their active electron counts adjust with charge.</p>'),
-            self.charge,self.mult,self.roots,
+            'choice for your molecule. All charge sectors use the same spatial orbitals; their active electron counts adjust with charge.</p>'),
+            self.charge,ipw.HTML('<p><b>Charges are absolute molecular charges</b>, not changes relative '
+                'to the reference. Use spaces or commas: <code>0 +1 -1 +2 -2</code>. '
+                'Charge +1 means one electron fewer than the neutral molecule; −1 means one more. '
+                'For reference charge q₀, active electrons = reference active electrons − (q − q₀).</p>'),
+            self.mult,ipw.HTML('<p>Enter multiplicities separated by spaces or commas, e.g. '
+                '<code>1 2 3 4</code>: singlet, doublet, triplet, quartet. '
+                'Even electron counts allow odd multiplicities; odd counts allow even multiplicities. '
+                'The active-space size also limits the highest possible spin. '
+                'The app tests every requested charge/multiplicity pair and never substitutes a different spin.</p>'),self.roots,
             ipw.HTML('<p><b>Electronic states (also called roots):</b> '
                 '<b>1</b> requests the lowest-energy CASCI state in the chosen charge/spin sector; '
                 '<b>2</b> also requests the next state, and so on. '
-                'This is separate from the number of active orbitals.</p>'),
-            advanced,self.review,self.submit])
+                'This count applies to each allowed sector and is separate from the number of active orbitals. '
+                'If fewer states exist, the review table explicitly shows the available count.</p>'),
+            advanced,self.review,self.batch_review,self.submit,self.batch_status])
         self.calculation = ComputePanel('Prepare orbitals / add CASCI states…',
                                         [self.common_preparation,self.sector_preparation])
-        self.states_view = ipw.VBox([self.previous,self.status,self.empty,self.diagram_box,
+        self.states_view = ipw.VBox([self.status,self.empty,self.diagram_box,self.history,
             self.inspect if on_inspect else self.inspection_box, self.calculation,self.message])
         self.guide = kondo_preparation_guide()
         self.reference_controls = ipw.HBox([self.reference,self.refresh],layout=ipw.Layout(flex_flow='row wrap'))
@@ -120,7 +146,6 @@ class CasciStates(ipw.VBox):
         self.electrons.observe(self._refresh_diagram,names='value')
         self.norb.observe(self._refresh_diagram,names='value')
         self.aux.observe(self._refresh_diagram,names='value')
-        self.charge.observe(self._charge_changed,names='value')
         self._refresh()
 
     def set_stage(self, stage):
@@ -133,7 +158,7 @@ class CasciStates(ipw.VBox):
         self.reference_controls.layout.display = '' if preparing or legacy else 'none'
         self.active_controls.layout.display = '' if legacy else 'none'
         self.space_info.layout.display = 'none' if preparing else ''
-        for widget in (self.previous, self.empty, self.inspect, self.inspection_box, self.diagram_box):
+        for widget in (self.history,self.empty, self.inspect, self.inspection_box, self.diagram_box):
             widget.layout.display = 'none' if preparing else ''
         self.calculation.toggle.description = 'Prepare orbital reference' if preparing else 'Add / extend CASCI states'
         if preparing:
@@ -145,6 +170,7 @@ class CasciStates(ipw.VBox):
         self.submit.disabled = True
         self.common_submit.disabled = True
         self.message.value = ''
+        self.batch_review.value = ''
         self._space_text()
 
     def _space_text(self):
@@ -155,9 +181,7 @@ class CasciStates(ipw.VBox):
         try:
             ref = service.reference_data(self.reference.value)
             start = (ref['n_electrons']-self.electrons.value)//2
-            count = self.electrons.value-self.charge.value+ref['charge']
-            sector = (f'This charge sector: <b>CAS({count},{self.norb.value})</b>.' if self.analysis.value == 'states' else
-                      f'Reference active space: <b>CAS({self.electrons.value},{self.norb.value})</b>.')
+            sector = f'Reference active space: <b>CAS({self.electrons.value},{self.norb.value})</b> at charge {ref["charge"]:+d}.'
             self.space_info.value = (f'<p>ORCA orbital indices <b>{start}–{start+self.norb.value-1}</b> (start at 0). '
                 f'{sector} Orbitals are held fixed; orbital reordering is not yet available.</p>')
             if self._inspection:
@@ -165,18 +189,13 @@ class CasciStates(ipw.VBox):
         except Exception as exc:
             self.space_info.value = '<p>'+html.escape(str(exc))+'</p>'
 
-    def _charge_changed(self, _=None):
-        if self.reference.value:
-            ref = service.reference_data(self.reference.value)
-            count = ref['n_electrons']-self.charge.value+ref['charge']
-            self.mult.value = 1 if count%2==0 else 2
-
     def _reference_changed(self, _=None):
         if self._inspection:
             self._inspection.close()
             self._inspection = None
             self.inspection_box.children = (ipw.HTML("Open orbital inspection to read this reference."),)
         self._invalidate()
+        self._execution_text()
         self._refresh_runs()
         self._refresh_diagram()
         if self.inspection_box.selected_index == 0:
@@ -244,15 +263,47 @@ class CasciStates(ipw.VBox):
             self.reference.value = rows[0]['uuid']
         self._refresh_runs()
         self._refresh_diagram()
+        self._execution_text()
+
+    def _execution_text(self):
+        explanation = ('<p><b>Computer and resources:</b> orbital preparation inherits the SCF '
+            'calculation’s ORCA code, computer, process count, memory and wall-time limit. '
+            'Saved remote or stashed wavefunctions are read on that computer. '
+            'CASCI keeps the orbital reference’s computer; its processes, memory and wall time '
+            'can be edited under <b>CASCI resources and advanced settings</b>.</p>')
+        try:
+            context = service.execution_details(self.reference.value or self.source_uuid)
+            self._execution_context = context
+            self.execution_info.value = (explanation+f'<p><b>Inherited preparation settings:</b> '
+                f'{html.escape(context["code"])}@{html.escape(context["computer"])}; '
+                f'{context["nprocs"]} processes, {context["memory_mb"]} MiB total memory, '
+                f'{context["wallclock_seconds"]//60} minutes wall-time limit.</p>')
+        except Exception as exc:
+            self._execution_context = None
+            self.execution_info.value = explanation+'<p>Execution details unavailable: '+html.escape(str(exc))+'</p>'
 
     def _refresh_runs(self):
         rows = service.runs(self.reference.value) if self.reference.value else []
         self._runs = {r['uuid']:r for r in rows}
+        keep_charge = self.result_charge.value
+        charges = sorted({r['settings']['charge'] for r in rows})
+        self.result_charge.unobserve(self._filter_runs,names='value')
+        try:
+            self.result_charge.options = [('All available charges',None)]+[(f'Charge {q:+d}',q) for q in charges]
+            self.result_charge.value = keep_charge if keep_charge in charges else None
+        finally:
+            self.result_charge.observe(self._filter_runs,names='value')
+        self._filter_runs()
+
+    def _filter_runs(self, _=None):
+        rows = [r for r in self._runs.values() if self.result_charge.value is None or
+                r['settings']['charge'] == self.result_charge.value]
+        available = {row['uuid'] for row in rows}
         keep = self.previous.value
         self.previous.options = [('Select a CASCI calculation',None)]+[(f"{r['date'][:16]} · {r['state']} · {r['label']}",r['uuid']) for r in rows]
-        if self.process_uuid in self._runs:
+        if self.process_uuid in available:
             self.previous.value = self.process_uuid
-        elif keep in self._runs:
+        elif keep in available:
             self.previous.value = keep
         elif rows:
             self.previous.value = rows[0]['uuid']
@@ -261,21 +312,12 @@ class CasciStates(ipw.VBox):
         if not change['new']:
             return
         row = self._runs[change['new']]
-        self.electrons.value = row['space']['electrons']
-        self.norb.value = len(row['space']['orbitals'])
         s = row['settings']
-        self.charge.value = s['charge']
-        self.mult.value = s['multiplicity']
-        self.roots.value = s['nroots']
-        self.aux.value = s['auxiliary_basis']
-        self.threshold.value = s['tprintwf']
-        self.nprocs.value = s['nprocs']
-        self.memory.value = s['memory_mb']
-        self.walltime.value = s['wallclock_seconds']//60
-        self.process_uuid = row['uuid']
-        data = service.progress(self.process_uuid)
-        self.status.value = '<p>'+html.escape(data['state']+' · '+data['message'])+'</p>'
-        if not data['finished']:
+        data = service.progress(row['uuid'])
+        self.history_status.value = (f'<p>Saved calculation: charge {s["charge"]:+d}, multiplicity {s["multiplicity"]}, '
+            f'{s["nroots"]} states · '+html.escape(data['state']+' · '+data['message'])+'</p>')
+        if not data['finished'] and not self._running:
+            self.process_uuid = row['uuid']
             try:
                 if self._poll_task:
                     self._poll_task.cancel()
@@ -283,10 +325,10 @@ class CasciStates(ipw.VBox):
                 self._poll_task = asyncio.get_running_loop().create_task(self._poll())
             except RuntimeError:
                 pass
-        self._refresh_diagram()
 
     def _review_common(self, _=None):
         self._invalidate()
+        self._execution_text()
         try:
             self.plan = service.prepare_common(self.source_uuid,self.common_force.value)
             text = ('Reuse preserved common orbitals.' if self.plan['action']=='reuse' else
@@ -304,13 +346,15 @@ class CasciStates(ipw.VBox):
         try:
             if not self.reference.value:
                 raise ValueError('Prepare or select common orbitals first')
-            values = {'charge':self.charge.value,'multiplicity':self.mult.value,'nroots':self.roots.value,
+            values = {'nroots':self.roots.value,
                 'auxiliary_basis':self.aux.value.strip(),'tprintwf':self.threshold.value,
                 'nprocs':self.nprocs.value,'memory_mb':self.memory.value,'wallclock_seconds':self.walltime.value*60}
-            self.plan = service.prepare_casci(self.reference.value,self.electrons.value,self.norb.value,values,self.force.value)
-            text = 'Reuse the available CASCI states.' if self.plan['action']=='reuse' else 'Run one fixed-geometry, fixed-orbital CASCI calculation.'
-            self.message.value = '<p><b>'+text+'</b></p><details><summary>ORCA input preview</summary><pre>'+html.escape(self.plan['input'])+'</pre></details>'
-            self.submit.disabled = self._running
+            charges = casci_batch.parse_integer_list(self.charge.value,'charges')
+            multiplicities = casci_batch.parse_integer_list(self.mult.value,'multiplicities',positive=True)
+            self.plan = casci_batch.prepare_batch(self.reference.value,self.electrons.value,self.norb.value,
+                charges,multiplicities,values,self.force.value)
+            self.batch_review.value = casci_batch.review_html(self.plan,self._execution_context)
+            self.submit.disabled = self._running or not self.plan['ready']
         except Exception as exc:
             self._error(exc)
 
@@ -322,8 +366,74 @@ class CasciStates(ipw.VBox):
             self._launch(service.submit_common)
 
     def _submit_casci(self, _=None):
-        if self.plan and not self.submit.disabled:
-            self._launch(service.submit_casci)
+        if not self.plan or self.plan.get('kind') != 'casci-batch' or self.submit.disabled:
+            return
+        plan,self.plan = self.plan,None
+        self.submit.disabled,self.common_submit.disabled,self._running = True,True,True
+        self._batch_jobs = []
+        stopped = False
+        for row in plan['rows']:
+            if row['status'] not in ('compute','reuse','running'):
+                continue
+            record = {'charge':row['charge'],'multiplicity':row['multiplicity'],
+                      'uuid':None,'state':'not submitted','finished':True,'success':False,'message':''}
+            self._batch_jobs.append(record)
+            if stopped:
+                continue
+            try:
+                if row['status'] == 'compute':
+                    uuid = service.submit_casci(row['plan'])
+                    record.update(uuid=str(uuid),state='submitted',finished=False)
+                else:
+                    record.update(uuid=row['uuid'],state='reused' if row['status']=='reuse' else 'already running',
+                                  finished=row['status']=='reuse',success=row['status']=='reuse')
+            except Exception as exc:
+                record.update(state='submission failed',message=str(exc))
+                stopped = True
+        self._batch_status()
+        if any(not row['finished'] for row in self._batch_jobs):
+            try:
+                if self._batch_task:
+                    self._batch_task.cancel()
+                self._batch_task = asyncio.get_running_loop().create_task(self._poll_batch())
+            except RuntimeError:
+                self._running = False
+        else:
+            self._running = False
+            self._refresh()
+
+    def _batch_status(self):
+        rows = data_table(['Charge','Multiplicity','Status','Calculation UUID','Details'],[
+            [f'{row["charge"]:+d}',row['multiplicity'],row['state'],row['uuid'] or '—',row['message']]
+            for row in self._batch_jobs],numeric_columns=(0,1),label='Batch calculation status')
+        self.batch_status.value = ('<h4>Reviewed batch</h4><p>Submitted calculations continue in AiiDA '
+            'if this page is closed. A submission error stops the remaining requests; completed submissions are retained.</p>'
+            +rows)
+
+    async def _poll_batch(self):
+        try:
+            while True:
+                changed = False
+                for row in self._batch_jobs:
+                    if row['finished']:
+                        continue
+                    try:
+                        data = service.progress(row['uuid'])
+                        row.update(state=data['state'],finished=data['finished'],success=data['success'],
+                                   message=data['message'])
+                        changed = changed or data['finished']
+                    except Exception as exc:
+                        row['message'] = 'Status unavailable: '+str(exc)
+                self._batch_status()
+                if changed:
+                    self._refresh_runs()
+                    self._refresh_diagram()
+                if all(row['finished'] for row in self._batch_jobs):
+                    self._running = False
+                    return
+                await asyncio.sleep(3)
+        except asyncio.CancelledError:
+            pass
 
     def _launch(self, function):
         try:
@@ -385,6 +495,8 @@ class CasciStates(ipw.VBox):
         self._disposed = True
         if getattr(self,'_poll_task',None):
             self._poll_task.cancel()
+        if getattr(self,'_batch_task',None):
+            self._batch_task.cancel()
         if getattr(self,'_diagram',None):
             self._diagram.close()
             self._diagram = None

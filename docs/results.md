@@ -92,3 +92,11 @@ and polling tasks once.
 
 The backend workflows, scientific parameters, physical conventions and package
 pins are unchanged by this presentation refactor.
+
+## Export to openBIS
+
+The optional [shared-export workspace](openbis-export.md) opens the common
+experiment/molecule selection and combined review for the whole geometry entry.
+Related completed analyses are automatically split into their scientific
+categories. It exports AiiDA-stored data only. Opening and reviewing the form do
+not upload or submit calculations.

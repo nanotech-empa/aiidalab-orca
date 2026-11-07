@@ -113,6 +113,7 @@ class ResultsView(ipw.VBox):
             ('quantum_energy', 'Quantum-assisted energy levels', self._quantum_energy),
             ('states', 'CASCI, Dyson & Kondo', self._states),
             ('vibrations', 'Vibrations', self._vibrations),
+            ('export', 'Export to openBIS', self._export),
             ('xps', 'XPS · Work in progress', self._xps),
             ('details', 'Calculation details', self._details),
         ])
@@ -198,7 +199,7 @@ class ResultsView(ipw.VBox):
             if task in dict(self.navigation.options).values():
                 self.navigation.value = task
             self.continue_goal.layout.display = '' if self.goal and task != self.goal else 'none'
-            if task in ('overview', 'details'):
+            if task in ('overview', 'details', 'export'):
                 self.analysis_hint.layout.display = 'none'
                 return self.tabs.show_section(task)
             if task == 'pdos':
@@ -407,6 +408,10 @@ class ResultsView(ipw.VBox):
                                   + input_details(data.get('input_files', {}))))
         items.append(ipw.HTML('<h4>Provenance and identifiers</h4>'+provenance))
         return ipw.VBox(items)
+
+    def _export(self):
+        from .openbis import OpenbisExport
+        return OpenbisExport(self.data['uuid'])
 
     def _xps(self):
         return ipw.HTML('<h3>XPS · Work in progress</h3>'

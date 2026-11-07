@@ -363,3 +363,22 @@ allowed-values hint is bounded by the electron count and does not predict the
 physical ground-state spin. Geometry/SCF and CASCI memory inputs display GiB;
 the existing `memory_mb` settings and backend still use integer MiB (2 GiB =
 2048 MiB). Assistant snapshots and copied settings preserve that meaning.
+
+## Exporting results to openBIS
+
+The optional **Export to openBIS** workspace passes the geometry/SCF entry UUID
+to the shared exporter; see [the export guide](../../../docs/openbis-export.md).
+Its experiment/molecule selectors and combined review cover all connected,
+completed results at that exact stored geometry, including independent analysis
+workflows. Do not add an app-specific calculation picker or bypass the common
+review. Refresh results if new analyses finish; a changed result set invalidates
+the old review. Only the shared form's explicit Export action publishes data.
+
+Dyson/Kondo orbitals and maps use `SPM_SIMULATION`. Whole CASCI state tables,
+Dyson transitions and Kondo exchange matrices retain their structure in AiiDA
+archives, with labelled unclassified result records pending a dedicated schema.
+Do not call UNO occupations an energy DOS or hide multi-root data behind one
+energy value. The export boundary is data already stored in AiiDA: remote/stash
+references do not include external file contents. Do not retrieve or regenerate
+files to make an export appear complete. Future schema changes must update the
+normative openBIS document and its code/models before any reviewed deployment.

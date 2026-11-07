@@ -67,7 +67,7 @@ def test_unoptimized_reference_explains_vibration_prerequisite(monkeypatch):
         panel = result.tabs.show_section('vibrations')
         assert 'geometry optimization' in panel.value
         assert result.tabs.titles == ('Overview', 'Orbitals & density', 'Inspect orbitals / active space', 'Choose energy solver', 'Quantum-assisted energy levels', 'CASCI, Dyson & Kondo',
-                                     'Vibrations', 'XPS · Work in progress', 'Calculation details')
+                                     'Vibrations', 'Export to openBIS', 'XPS · Work in progress', 'Calculation details')
     finally:
         close_widget_tree(result)
 

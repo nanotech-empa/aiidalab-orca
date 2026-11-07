@@ -23,6 +23,8 @@ orca-dyson = "aiida_empa_orca.dyson_tools:main"
 orca-tools = "aiida_empa_orca.tools:main"
 
 [project.entry-points."aiida.calculations"]
+"empa_orca.energy_hamiltonian" = "aiida_empa_orca.energy:EnergyHamiltonianCalculation"
+"empa_orca.energy_stage" = "aiida_empa_orca.energy:EnergyStageCalculation"
 "empa_orca.kondo" = "aiida_empa_orca.kondo:KondoCalculation"
 "empa_orca.kondo_cubes" = "aiida_empa_orca.kondo:KondoCubesCalculation"
 "empa_orca.kondo_reference_cubes" = "aiida_empa_orca.kondo:KondoReferenceCubesCalculation"
@@ -43,6 +45,8 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.calculation:SinglePointCalculation"
 
 [project.entry-points."aiida.parsers"]
+"empa_orca.energy_hamiltonian" = "aiida_empa_orca.energy:EnergyHamiltonianParser"
+"empa_orca.energy_stage" = "aiida_empa_orca.energy:EnergyStageParser"
 "empa_orca.kondo" = "aiida_empa_orca.kondo:KondoParser"
 "empa_orca.kondo_cubes" = "aiida_empa_orca.kondo:KondoCubesParser"
 "empa_orca.kondo_maps" = "aiida_empa_orca.maps:DysonMapsParser"
@@ -62,6 +66,7 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.parser:SinglePointParser"
 
 [project.entry-points."aiida.workflows"]
+"empa_orca.energy_export" = "aiida_empa_orca.energy:EnergyExportWorkChain"
 "empa_orca.kondo" = "aiida_empa_orca.kondo:KondoWorkChain"
 "empa_orca.kondo_cubes" = "aiida_empa_orca.kondo:KondoCubesWorkChain"
 "empa_orca.vibrations" = "aiida_empa_orca.vibrations:VibrationsWorkChain"

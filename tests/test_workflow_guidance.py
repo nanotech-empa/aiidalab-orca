@@ -1,4 +1,5 @@
 from importlib.resources import files
+from importlib import import_module
 import tomllib
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,7 +19,13 @@ def test_packaged_agent_guide_is_the_declared_chat_resource():
     assert 'does not expose\nCASCI, Dyson or Kondo' in guide['text']
     assert 'not permission' in guide['text']
     metadata = tomllib.loads((Path(__file__).parents[1] / 'pyproject.toml').read_text())
-    assert metadata['project']['entry-points']['aiidalab_assistant.workflow_guides']['orca'] == 'aiidalab_orca.guidance:workflow_guides'
+    entry_point = metadata['project']['entry-points']['aiidalab_assistant.workflow_guides']['orca']
+    module, function = entry_point.split(':')
+    registered = getattr(import_module(module), function)()
+    by_id = {item['id']: item for item in registered}
+    assert len(by_id) == len(registered)
+    assert by_id['orca.casci-kondo'] == guide
+    assert by_id['orca.quantum-energy']['text'] == files('aiidalab_orca').joinpath('knowledge/quantum-energy.md').read_text()
     assert 'knowledge/*.md' in metadata['tool']['setuptools']['package-data']['aiidalab_orca']
 
 

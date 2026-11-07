@@ -9,12 +9,15 @@ also readable here on GitHub. Do not maintain a separate copy for each model.
 | App orientation, geometry/SCF, step-by-step routes and official references | `orca.app` | [Start here](../../src/aiidalab_orca/knowledge/orca.md) |
 | Common orbitals, CASCI, Dyson, Kondo and scientific acceptance | `orca.casci-kondo` | [Electronic-analysis guide](../../src/aiidalab_orca/knowledge/casci-kondo.md) |
 | Harmonic IR/Raman, geometry selection and the acknowledged fixed-geometry route | `orca.vibrations` | [Vibrations guide](../../src/aiidalab_orca/knowledge/vibrations.md) |
+| ORCA CASCI versus full exported or QPU/simulator-selected Hamiltonian solves, sampling checks and saved ORCA comparisons | `orca.quantum-energy` | [Quantum-assisted energy guide](../../src/aiidalab_orca/knowledge/quantum-energy.md) |
 
 In the AiiDAlab chat, consult the guides delivered in the current instructions
 or use `read_workflow_guide(guide_id)`. The shared assistant discovers them
 through `aiidalab_assistant.workflow_guides`, supplies their text before calling
 any provider, and records their SHA-256. Prefer the installed guide and live
 capabilities when they differ from a different Git branch or an old example.
+The ORCA registration includes `orca.quantum-energy` under the ORCA app identity,
+so a generic next-step question in ORCA context also receives that guide.
 Reading a guide does not submit a calculation or authorize an action.
 
 When working outside that chat, follow the relative links above and inspect
@@ -36,5 +39,6 @@ active spaces, capabilities or a molecule-specific recipe for a new system.
 The guides describe the assembled standard-app preview. Its constituent
 navigation, batch CASCI, spectral-map, resource and vibration changes can be
 open PRs rather than merged releases. Check the installed GUI before promising
-a control. XPS is a **Work in progress** placeholder; QPU/DMRG extensions are
-separate from this standard-user route and must not be disturbed by navigation.
+a control. XPS is a **Work in progress** placeholder. The standard quantum-assisted energy
+route is covered by `orca.quantum-energy`; separate QPU/DMRG research extensions
+must not be disturbed by navigation.

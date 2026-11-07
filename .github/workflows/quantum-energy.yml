@@ -1,0 +1,26 @@
+name: Quantum energy workers
+
+on:
+  pull_request:
+    paths:
+      - 'quantum-tools/**'
+      - '.github/workflows/quantum-energy.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'quantum-tools/**'
+      - '.github/workflows/quantum-energy.yml'
+
+jobs:
+  worker-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install './quantum-tools[quantum,hardware]' pytest
+      - run: python -m pytest -q quantum-tools/tests
+        env:
+          OMP_NUM_THREADS: '2'
+          OPENBLAS_NUM_THREADS: '2'

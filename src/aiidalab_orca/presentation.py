@@ -24,8 +24,8 @@ class ComputePanel(ipw.VBox):
         self.toggle.value = True
 
 
-class LazyTabs(ipw.Tab):
-    """Construct a property once, retaining its viewers and selections."""
+class _LazySections:
+    """Construct each section once, retaining its viewers and selections."""
 
     def __init__(self, sections):
         self.section_keys = [key for key, _, _ in sections]
@@ -79,3 +79,11 @@ class LazyTabs(ipw.Tab):
             panel = self.panels.get(self.section_keys[self.selected_index])
             if panel and hasattr(panel, 'set_active'):
                 panel.set_active(active)
+
+
+class LazyTabs(_LazySections, ipw.Tab):
+    """Lazy sections with their own tab navigation."""
+
+
+class LazyStack(_LazySections, ipw.Stack):
+    """Lazy sections controlled by an external selector, without a second menu."""

@@ -254,7 +254,7 @@ def test_submission_retry_and_explicit_edit_copy(source, monkeypatch):
         app._submit()
         assert len(calls) == 2  # No accidental second submission.
         app._edit_copy()
-        assert app.draft_panel.children == (app.steps,)
+        assert app.draft_panel.children == (app.calculation_start, app.steps)
         assert not app._structure_confirmed and not app._settings_confirmed
         assert app.submit_button.disabled
         assert app.structure.atoms.get_chemical_formula() == "NO"

@@ -186,6 +186,10 @@ def test_preparation_then_explicit_active_selection_precedes_state_requests(monk
         selection.electrons.value,selection.norb.value = 4,4
         assert (panel.electrons.value,panel.norb.value) == (2,2)
         selection.confirm.click()
+        assert result.navigation.value == 'energy'
+        route = result.tabs.panels['energy']
+        assert 'quantum' not in dict(route.choice.options).values()
+        route.continue_button.click()
         assert result.navigation.value == 'casci'
         assert result.confirmed_space == ('common',4,4)
         assert panel.sector_preparation.layout.display == '' and panel.common_preparation.layout.display == 'none'
@@ -195,7 +199,7 @@ def test_preparation_then_explicit_active_selection_precedes_state_requests(monk
         assert result.tabs.panels['active'] is selection
         selection.inspection.apply_window([2,3,4,5,6])
         assert result.confirmed_space == ('common',6,5)
-        assert result.navigation.value == 'casci' and result.goal == 'kondo'
+        assert result.navigation.value == 'energy' and result.goal == 'kondo'
         result.open_analysis('prepare')
         panel.reference.options = [('New reference','another-common')]
         result.open_analysis('casci')

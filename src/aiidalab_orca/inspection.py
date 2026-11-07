@@ -88,6 +88,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         data = self.catalog_record['data']
         previous = self.kind.value
         options = [(('QRO · integer reference occupations' if kind == 'QRO' else
+                    'CASSCF · correlated natural occupations' if kind == 'CASSCF' else
                     'UNO · fractional natural occupations' if kind == 'UNO' else 'Restricted SCF orbitals'),kind)
                    for kind in data['sets']]
         self.kind.options = options
@@ -108,11 +109,13 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         record = data['sets'][kind]
         self.review.disabled = False
         self.use_window.disabled = kind == 'UNO' or self.apply_window is None
-        self.use_window.description = ('Use selected orbital window for CASCI' if kind == 'restricted' else
+        self.use_window.description = ('Use selected orbital window for CASCI' if kind in ('restricted', 'CASSCF') else
                                        'Use selected QRO window for CASCI')
         description = ('Fractional occupations diagonalize the source SCF spin-summed density matrix. '
             'They are diagnostics of that SCF reference, not correlated CASCI occupations. UNO indices belong to the UNO ordering; '
             'they are not a one-to-one assignment to QROs.' if kind == 'UNO' else
+            'Correlated natural occupations describe the selected CASSCF state or weighted state average. '
+            'These orbitals have no canonical Kohn–Sham energy; orbital character is shown by index.' if kind == 'CASSCF' else
             'Integer occupations describe this orbital reference. The orbital energies are QRO labels, not CASCI state energies.' if kind == 'QRO' else
             'Restricted SCF orbitals are retained without an unrestricted-to-QRO conversion.')
         if kind == 'QRO' and 'UNO' not in data['sets']:
@@ -122,7 +125,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         for row in record['levels']:
             index, occ = row['index'],row['occupation']
             display_occ = max(0.,min(2.,occ))  # Only suppress round-off at endpoints in display.
-            label = f'{kind} {index} · '+('natural occ ' if kind == 'UNO' else 'reference occ ')+f'{display_occ:.6f}'
+            label = f'{kind} {index} · '+('natural occ ' if kind in ('UNO', 'CASSCF') else 'reference occ ')+f'{display_occ:.6f}'
             energy = f'{row["energy_ev"]:.2f}' if 'energy_ev' in row else '—'
             if 'energy_ev' in row:
                 label += f' · {energy} eV'

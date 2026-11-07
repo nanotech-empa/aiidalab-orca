@@ -65,8 +65,10 @@ current general CASCI input and spin-summed UNOs for inspection. UNO occupations
 lie between 0 and 2; UNOs are not separate alpha/beta lists. A restricted
 single determinant alone cannot supply correlated fractional natural occupations.
 Theoretical suitability of UNOs as a CAS starting basis does not mean this GUI
-currently exposes that input route. Do not promise correlated natural-orbital
-preparation, arbitrary orbital reordering or orbital-optimized CASSCF here.
+currently exposes that input route. Optional **Optimize orbitals · CASSCF**
+does provide correlated natural orbitals from a selected state or state average;
+it creates a new reference, not a conversion of the original SCF density.
+Do not promise arbitrary orbital reordering.
 
 Use **View orbitals and choose active space**, read orbital information and
 inspect occupations/shapes. Zero-based orbital indices accept spaces, commas
@@ -77,6 +79,16 @@ orbital confirmation; a QPU-specific permutation is not that general interface.
 Small initial CAS values are examples, not validated choices for the molecule.
 
 ## 3. CASCI states and charge/spin batches
+
+After active-space confirmation, **3. Choose energy solver** offers fixed-orbital
+CASCI, optional CASSCF orbital optimization, or quantum-assisted energies.
+For a Dyson/Kondo goal, only the compatible ORCA state-vector route is offered.
+CASSCF can optimize one root, or average explicitly weighted roots and
+multiplicities at one charge and geometry. The review lists normalized
+optimization weights; they are unrelated to populations or spectral weights.
+Successful optimization requires a passing independent frozen-orbital readback.
+Inspect and confirm the new natural-orbital reference before requesting CASCI
+sectors or a new QPU Hamiltonian export. Never mix old and new references.
 
 Use the same fixed geometry and common orbitals for compatible charge/spin
 sectors. **Charges** accepts absolute molecular charges, e.g. `0 +1 -1`;

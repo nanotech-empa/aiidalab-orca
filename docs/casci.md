@@ -166,8 +166,9 @@ from an isolated molecule.
   that sector. There is no monolithic all-charge workflow.
 - Local ORCA 6.1.1 integration is tested; tigu deployment remains separate.
 - [Dyson transitions, wavefunction export, spectra and intensity blends](dyson.md)
-  are now separate components. CASSCF orbital optimization, correlated-state
-  natural-orbital analysis and the quantitative STM map model remain future work.
+  are now separate components. Optional [CASSCF orbital optimization](casscf.md)
+  supplies a new shared natural-orbital reference; a quantitative STM model
+  remains a separate validation task.
 
 The input follows the fixed-orbital CASCI strategy in Andrés's supplied
 `setup_dyson.sh`, with explicit provenance and storage. See the

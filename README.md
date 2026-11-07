@@ -10,6 +10,12 @@ offers separate **Orbitals & density**, **States & Dyson**, **Vibrations** and
 CASCI does not require Dyson, and vibrations do not require either. Saved results
 appear before optional calculation forms. See [the results guide](docs/results.md).
 
+**CASSCF orbital-reference draft:** after inspecting and confirming the active
+space, optionally optimize one selected state or a weighted state average at
+fixed charge and geometry. A new reference becomes reusable only after a frozen
+saved-orbital energy check. Inspect its natural occupations and reconfirm it
+before CASCI/Dyson or quantum-assisted energies. See [the CASSCF guide](docs/casscf.md).
+
 **Harmonic IR and Raman draft:** a separate section on optimized-geometry results
 now submits an independent frequency workflow, retains the Hessian and
 derivatives in AiiDA, and reuses the QE vibroscopy spectra/mode-animation viewer

@@ -138,7 +138,12 @@ class EnergyHamiltonianCalculation(engine.CalcJob):
         if (
             producer is None
             or not producer.is_finished_ok
-            or producer.process_type != "aiida.calculations:empa_orca.common_orbitals"
+            or producer.process_type not in (
+                "aiida.calculations:empa_orca.common_orbitals",
+                "aiida.calculations:empa_orca.casscf",
+            )
+            or (producer.process_type == "aiida.calculations:empa_orca.casscf"
+                and reference.get("preparation") != "casscf_verified_v1")
             or str(self.inputs.code.uuid) != str(producer.inputs.code.uuid)
         ):
             raise ValueError(

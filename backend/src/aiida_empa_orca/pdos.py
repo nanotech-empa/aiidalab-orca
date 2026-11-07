@@ -29,7 +29,7 @@ class OrbitalCharacterCalculation(engine.CalcJob):
 
     def prepare_for_submission(self, folder):
         identity, location = self.inputs.identity.get_dict(), self.inputs.location.get_dict()
-        if identity['kind'] not in ('SCF', 'restricted', 'QRO', 'UNO'):
+        if identity['kind'] not in ('SCF', 'restricted', 'QRO', 'UNO', 'CASSCF'):
             raise ValueError('Unsupported orbital set')
         if self.inputs.source.uuid != location['uuid']:
             raise ValueError('The orbital location and provenance differ')

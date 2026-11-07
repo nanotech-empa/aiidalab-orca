@@ -8,11 +8,11 @@ import ase.io
 import ipywidgets as ipw
 import traitlets as tl
 from aiidalab_widgets_base import BasicStructureEditor, SmilesWidget
-from aiidalab_widgets_base.viewers import StructureDataViewer
 from aiidalab_widgets_empa import CdxmlUploadWidget
 
 from . import services, structure_io
 from .constraints import ConstraintEditor
+from .geometry_viewer import MolecularStructureViewer
 
 
 class StructureWidget(ipw.VBox):
@@ -61,7 +61,7 @@ class StructureWidget(ipw.VBox):
         ])
         for i, title in enumerate(["File / XYZ", "AiiDA structures", "CDXML", "Build from SMILES"]):
             self.importers.set_title(i, title)
-        self.viewer = StructureDataViewer(configuration_tabs=["Selection", "Appearance", "Download"])
+        self.viewer = MolecularStructureViewer()
         self.constraints = ConstraintEditor(self.viewer)
         self.constraint_panel = ipw.Accordion(children=[self.constraints], selected_index=None)
         self.constraint_panel.set_title(0, "Geometry optimization constraints (optional)")

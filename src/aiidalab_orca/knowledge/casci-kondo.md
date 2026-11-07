@@ -10,6 +10,39 @@ procedure and an automation design, not an instruction to change the user's
 method or submit more calculations. Follow the existing task's resource,
 retention and publication authorizations.
 
+## PDOS and orbital-character inspection
+
+New SCF/geometry calculations and common-orbital preparations include orbital
+character by default as workflow-managed child CalcJobs. Existing/reused
+references are never backfilled automatically. Read the saved PDOS directly;
+if its status reports missing tools or a failed analysis, fix/retry only that
+postprocessing, without repeating SCF. The geometry/SCF resources page has a
+checked **Compute PDOS / orbital character** option and independent **PDOS
+resources**. Preparing QRO/UNO includes character analysis for each new set.
+
+The draft **PDOS & orbital character** panel is available from **Orbitals &
+density** and inside prepared-reference inspection. Consult
+[the PDOS guide](../../../docs/pdos.md) before preparing its native CalcJob or
+interpreting π-like contributions. It uses symmetric Löwdin atomic/angular
+weights and an editable molecular-plane normal for perpendicular p character.
+This is a basis-dependent descriptor, not a unique full π/σ classification or
+an automatically justified CAS. Keep native spin/orbital identities unchanged.
+QRO energies are reference labels; UNOs use an occupation/index view without a
+KS-energy DOS. State DOS includes virtual orbitals and is not occupation weighted.
+The shared structure viewer links 3D atom selection and one-based ranges such as
+`1 3..5` to the PDOS fragment. Atom numbers start at 1; orbital indices remain
+0-based. Its selection panel also measures distances, angles and dihedrals.
+Input/final geometry inspection uses the same viewer; optimization frames and
+separate trajectory playback are display-only and never change the reference.
+
+Candidate selection forwards indices to the existing cube/inspection selector.
+CAS preparation still validates and applies them. Do not claim that candidate
+selection reordered orbitals or launched CASCI, or that this panel adds a new
+noncontiguous preparation route. Preserve existing research permutations.
+The extraction returns compact arrays; full coefficients/overlap remain on
+the source computer and no Python selector is shown. Inspect the current
+installed revision: separate native/browser qualification is not a live rollout.
+
 ## Contract for agents in the AiiDAlab chat
 
 Consult this installed app-owned guide before advising on or preparing CASCI,

@@ -13,6 +13,7 @@ from aiida_orca.calculations.orca_orca import OrcaCalculation
 
 from .artifacts import resolve_electronic, storage_builder, storage_policy
 from .input import render_input
+from .pdos_workflow import OrbitalCharacterMixin
 from .protocols import reference as reference_type
 from .reference import reference_settings, reference_signature, single_point_parameters
 
@@ -177,7 +178,7 @@ def matching_references(retrieved_uuid, code_uuid):
             yield str(uuid)
 
 
-class CommonOrbitalsWorkChain(engine.WorkChain):
+class CommonOrbitalsWorkChain(OrbitalCharacterMixin, engine.WorkChain):
     @classmethod
     def define(cls, spec):
         super().define(spec)
@@ -188,8 +189,10 @@ class CommonOrbitalsWorkChain(engine.WorkChain):
         spec.input('force_recompute', valid_type=orm.Bool, default=lambda:orm.Bool(False))
         for key, typ in {'orbital_reference':orm.Dict, 'remote_folder':orm.RemoteData, 'retrieved':orm.FolderData}.items():
             spec.output(key, valid_type=typ)
+        cls.character_spec(spec)
         spec.outline(cls.setup, engine.if_(cls.needs_preparation)(cls.prepare, cls.inspect,
-                     cls.preserve, cls.inspect_storage), cls.results)
+                     cls.preserve, cls.inspect_storage), cls.results,
+                     cls.run_orbital_character, cls.inspect_orbital_character)
         spec.exit_code(400, 'ERROR_SOURCE', message='The source orbitals or provenance are unavailable; see report.')
         spec.exit_code(401, 'ERROR_PREPARATION', message='Common spatial-orbital preparation failed.')
         spec.exit_code(402, 'ERROR_STORAGE', message='Common-orbital preservation failed.')

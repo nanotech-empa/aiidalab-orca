@@ -334,6 +334,10 @@ class CasciStates(ipw.VBox):
             self.plan = service.prepare_common(self.source_uuid,self.common_force.value)
             text = ('Reuse preserved common orbitals.' if self.plan['action']=='reuse' else
                     'Read the saved SCF orbitals without SCF iterations; prepare '+self.plan['kind']+' spatial orbitals and preserve them using the SCF wavefunction storage policy.')
+            if self.plan['action'] != 'reuse':
+                text += ' Orbital-character postprocessing is included for each newly prepared orbital set.'
+                if not self.plan.get('pdos', {}).get('ready'):
+                    text += ' Its exporter or analysis worker is not configured; PDOS will be reported as unavailable.'
             if self.plan['unavailable']:
                 text += ' Earlier common-orbital files are missing: preparation will run again, creating a new reference. Old CASCI states remain attached to their original reference.'
             self.message.value = '<p>'+html.escape(text)+'</p>'

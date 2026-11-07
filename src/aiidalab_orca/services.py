@@ -45,7 +45,8 @@ def validate_configuration(atoms, settings, optimize):
     validate_molecule(orm.StructureData(ase=atoms), values)
 
 
-def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *, atoms=None, imported=None, storage=None):
+def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *, atoms=None, imported=None,
+            storage=None, pdos=True, pdos_memory_gib=8):
     if atoms is not None:
         structure = orm.StructureData(ase=atoms)
     elif source_uuid.strip():
@@ -64,6 +65,8 @@ def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *,
             raise ValueError("The storage code must run on the ORCA computer")
     plan = (plan_geometry(structure, settings, code, force_recompute=force_recompute) if optimize else
             plan_reference(structure, settings, code, force_recompute=force_recompute))
+    from aiida_empa_orca.pdos_workflow import default_plan
+    character = default_plan(code.computer.uuid, enabled=pdos, memory_gib=pdos_memory_gib)
     if atoms is not None:
         from .structure_io import store_reviewed_structure
         structure = orm.load_node(store_reviewed_structure(atoms, source_uuid, imported))
@@ -71,7 +74,8 @@ def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *,
         structure.store()
     from aiida_empa_orca.input import preview_input
     return {"structure_uuid": str(structure.uuid), "code_uuid": str(code.uuid) if code else None,
-            "settings": settings, "storage": storage, "optimize": optimize, "force_recompute": force_recompute,
+            "settings": settings, "storage": storage, "pdos": character,
+            "optimize": optimize, "force_recompute": force_recompute,
             "plan": plan, "formula": structure.get_formula(),
             "source_description": structure_origin(structure),
             "input_files": preview_input(structure, settings, single_point=not optimize)}
@@ -104,6 +108,9 @@ def submit_plan(review, label):
     if review.get("storage"):
         builder.storage_policy = orm.Dict(dict=review["storage"]["policy"])
         builder.storage_code = orm.load_code(review["storage"]["code_uuid"])
+    if review.get("pdos"):
+        from aiida_empa_orca.pdos_workflow import configure
+        configure(builder, review["pdos"])
     builder.metadata.label = label.strip() or f"{review['formula']} {'optimization' if review['optimize'] else 'SCF'}"
     builder.metadata.description = "Submitted from AiiDAlab ORCA electronic structure app"
     node = submit(builder)
@@ -162,6 +169,11 @@ def result(uuid):
             except (FileNotFoundError, OSError):
                 pass
     data["warnings"] = [node.exit_message] if node.exit_status == 405 else []
+    if 'pdos_status' in node.outputs:
+        data['pdos_status'] = node.outputs.pdos_status.get_dict()
+        if data['pdos_status']['state'] in ('unavailable', 'incomplete'):
+            data['warnings'].append('PDOS postprocessing is incomplete. Electronic results are available; '
+                                    'retry only orbital-character analysis under Orbitals & density.')
     data["source_description"] = ""
     if "structure" in node.outputs:
         try:

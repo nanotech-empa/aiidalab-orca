@@ -33,6 +33,11 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self.info, self.occupations, self.table, self.metadata_download = (ipw.HTML() for _ in range(4))
         self.orbitals = ipw.SelectMultiple(description='Orbitals to inspect',style=style,layout=ipw.Layout(width='95%',height='170px'))
         self.selection_input = OrbitalIndexInput(self.orbitals,style=style)
+        self.pdos = None
+        self.character_box = ipw.VBox()
+        character_panel = ipw.Accordion(children=[self.character_box], selected_index=None)
+        character_panel.set_title(0, 'PDOS & orbital character · inspect CAS candidates')
+        character_panel.observe(self._open_character, names='selected_index')
         self.use_window = ipw.Button(description='Use selected QRO window for CASCI',icon='check',layout=ipw.Layout(width='auto'))
         self.use_window.on_click(self._apply_window)
         self.window_message = ipw.HTML()
@@ -62,7 +67,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
             'Once complete, choose an <b>Orbital to display</b> in the 3D viewer below. '
             'Preview generation is separate from CASCI.</p>'),
             self.read,self.status,self.message,self.kind,self.info,self.occupations,self.metadata_download,self.table,
-            self.selection_input,self.orbitals,
+            character_panel,self.selection_input,self.orbitals,
             ipw.HBox([self.review,self.submit],layout=ipw.Layout(flex_flow='row wrap')),self.calculation,
             self.previous,self.result_info,self.cube,self.download,self.cube_box,
             self.use_window,self.window_message])
@@ -97,6 +102,8 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         if not self.catalog_record or not self.kind.value:
             return
         kind = self.kind.value
+        if self.pdos:
+            self.pdos.select_kind(kind)
         data = self.catalog_record['data']
         record = data['sets'][kind]
         self.review.disabled = False
@@ -136,6 +143,19 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self.table.value = '<details><summary>All orbital indices and occupations</summary><table><tr><th>Index</th><th>Occupation</th><th>Orbital energy (eV)</th><th>CASCI window</th></tr>'+''.join(table)+'</table></details>'
         self._occupation_plot(record['levels'],kind)
         self._refresh_runs()
+
+    def _select_character_candidates(self, pairs):
+        self.orbitals.value = tuple(index for _, index in pairs)
+        self.window_message.value = ('<p>Selected orbital shapes for inspection. Use the existing CAS selection '
+            'controls to review the active space; this selection does not reorder orbitals or submit CASCI.</p>')
+
+    def _open_character(self, event):
+        if event['new'] is None or self.pdos:
+            return
+        from .pdos import PdosPanel
+        self.pdos = PdosPanel(self.common_uuid, kind=self.kind.value, on_select=self._select_character_candidates)
+        self.pdos.kind.layout.display = 'none'
+        self.character_box.children = (self.pdos,)
 
     def _occupation_plot(self,levels,kind):
         points = ' '.join(f'{45+620*i/max(1,len(levels)-1):.2f},{130-50*max(0.,min(2.,row["occupation"])):.2f}' for i,row in enumerate(levels))

@@ -11,6 +11,7 @@ dependencies = [
   "aiida-core>=2.9.2,<3",
   "aiida-orca @ git+https://github.com/ezpzbz/aiida-orca.git@36abfa6917819c3e9ff454cfa89d9fd013634d12",
   "ase",
+  "numpy",
   "PyYAML",
 ]
 
@@ -23,6 +24,7 @@ orca-dyson = "aiida_empa_orca.dyson_tools:main"
 orca-tools = "aiida_empa_orca.tools:main"
 
 [project.entry-points."aiida.calculations"]
+"empa_orca.orbital_character" = "aiida_empa_orca.pdos:OrbitalCharacterCalculation"
 "empa_orca.energy_hamiltonian" = "aiida_empa_orca.energy:EnergyHamiltonianCalculation"
 "empa_orca.energy_stage" = "aiida_empa_orca.energy:EnergyStageCalculation"
 "empa_orca.kondo" = "aiida_empa_orca.kondo:KondoCalculation"
@@ -45,6 +47,7 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.calculation:SinglePointCalculation"
 
 [project.entry-points."aiida.parsers"]
+"empa_orca.orbital_character" = "aiida_empa_orca.pdos:OrbitalCharacterParser"
 "empa_orca.energy_hamiltonian" = "aiida_empa_orca.energy:EnergyHamiltonianParser"
 "empa_orca.energy_stage" = "aiida_empa_orca.energy:EnergyStageParser"
 "empa_orca.kondo" = "aiida_empa_orca.kondo:KondoParser"

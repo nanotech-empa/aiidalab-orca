@@ -21,6 +21,8 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self._job_uuid,self._job_kind,self._poll_task = None,None,None
         self.spectrum = None
         self.map_panel = None
+        self.kondo_panel = None
+        self.kondo_box = ipw.VBox()
         self.map_box = ipw.Accordion(children=[],selected_index=None)
         choices = service.codes(self.common_uuid)
         style,wide = {'description_width':'155px'},ipw.Layout(width='95%')
@@ -83,7 +85,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.empty = ipw.HTML()
         self._view = 'spectrum'
         super().__init__([self.initial,self.previous,self.status,self.empty,self.calculation,self.message,
-                          self.spectrum_box,self.cube_controls])
+                          self.spectrum_box,self.cube_controls,self.kondo_box])
         self.initial.observe(self._initial_changed,names='value')
         self.side.observe(self._initial_changed,names='value')
         for w in (self.finals,self.loss,self.force,self.export_code,self.dyson_code):
@@ -97,6 +99,11 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self._view = view
         self.spectrum_box.layout.display = '' if view == 'spectrum' else 'none'
         self.cube_controls.layout.display = '' if view == 'maps' and self.record else 'none'
+        self.kondo_box.layout.display = '' if view == 'kondo' else 'none'
+        if view == 'kondo' and self.record and self.kondo_panel is None:
+            from .kondo import KondoChannels
+            self.kondo_panel = KondoChannels(self.record['transitions_uuid'], self.dyson_code.value, self.cubehandler_code.value)
+            self.kondo_box.children = (self.kondo_panel,)
         self.empty.value = ('' if self.record else '<p class="orca-notice">No Dyson result is available for this initial state. '
             'CASCI results remain usable on their own. Compute transitions here only if you need spectra or tunnelling maps.</p>')
         if view == 'maps':
@@ -118,6 +125,10 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             close_widget_tree(self.spectrum)
             self.spectrum = None
         self.record = None
+        if self.kondo_panel:
+            self.kondo_panel.close()
+            self.kondo_panel = None
+        self.kondo_box.children = ()
         if self.map_panel:
             self.map_panel.close()
             self.map_panel = None
@@ -228,6 +239,10 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             self._error(data['message'])
             return
         self.record = service.result(uuid)
+        if self.kondo_panel:
+            self.kondo_panel.close()
+            self.kondo_panel = None
+        self.kondo_box.children = ()
         if self.map_panel:
             self.map_panel.close()
             self.map_panel = None

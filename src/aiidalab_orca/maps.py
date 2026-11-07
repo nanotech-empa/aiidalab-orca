@@ -20,16 +20,18 @@ class DysonMaps(ipw.VBox):
         self.viewer, self.plan, self.map_uuid = None, None, None
         self._task, self._disposed, self._plane_controls = None, False, []
         self.source = service.source_data(cube_uuid)
-        amplitudes = [c for c in self.source['manifest']['cubes'] if c['kind'] == 'dyson']
+        self.kondo = self.source.get('table_input') == 'channels'
+        amplitudes = [c for c in self.source['manifest']['cubes'] if c['kind'] == ('kondo' if self.kondo else 'dyson')]
+        id_key = 'channel_id' if self.kondo else 'transition_id'
         first = amplitudes[0]
         cube = read_cube(io.StringIO(preview_content(cube_uuid, first['filename'])))
         span = (np.asarray(cube['data'].shape)-1) * np.linalg.norm(cube['spacing'], axis=1)
         self.defaults = default_plane(cube['atoms'].positions, .9*span[1], .9*span[0])
         style = {'description_width': '165px'}
-        self.selection = ipw.SelectMultiple(description='Map transitions', style=style,
-            options=[(c['transition_id'], c['transition_id']) for c in amplitudes],
-            value=tuple(c['transition_id'] for c in amplitudes), layout=ipw.Layout(width='95%', height='120px'))
-        self.kind = ipw.ToggleButtons(options=[('Individual transitions', 'individual'), ('Spectral blend', 'blend')])
+        self.selection = ipw.SelectMultiple(description='Map channels' if self.kondo else 'Map transitions', style=style,
+            options=[(c[id_key], c[id_key]) for c in amplitudes],
+            value=tuple(c[id_key] for c in amplitudes), layout=ipw.Layout(width='95%', height='120px'))
+        self.kind = ipw.ToggleButtons(options=[('Individual channels', 'individual')] if self.kondo else [('Individual transitions', 'individual'), ('Spectral blend', 'blend')])
         self.heights = ipw.Text(value='5, 7', description='Observation heights (Å)', style=style, layout=ipw.Layout(width='440px'))
         self.kappa = ipw.BoundedFloatText(value=1.15, min=.001, max=10, step=.01, description='Vacuum κ (Å⁻¹)', style=style)
         self.padding = ipw.BoundedIntText(value=0, min=0, max=512, description='FFT padding / edge', style=style)
@@ -73,7 +75,7 @@ class DysonMaps(ipw.VBox):
             'Observation heights use that same reference and normal. Full-resolution amplitudes are extrapolated before squaring and combining; '
             'the displayed reduced cube only helps position the plane.</p>'), self.reset, self.plane_info,
             self.selection, self.kind, self.heights, ipw.HBox([self.kappa, self.padding], layout=ipw.Layout(flex_flow='row wrap')),
-            ipw.HTML('<p>Blends use the energy/window, broadening and spin convention selected in the spectral viewer. '
+            ipw.HTML('<p>Each map shows one normalized Kondo eigenchannel. Exchange couplings identify AFM/FM channels; they are not spectral intensities. No NRG-based combined map is inferred.</p>' if self.kondo else '<p>Blends use the energy/window, broadening and spin convention selected in the spectral viewer. '
                      'Individual maps use its spin convention. The model produces STM-like intensities, without absolute current calibration.</p>'),
             self.review, self.compute])
         self.empty = ipw.HTML()
@@ -126,6 +128,10 @@ class DysonMaps(ipw.VBox):
             self.plane_info.value = '<p>Enter a valid source plane in the slice viewer.</p>'
 
     def _parameters(self):
+        if self.kondo:
+            return dict(plane=self._plane(), heights_angstrom=[float(v) for v in self.heights.value.replace(',', ' ').split()],
+                        kappa_inv_angstrom=self.kappa.value, padding=self.padding.value,
+                        channel_ids=list(self.selection.value), kind='individual')
         p = dict(plane=self._plane(), heights_angstrom=[float(v) for v in self.heights.value.replace(',', ' ').split()],
                  kappa_inv_angstrom=self.kappa.value, padding=self.padding.value,
                  transition_ids=list(self.selection.value), kind=self.kind.value, spin_convention=self.spectrum.spin.value)
@@ -230,8 +236,9 @@ class DysonMaps(ipw.VBox):
         self._apply_plane(p['plane'])
         self.heights.value = ', '.join(map(str, p['heights_angstrom']))
         self.kappa.value, self.padding.value = p['kappa_inv_angstrom'], p['padding']
-        self.selection.value, self.kind.value = tuple(p['transition_ids']), p['kind']
-        self.spectrum.spin.value = p['spin_convention']
+        self.selection.value, self.kind.value = tuple(p['channel_ids' if self.kondo else 'transition_ids']), p['kind']
+        if not self.kondo:
+            self.spectrum.spin.value = p['spin_convention']
         if p['kind'] == 'blend':
             b = p['blend']
             self.spectrum.mode.value, self.spectrum.energy.value = b['mode'], b['energy_ev']
@@ -278,7 +285,8 @@ class DysonMaps(ipw.VBox):
             links = []
             for key, mime in (('png', 'image/png'), ('pdf', 'application/pdf')):
                 encoded = base64.b64encode(result['images'][key]).decode()
-                links.append(f'<a download="dyson-maps.{key}" href="data:{mime};base64,{encoded}">Download {key.upper()}</a>')
+                filename = 'kondo-channel-maps' if self.kondo else 'dyson-maps'
+                links.append(f'<a download="{filename}.{key}" href="data:{mime};base64,{encoded}">Download {key.upper()}</a>')
             self.download.value = ' · '.join(links)+'<p>Stored image nodes: <code>'+result['png_uuid']+'</code> / <code>'+result['pdf_uuid']+'</code>.</p>'
             for key in ('vmin', 'vmax', 'cmap', 'dpi', 'rotation'):
                 getattr(self, key).value = result['settings'][key]

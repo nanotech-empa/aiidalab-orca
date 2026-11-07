@@ -7,6 +7,7 @@ import ipywidgets as ipw
 
 from . import casci_services as service
 from .state_levels import StateEnergyLevels
+from .guidance import kondo_preparation_guide
 
 
 class CasciStates(ipw.VBox):
@@ -72,7 +73,7 @@ class CasciStates(ipw.VBox):
         self.diagram_box = ipw.VBox()
         self.empty = ipw.HTML()
         self.analysis = ipw.ToggleButtons(options=[('Many-electron states', 'states'),
-            ('Dyson spectrum', 'spectrum'), ('Dyson orbitals & maps', 'maps')],
+            ('Dyson spectrum', 'spectrum'), ('Dyson orbitals & maps', 'maps'), ('Kondo orbitals & maps', 'kondo')],
             style={'button_width': 'auto'}, layout=ipw.Layout(width='100%'))
         self.analysis.observe(self._analysis_changed, names='value')
         self.inspection_box = ipw.Accordion(children=[ipw.HTML("Select common orbitals to inspect.")],selected_index=None)
@@ -92,8 +93,9 @@ class CasciStates(ipw.VBox):
             self.charge,self.mult,self.roots,advanced,self.review,self.submit])
         self.states_view = ipw.VBox([self.previous,self.status,self.empty,
             self.inspect if on_inspect else self.inspection_box, self.calculation,self.message,self.diagram_box])
+        self.guide = kondo_preparation_guide()
         super().__init__([ipw.HTML('<p>Shared spatial orbitals at this fixed geometry. '
-            'Use CASCI states on their own, or explore optional Dyson transitions and maps.</p>'),
+            'Use CASCI states on their own, or explore optional Dyson transitions and maps.</p>'), self.guide,
             ipw.HBox([self.reference,self.refresh],layout=ipw.Layout(flex_flow='row wrap')), self.space_info,
             self.analysis,self.states_view,self.dyson_box])
         for control in (self.electrons,self.norb,self.charge,self.mult,self.roots,self.aux,self.threshold,

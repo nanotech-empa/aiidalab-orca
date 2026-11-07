@@ -1,0 +1,289 @@
+"""Fixed-geometry correlation energies, separate from orbital/state-vector sources."""
+import math
+import re
+
+from aiida import common, engine, orm
+from aiida.parsers import Parser
+from aiida_orca.calculations.orca_orca import OrcaCalculation
+
+from . import casscf
+from .common_orbitals import copy_orbital, validate_source
+from .input import render_input
+from .reference import single_point_parameters
+
+PROCESS_TYPE = 'aiida.calculations:empa_orca.correlation'
+METHODS = ('RI-MP2', 'SC-NEVPT2')
+NUMBER = r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[EeDd][-+]?\d+)?'
+
+
+def settings(values, electronic, optimized=None):
+    defaults = {'method': 'RI-MP2', 'frozen_core': True,
+                'auxiliary_basis': (optimized['auxiliary_basis'] if optimized else
+                    electronic['basis'] + '/C' if electronic['basis'] in
+                    ('def2-SVP', 'def2-TZVP', 'def2-TZVPP') else 'AutoAux'),
+                **{key: electronic[key] for key in ('nprocs', 'memory_mb', 'wallclock_seconds')}}
+    if not isinstance(values, dict) or set(values) - set(defaults):
+        raise ValueError('Unknown correlation setting')
+    result = defaults | values
+    if result['method'] not in METHODS or type(result['frozen_core']) is not bool:
+        raise ValueError('Choose RI-MP2 or SC-NEVPT2 and an explicit frozen-core policy')
+    for key in ('nprocs', 'memory_mb', 'wallclock_seconds'):
+        if type(result[key]) is not int or result[key] < 1:
+            raise ValueError(key + ' must be a positive integer')
+    if result['memory_mb'] < 256 * result['nprocs']:
+        raise ValueError('Provide at least 256 MiB per process')
+    from .protocols import _token
+    result['auxiliary_basis'] = _token(result['auxiliary_basis'], 'Correlation auxiliary basis')
+    if result['method'] == 'SC-NEVPT2' and (not optimized or
+            result['auxiliary_basis'] != optimized['auxiliary_basis']):
+        raise ValueError('SC-NEVPT2 requires the same integral model as its verified CASSCF reference')
+    return result
+
+
+def correlation_input(electronic, values, reference=None):
+    optimized = reference['casscf_settings'] if reference else None
+    s = settings(values, electronic, optimized)
+    if s['method'] == 'SC-NEVPT2':
+        if reference.get('preparation') != casscf.PREPARATION:
+            raise ValueError('Select a verified CASSCF reference')
+        objective = optimized | {key: s[key] for key in ('nprocs', 'memory_mb', 'wallclock_seconds')}
+        text = casscf.casscf_input(reference, reference['optimized_active_space'], objective, readback=True)
+        text = text.replace('%moinp "aiida.gbw"', '%moinp "reference.gbw"')
+        text = text.replace(' maxiter 1\n', ' maxiter 1\n PTMethod SC_NEVPT2\n'
+                            ' PTSettings\n  CanonStep canonical\n end\n')
+    else:
+        source = single_point_parameters(electronic)
+        params = {'charge': electronic['charge'], 'multiplicity': electronic['multiplicity'],
+                  'input_keywords': ['RHF' if electronic['multiplicity'] == 1 else 'UHF',
+                    'RI-MP2', electronic['basis'], s['auxiliary_basis'], 'TightSCF'], 'input_blocks': {
+                    'pal': {'nprocs': s['nprocs']}, 'scf': {'MaxIter': electronic['max_scf_steps']}}}
+        if 'basis' in source['input_blocks']:
+            params['input_blocks']['basis'] = source['input_blocks']['basis']
+        text = render_input(params, int(.75 * s['memory_mb'] / s['nprocs']), 'aiida.coords.xyz')
+    return text + '\n%method\n FrozenCore ' + ('FC_ELECTRONS' if s['frozen_core'] else 'FC_NONE') + '\nend\n'
+
+
+def native_guard(text):
+    if text.count('ORCA TERMINATED NORMALLY') != 1 or re.search(
+            r'ORCA finished by error|Segmentation fault|poorly\s+normalized|'
+            r'project(?:ing|ion|ed)\s+(?:the\s+)?CMatrix|'
+            r'(?:SCF|CI|CASSCF).*?(?:NOT CONVERGED|DID NOT CONVERGE)', text, re.I):
+        raise ValueError('Native failure, unconverged reference, projection or normalization warning')
+
+
+def one_number(pattern, text, label):
+    values = re.findall(pattern, text, re.I | re.M)
+    if len(values) != 1:
+        raise ValueError('Missing or ambiguous native ' + label)
+    result = float(values[0].replace('D', 'E').replace('d', 'e'))
+    if not math.isfinite(result):
+        raise ValueError('Nonfinite native ' + label)
+    return result
+
+
+def electron_count(text):
+    counts = re.findall(r'Number of Electrons\s+NEL\s+\.{2,}\s+(\d+)', text)
+    if not counts or len(set(counts)) != 1:
+        raise ValueError('Missing or inconsistent electron count')
+    return int(counts[0])
+
+
+def parse_result(text, electronic, values, expected_electrons, reference=None, reference_states=None):
+    native_guard(text)
+    s = settings(values, electronic, reference['casscf_settings'] if reference else None)
+    checks = {'native_normal_termination': True}
+    version = re.search(r'Program Version\s+(\S+)', text)
+    if version is None:
+        raise ValueError('The native ORCA version was not recorded')
+    checks['orca_version'] = version[1]
+    if electron_count(text) != expected_electrons:
+        raise ValueError('Native electron count differs from the source geometry/basis/charge')
+    rows = []
+    if s['method'] == 'RI-MP2':
+        hf = 'RHF' if electronic['multiplicity'] == 1 else 'UHF'
+        if not re.search(r'Hartree-Fock type\s+HFTyp\s+\.{2,}\s+' + hf + r'\b', text):
+            raise ValueError('MP2 requires its own HF reference, not frozen DFT/CAS orbitals')
+        if 'SCF CONVERGED AFTER' not in text or 'Guess MOs are being read' in text:
+            raise ValueError('A newly converged HF calculation is required')
+        for name, target in [('Charge', electronic['charge']), ('Mult', electronic['multiplicity'])]:
+            found = re.findall(r'\b' + name + r'\s+\.{2,}\s+(-?\d+)', text)
+            if not found or int(found[-1]) != target:
+                raise ValueError('The fresh HF charge/multiplicity differs from the request')
+        hf_text = re.split(r'ORCA\s+MP2\s*\n', text, maxsplit=1)[0]
+        energy = one_number(r'^\s*Total Energy\s*:\s*(' + NUMBER + r')\s+Eh', hf_text, 'HF energy')
+        correction = one_number(r'RI-MP2 CORRELATION ENERGY:\s*(' + NUMBER + r')\s+Eh', text, 'MP2 correction')
+        total = one_number(r'MP2 TOTAL ENERGY:\s*(' + NUMBER + ')', text, 'MP2 total')
+        final = one_number(r'FINAL SINGLE POINT ENERGY\s+(' + NUMBER + ')', text, 'final energy')
+        if abs(final - total) > 1e-8:
+            raise ValueError('Native final and MP2 energies disagree')
+        core = re.findall(r'Freezing NCore=(\d+) chemical core electrons', text)
+        if not core:
+            core = re.findall(r'Number of frozen core electrons\s*[:.]\s*(\d+)', text, re.I)
+        starts = re.findall(r'Orbital Range Operator\s+\d+:\s*(\d+)\s*-\s*\d+\s+to', text)
+        if len(core) == 1:
+            frozen = int(core[0])
+            checks['frozen_core_count_evidence'] = 'native_NCore'
+        elif not core and starts and set(starts) == {'0'}:
+            # With FC_NONE, ORCA 6.1.1 omits NCore altogether. Its actual
+            # correlated occupied ranges starting at MO 0 establish zero.
+            frozen = 0
+            checks['frozen_core_count_evidence'] = 'native_correlated_ranges_start_at_zero'
+        else:
+            raise ValueError('The native MP2 frozen-core count was not established')
+        spin = one_number(r'Expectation value of <S\*\*2>\s*:\s*(' + NUMBER + ')', hf_text, 'UHF spin') if hf == 'UHF' else 0.
+        target = (electronic['multiplicity'] - 1) / 2
+        checks.update(fresh_hf_converged=True, hf_reference=hf, hf_spin_squared=spin,
+                      hf_target_spin_squared=target * (target + 1))
+        rows = [{'charge': electronic['charge'], 'multiplicity': electronic['multiplicity'], 'root': 0,
+                 'reference_energy_hartree': energy, 'correction_hartree': correction, 'energy_hartree': total}]
+    else:
+        marker = text.find('< NEVPT2  >')
+        if marker < 0:
+            raise ValueError('No native NEVPT2 stage')
+        # Keep the actual reference section and actual termination footer. PT2
+        # prints its own repeated block headers, which are not a second CASCI.
+        before = text[:marker]
+        excerpt = before + text[text.rfind('ORCA TERMINATED NORMALLY'):]
+        objective = reference['casscf_settings']
+        space = reference['optimized_active_space']
+        native = casscf.state_table(excerpt, reference, space, objective)
+        if ('>>> CAS-CI.' not in before or 'THE CAS-SCF GRADIENT HAS CONVERGED' in before or
+                any(not re.search(kind + r'\s+Orbitals\s+\.\.\.\s+unchanged', before)
+                    for kind in ('Active', 'Internal', 'External'))):
+            raise ValueError('NEVPT2 must read the verified orbitals without hidden optimization')
+        if ('Guess MOs are being read from file: reference.gbw' not in before or
+                'Input Geometry matches current geometry' not in before or
+                'Input basis set matches current basis set' not in before):
+            raise ValueError('Saved CASSCF geometry/basis/read source was not confirmed')
+        expected = {(r['multiplicity'], r['root']): r['energy_hartree'] for r in reference_states['states']}
+        error = max(abs(row['energy_hartree'] - expected[(row['multiplicity'], row['root'])]) for row in native)
+        if {(r['multiplicity'], r['root']) for r in native} != set(expected) or error > 1e-7:
+            raise ValueError('The frozen reference state energies changed; do not apply a correction')
+        pt = text[marker:]
+        if not re.search(r'Orbitals\s+\.\.\.\s+canonical for each state', pt):
+            raise ValueError('The reviewed per-state canonicalization was not confirmed')
+        summary = pt[pt.find('NEVPT2 Results'):]
+        pattern = (r'MULT\s+(\d+),\s*ROOT\s+(\d+).*?Total Energy Correction\s*:\s*dE\s*=\s*(' + NUMBER +
+                   r').*?Reference\s+Energy\s*:\s*E0\s*=\s*(' + NUMBER +
+                   r').*?Total Energy \(E0\+dE\)\s*:\s*E\s*=\s*(' + NUMBER + ')')
+        for mult, root, correction, energy, total in re.findall(pattern, summary, re.S):
+            key = int(mult), int(root)
+            if key not in expected or any((r['multiplicity'], r['root']) == key for r in rows):
+                raise ValueError('Unexpected or duplicated corrected state')
+            if abs(float(energy) - expected[key]) > 1e-7:
+                raise ValueError('NEVPT2 zero-order energy differs from the verified reference')
+            rows.append({'charge': reference['charge'], 'multiplicity': key[0], 'root': key[1],
+                         'reference_energy_hartree': float(energy), 'correction_hartree': float(correction),
+                         'energy_hartree': float(total),
+                         'averaging_weight': next(row['averaging_weight'] for row in reference_states['states']
+                                                  if (row['multiplicity'], row['root']) == key)})
+        if {(r['multiplicity'], r['root']) for r in rows} != set(expected):
+            raise ValueError('Incomplete NEVPT2 correction table')
+        counts = re.findall(r'Last\s+frozen\s+orbital\s+\.{2,}\s+(-?\d+)', pt)
+        starts = re.findall(r'Orbital Range Operator\s+\d+:\s*(\d+)\s*-\s*\d+\s+to', pt)
+        if counts and len(set(counts)) == 1:
+            frozen = 2 * (int(counts[0]) + 1)
+            checks['frozen_core_count_evidence'] = 'native_last_frozen_orbital'
+        elif not counts and starts and set(starts) == {'0'}:
+            frozen = 0
+            checks['frozen_core_count_evidence'] = 'native_correlated_ranges_start_at_zero'
+        else:
+            raise ValueError('The NEVPT2 frozen-core count was not established')
+        if frozen > reference['n_electrons'] - space['electrons']:
+            raise ValueError('Frozen core overlaps the active space')
+        checks.update(reference_readback_max_error_hartree=error, reference_orbitals_unchanged=True,
+                      canonicalization='per_state')
+    if frozen < 0 or frozen > expected_electrons or frozen % 2 or (not s['frozen_core'] and frozen != 0):
+        raise ValueError('The native frozen-core count conflicts with the requested policy')
+    if any(not math.isfinite(r[k]) for r in rows for k in
+           ('reference_energy_hartree', 'correction_hartree', 'energy_hartree')):
+        raise ValueError('A correlation energy is nonfinite')
+    error = max(abs(r['reference_energy_hartree'] + r['correction_hartree'] - r['energy_hartree']) for r in rows)
+    if error > 1e-8:
+        raise ValueError('Reference plus correlation correction does not equal the total')
+    checks['energy_sum_max_error_hartree'] = error
+    return {'schema_version': 1, 'method': s['method'], 'geometry_mode': 'fixed', 'energy_unit': 'hartree',
+            'reference_method': 'HF' if s['method'] == 'RI-MP2' else 'CASSCF',
+            'states': sorted(rows, key=lambda r: (r['multiplicity'], r['root'])),
+            'model': {'basis': electronic['basis'], 'auxiliary_basis': s['auxiliary_basis'],
+                      'integral_transform': 'RI', 'frozen_core': s['frozen_core'], 'frozen_core_electrons': frozen},
+            'checks': checks, 'provides_transition_amplitudes': False, 'dyson_compatible': False}
+
+
+class CorrelationCalculation(engine.CalcJob):
+    @classmethod
+    def define(cls, spec):
+        super().define(spec)
+        for key, typ in {'structure': orm.StructureData, 'electronic_settings': orm.Dict, 'settings': orm.Dict}.items():
+            spec.input(key, valid_type=typ)
+        for key, typ in {'source_retrieved': orm.FolderData, 'orbital_reference': orm.Dict,
+                         'reference_states': orm.Dict, 'source_remote': orm.RemoteData,
+                         'source_repository': orm.FolderData, 'source_folder': orm.RemoteData,
+                         'source_stash': orm.RemoteStashFolderData, 'source_filename': orm.Str}.items():
+            spec.input(key, valid_type=typ, required=False)
+        spec.input('metadata.options.parser_name', default='empa_orca.correlation')
+        spec.input('metadata.options.withmpi', default=False)
+        spec.output('correlation_energies', valid_type=orm.Dict)
+        spec.exit_code(310, 'ERROR_CORRELATION', message='Correlation/reference validation failed; inspect the native output.')
+
+    def prepare_for_submission(self, folder):
+        electronic = self.inputs.electronic_settings.get_dict()
+        ref = self.inputs.orbital_reference.get_dict() if 'orbital_reference' in self.inputs else None
+        s = settings(self.inputs.settings.get_dict(), electronic, ref['casscf_settings'] if ref else None)
+        if (self.inputs.metadata.options.resources.get('num_mpiprocs_per_machine', 1) != s['nprocs']
+                or self.inputs.metadata.options.withmpi):
+            raise ValueError('Allocate the reviewed ORCA processes; ORCA manages MPI internally')
+        if self.inputs.code.computer.label == 'tigu' and s['nprocs'] > 12:
+            raise ValueError('The current tigu allocation is limited to 12 processes per submission')
+        info = common.CalcInfo()
+        if s['method'] == 'RI-MP2':
+            if ref or any(key in self.inputs for key in ('source_filename', 'source_repository', 'source_folder', 'source_stash')):
+                raise ValueError('MP2 must converge a fresh HF reference')
+            retrieved = self.inputs.source_retrieved
+            validate_source(self.inputs.structure, electronic, self.inputs.code, retrieved,
+                            retrieved.creator.outputs.remote_folder)
+        else:
+            producer = self.inputs.orbital_reference.creator
+            states = self.inputs.reference_states
+            if (not producer.is_finished_ok or producer.process_type != 'aiida.calculations:empa_orca.casscf' or
+                    states.creator.uuid != producer.uuid or self.inputs.source_remote.uuid != producer.outputs.remote_folder.uuid or
+                    str(self.inputs.structure.uuid) != ref['structure_uuid'] or electronic != ref['settings'] or
+                    self.inputs.code.uuid != producer.inputs.code.uuid or
+                    states.get_dict()['readback_max_error_hartree'] > 1e-7):
+                raise ValueError('Select the intact, verified CASSCF source and its exact geometry/code')
+            from .artifacts import resolve_electronic
+            location = resolve_electronic(self.inputs.source_remote, names=['aiida.gbw'])
+            key = {'repository': 'source_repository', 'remote': 'source_folder', 'stash': 'source_stash'}[location['kind']]
+            if (key not in self.inputs or str(self.inputs[key].uuid) != location['uuid']
+                    or self.inputs.source_filename.value != 'aiida.gbw'):
+                raise ValueError('The staged orbitals differ from the preserved CASSCF source')
+            copy_orbital(info, self.inputs)
+        with folder.open('aiida.inp', 'w') as handle:
+            handle.write(correlation_input(electronic, s, ref))
+        OrcaCalculation._write_structure(self.inputs.structure, folder, 'aiida.coords.xyz')
+        code = common.CodeInfo()
+        code.code_uuid, code.cmdline_params, code.stdout_name, code.join_files = self.inputs.code.uuid, ['aiida.inp'], 'aiida.out', True
+        info.codes_info = [code]
+        info.retrieve_list = ['aiida.out', 'aiida.property.txt']
+        return info
+
+
+class CorrelationParser(Parser):
+    def parse(self, **kwargs):
+        try:
+            ref = self.node.inputs.orbital_reference.get_dict() if 'orbital_reference' in self.node.inputs else None
+            expected = ref['n_electrons'] if ref else electron_count(
+                self.node.inputs.source_retrieved.base.repository.get_object_content('aiida.out'))
+            states = self.node.inputs.reference_states.get_dict() if ref else None
+            data = parse_result(self.retrieved.base.repository.get_object_content('aiida.out'),
+                self.node.inputs.electronic_settings.get_dict(), self.node.inputs.settings.get_dict(), expected, ref, states)
+            data['structure_uuid'] = str(self.node.inputs.structure.uuid)
+            if ref:
+                data['source_orbital_reference_uuid'] = str(self.node.inputs.orbital_reference.uuid)
+                data['source_state_energies_uuid'] = str(self.node.inputs.reference_states.uuid)
+            else:
+                data['source_retrieved_uuid'] = str(self.node.inputs.source_retrieved.uuid)
+            self.out('correlation_energies', orm.Dict(dict=data))
+        except (KeyError, ValueError, OSError) as exc:
+            self.logger.error(str(exc))
+            return self.exit_codes.ERROR_CORRELATION

@@ -38,7 +38,8 @@ class ActiveSpaceStep(ipw.VBox):
             'The small initial numbers are examples, not a choice for your molecule.</p>'
             '<p>UNO occupations, when available, diagnose the unrestricted SCF density. '
             'Viewing UNOs does not switch the CAS input from QROs to UNOs. '
-            'Correlated natural-orbital preparation and orbital-optimized CASSCF are not implemented in this GUI.</p>')
+            'CASSCF orbital optimization is an optional next step after confirming this space. '
+            'Its optimized orbitals must be inspected and confirmed again before subsequent calculations.</p>')
         super().__init__([ipw.HTML(heading), self.inspection,
             ipw.HTML('<h4>Review the active space</h4><p>The current preparation supports one contiguous '
                 'window in the prepared orbital ordering. Orbitals outside it remain inactive or virtual.</p>'),

@@ -12,7 +12,10 @@ from .property_services import helper_code, source_node, source_remote, wavefunc
 def reference_runs(source_uuid):
     source = source_node(source_uuid)
     choices, seen = [], set()
-    for uuid in common_orbitals.matching_references(source.outputs.retrieved.uuid, source.inputs.code.uuid):
+    from .casscf_services import optimized_references
+    uuids = [*optimized_references(source.outputs.retrieved.uuid, source.inputs.code.uuid),
+             *common_orbitals.matching_references(source.outputs.retrieved.uuid, source.inputs.code.uuid)]
+    for uuid in uuids:
         node = orm.load_node(uuid)
         key = str(node.outputs.orbital_reference.uuid)
         if key in seen:
@@ -41,6 +44,8 @@ def prepare_common(source_uuid, force=False):
     source = source_node(source_uuid)
     unavailable = []
     for row in ([] if force else reference_runs(source_uuid)):
+        if row['kind'] == 'CASSCF':
+            continue  # Orbital optimization is an explicit choice, never implicit SCF preparation.
         try:
             common_orbitals.reference_location(orm.load_node(row['uuid']))
             return {'source_uuid':source_uuid, 'action':'reuse', 'reference_uuid':row['uuid'], 'unavailable':unavailable}
@@ -78,7 +83,7 @@ def submit_common(plan):
 
 def reference_data(uuid):
     node = orm.load_node(uuid)
-    if node.process_type != common_orbitals.PROCESS_TYPE or not node.is_finished_ok:
+    if node.process_type not in (common_orbitals.PROCESS_TYPE, 'aiida.workflows:empa_orca.casscf') or not node.is_finished_ok:
         raise ValueError('Select completed common-orbital preparation')
     return node.outputs.orbital_reference.get_dict()
 

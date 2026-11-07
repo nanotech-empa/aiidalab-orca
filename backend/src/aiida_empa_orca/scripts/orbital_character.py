@@ -86,7 +86,7 @@ def character(document, kind='SCF'):
             occupations.append(occupation)
             spins.append(spin)
             indices.append(index)
-            if kind != 'UNO':
+            if kind not in ('UNO', 'CASSCF'):
                 energies.append(float(row['OrbitalEnergy']) * HARTREE_TO_EV)
     n_electrons = sum(float(a['NuclearCharge']) for a in molecule['Atoms']) - molecule['Charge']
     if abs(sum(occupations) - n_electrons) > 1e-5:
@@ -109,7 +109,7 @@ def character(document, kind='SCF'):
                 'multiplicity': molecule['Multiplicity'], 'atoms': molecule['Atoms'],
                 'coordinate_units': molecule['CoordinateUnits'], 'orthonormality_errors': errors,
                 'minimum_overlap_eigenvalue': float(eigenvalues[0]),
-                'energy_meaning': ('none' if kind == 'UNO' else 'QRO_reference_labels' if kind == 'QRO' else 'SCF_orbital_energies'),
+                'energy_meaning': ('none' if kind in ('UNO', 'CASSCF') else 'QRO_reference_labels' if kind == 'QRO' else 'SCF_orbital_energies'),
                 'p_direction_meaning': 'Perpendicular p contribution only; not a full pi/sigma symmetry classification',
                 'orca_version': document.get('ORCA Header', {}).get('Version', '').strip()}
     # Basis primitives are only needed remotely, never in the compact result.

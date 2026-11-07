@@ -144,9 +144,13 @@ def parse_states(text, reference, space, settings):
 
 def validate_reference(reference_node, source_remote):
     producer = reference_node.creator
-    if (producer is None or producer.process_type != 'aiida.calculations:empa_orca.common_orbitals'
+    allowed = ('aiida.calculations:empa_orca.common_orbitals', 'aiida.calculations:empa_orca.casscf')
+    if (producer is None or producer.process_type not in allowed
             or producer.outputs.remote_folder.uuid != source_remote.uuid):
         raise ValueError('The common-orbital metadata and folder must share their preparation CalcJob')
+    if producer.process_type == allowed[1] and (
+            not producer.is_finished_ok or reference_node.get_dict().get('preparation') != 'casscf_verified_v1'):
+        raise ValueError('Use a converged CASSCF reference with a successful frozen-orbital readback')
     return reference_node.get_dict()
 
 

@@ -82,7 +82,7 @@ class OrbitalCharacterMixin:
         spec.input('character_export_code', valid_type=orm.AbstractCode, required=False)
         spec.input('character_helper_code', valid_type=orm.AbstractCode, required=False)
         spec.output('pdos_status', valid_type=orm.Dict, required=False)
-        for kind in ('scf', 'restricted', 'qro', 'uno'):
+        for kind in ('scf', 'restricted', 'qro', 'uno', 'casscf'):
             spec.output(f'pdos.{kind}.metadata', valid_type=orm.Dict, required=False)
             spec.output(f'pdos.{kind}.character', valid_type=orm.ArrayData, required=False)
 

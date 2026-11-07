@@ -7,17 +7,20 @@ from .energy_route import assess_space
 
 
 class EnergyRoutes(ipw.VBox):
-    def __init__(self, reference_uuid, reference, space, open_orca, open_quantum):
+    def __init__(self, reference_uuid, reference, space, open_orca, open_quantum,
+                 open_casscf=None, *, allow_quantum=True):
         self.reference_uuid = str(reference_uuid)
         self.space = {
             "electrons": space["electrons"],
             "orbitals": list(space["orbitals"]),
         }
+        routes = [("ORCA CASCI — fixed orbitals", "orca")]
+        if open_casscf:
+            routes.append(("Optimize the orbitals first — CASSCF / SA-CASSCF", "casscf"))
+        if allow_quantum:
+            routes.append(("Quantum-assisted energy levels (simulator or QPU)", "quantum"))
         self.choice = ipw.RadioButtons(
-            options=[
-                ("ORCA CASCI — full selected active space", "orca"),
-                ("Quantum-assisted energy levels (simulator or QPU)", "quantum"),
-            ],
+            options=routes,
             value="orca",
             layout=ipw.Layout(width="100%"),
         )
@@ -29,6 +32,8 @@ class EnergyRoutes(ipw.VBox):
             layout=ipw.Layout(width="auto"),
         )
         self._callbacks = {"orca": open_orca, "quantum": open_quantum}
+        if open_casscf:
+            self._callbacks['casscf'] = open_casscf
         self.choice.observe(self._changed, names="value")
         self.continue_button.on_click(lambda _: self._callbacks[self.choice.value]())
         size = assess_space(
@@ -69,6 +74,13 @@ class EnergyRoutes(ipw.VBox):
                 "ORCA computes the required integrals internally.</p>"
             )
             self.continue_button.description = "Continue with ORCA CASCI"
+        elif self.choice.value == 'casscf':
+            self.explanation.value = (
+                '<p><b>Optimize shared orbitals → inspect and confirm them → choose a solver.</b> '
+                'CASSCF changes the orbitals, with one selected state or a weighted state average '
+                'at one fixed charge and geometry. The result is a new reference. '
+                'For Dyson/Kondo, compute all required fixed-orbital CASCI sectors using that reference.</p>')
+            self.continue_button.description = 'Configure CASSCF orbital optimization'
         else:
             self.explanation.value = (
                 "<p><b>Export active-space Hamiltonian → prepare circuits → "

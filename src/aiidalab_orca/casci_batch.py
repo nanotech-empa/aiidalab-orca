@@ -5,6 +5,7 @@ import re
 
 from aiida_empa_orca import casci
 from .presentation import data_table
+from .resources import memory_label
 
 
 def parse_integer_list(text, name, *, positive=False):
@@ -102,7 +103,7 @@ def review_html(plan, execution=None):
     return (f'<p><b>{count} new calculations; {reuse} reused; {running} already running; '
             f'{skipped} incompatible combinations skipped.</b></p>'
             +target+
-            f'<p>Per new calculation: {resources["nprocs"]} processes, {resources["memory_mb"]} MiB total memory, '
+            f'<p>Per new calculation: {resources["nprocs"]} processes, {memory_label(resources["memory_mb"])} total memory, '
             f'{resources["wallclock_seconds"]//60} minutes wall time. New calculations may run concurrently. '
             'All use the same fixed geometry and spatial-orbital reference. '
             'Review any reduction in the number of states before submitting.</p>'

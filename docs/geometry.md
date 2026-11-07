@@ -88,12 +88,11 @@ Calculation review is enabled after a structure has been selected.
 
 New calculations default to the lowest multiplicity compatible with the electron
 count (sum of atomic numbers minus charge): 1 for an even count, 2 for an odd count.
-The **Use lowest allowed multiplicity** option updates this default when the
-molecule or charge changes. Editing multiplicity or copying calculation settings
-turns the option off, preserving the chosen spin through subsequent edits. Turn it
-back on to restore the automatic default. Electron parity does not predict the
-ground-state spin; higher-spin states must be chosen explicitly. Existing charge
-and spin validation remains active for both automatic and manual values.
+The multiplicity field is always editable, with an allowed-values hint bounded
+by the electron count. Editing multiplicity or copying calculation settings
+preserves the chosen spin through subsequent edits. Electron parity does not
+predict the ground-state spin; higher-spin states must be chosen explicitly.
+Existing charge and spin validation remains active for all values.
 
 The interface has three areas:
 
@@ -317,7 +316,7 @@ settings = protocol_settings("pbe-v1", {
 
 The interface follows [ORCA's constrained-optimization syntax](https://www.faccts.de/docs/orca/6.1/manual/contents/structurereactivity/optimizations.html#constrained-optimization).
 
-Defaults: PBE/def2-SVP, neutral doublet, two processes, total memory budget 2048 MB,
+Defaults: PBE/def2-SVP, neutral doublet, two processes, total memory budget 2 GiB,
 100 geometry steps, 200 SCF steps, 30 minutes. `%maxcore` receives 75% of the total
 memory budget divided by the process count. The direct scheduler cannot enforce
 a hard physical-memory limit. These defaults define a small integration test,
@@ -476,3 +475,16 @@ Constraint validation on local ORCA 6.1.1 (2026-10-14):
   range parsing, input rendering after AiiDA storage, reuse compatibility,
   structure-edit invalidation and copied constraints. Browser checks cover
   loading the result and confirming copied constraints before compatible reuse.
+## Spin and memory controls
+
+The multiplicity field is always editable. A new molecule starts at the lowest
+allowed multiplicity (1 for an even electron count, 2 for an odd count). The help
+lists the first allowed values, limited by the number of electrons: two electrons
+allow 1 and 3, not 5. This is a parity/capacity rule, not a prediction of the ground
+state. Manual and copied choices are retained; incompatible values must be
+corrected before continuing. There is no automatic-multiplicity checkbox.
+
+Geometry/SCF and CASCI memory controls display **GiB**: entering 2 means 2048 MiB,
+entering 4 means 4096 MiB. Existing saved `memory_mb` settings retain their integer
+MiB meaning. Fractional GiB values are rounded to the nearest MiB for submission;
+changing display units does not increase a saved resource budget.

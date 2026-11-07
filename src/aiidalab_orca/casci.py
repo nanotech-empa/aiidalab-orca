@@ -10,6 +10,7 @@ from .state_levels import StateEnergyLevels
 from .guidance import kondo_preparation_guide
 from . import casci_batch
 from .presentation import data_table
+from .resources import MemoryInput, memory_label
 
 
 class CasciStates(ipw.VBox):
@@ -61,7 +62,7 @@ class CasciStates(ipw.VBox):
                 options=['def2-SVP/C','def2-TZVP/C','def2-TZVPP/C','AutoAux'],ensure_option=False,
                 description='Correlation auxiliary',style=style,layout=wide)
         self.nprocs = ipw.BoundedIntText(value=s['nprocs'],min=1,max=128,description='Processes',style=style)
-        self.memory = ipw.BoundedIntText(value=s['memory_mb'],min=256,max=1048576,description='Total memory (MiB)',style=style)
+        self.memory = MemoryInput(value=s['memory_mb'],min=256,max=1048576,style=style)
         self.walltime = ipw.BoundedIntText(value=s['wallclock_seconds']//60,min=1,max=10080,description='Wall time (minutes)',style=style)
         self.threshold = ipw.FloatText(value=1e-6,description='CI print threshold',style=style)
         self.force = ipw.Checkbox(value=False,description='Recompute requested CASCI sectors',layout=ipw.Layout(width='auto'))
@@ -276,7 +277,7 @@ class CasciStates(ipw.VBox):
             self._execution_context = context
             self.execution_info.value = (explanation+f'<p><b>Inherited preparation settings:</b> '
                 f'{html.escape(context["code"])}@{html.escape(context["computer"])}; '
-                f'{context["nprocs"]} processes, {context["memory_mb"]} MiB total memory, '
+                f'{context["nprocs"]} processes, {memory_label(context["memory_mb"])} total memory, '
                 f'{context["wallclock_seconds"]//60} minutes wall-time limit.</p>')
         except Exception as exc:
             self._execution_context = None

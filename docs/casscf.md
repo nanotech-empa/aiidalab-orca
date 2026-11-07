@@ -9,6 +9,10 @@ also opens this step. Geometry and charge stay fixed.
 Root 0 is that sector's lowest state; choosing root 2 computes roots 0–2 and
 gives only root 2 a nonzero orbital-optimization weight. Following an excited
 root can be difficult when states exchange character: inspect the result.
+CAS(3,3) means three active electrons in three orbitals; it does not request
+three states. With root 0 selected, one energy is the expected result. To
+obtain an energy ladder using those optimized orbitals, inspect and confirm
+the new reference, then request several roots in CASCI.
 
 **State average (SA)** optimizes one shared orbital set against the chosen
 states. Add multiplicities, set roots per multiplicity and, optionally, enter
@@ -34,6 +38,10 @@ active-space partition, and agreement of every readback energy within
 Failures retain their output for diagnosis and cannot become selectable successful
 references. Wavefunction storage inherits the selected reference's policy.
 
+**Run again even if a matching result exists** forces a new execution of the
+same request. Leave it unchecked for normal reuse. Editing the state objective,
+active space or other calculation settings already defines a different request.
+
 After success, **Inspect optimized orbitals** selects the new reference and
 returns to inspection. Its correlated natural occupations and orbital character
 are shown by orbital index, without presenting them as Kohn–Sham eigenvalues.
@@ -54,12 +62,16 @@ The scientific input convention follows the [ORCA 6.1 CASSCF manual](https://www
 The current general active-space preparation still defines its supported
 orbital partition; this feature does not add implicit orbital permutations.
 
-## Integration boundary
+## openBIS companion
 
-The shared openBIS adapter in
+The shared adapter in
 [aiidalab-openbis#153](https://github.com/nanotech-empa/aiidalab-openbis/pull/153)
-does not yet recognize `CasscfWorkChain` as a separately classified result.
-That companion adapter must be extended before advertising CASSCF whole-entry
-export as complete. It can use the existing CAS-method simulation category;
-this draft defines no new openBIS object types and makes no changes to that
-repository or a deployed schema. The stored outputs remain ordinary AiiDA data.
+includes `CasscfWorkChain` in the entry's export scope. The optimized reference,
+complete spin/root table, optimization weights and readback evidence remain
+together in one `UNCLASSIFIED_SIMULATION` result with method family `CAS`.
+CASSCF orbital cubes use `SPM_SIMULATION`, also with method family `CAS`.
+Natural occupations are not exported as an energy DOS. This reuses existing
+openBIS types and requires no server schema migration.
+
+That adapter is a separate, unmerged companion: use a revision containing the
+CASSCF mapping. The app alone does not install or release the shared exporter.

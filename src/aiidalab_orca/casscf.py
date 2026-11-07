@@ -26,7 +26,9 @@ class CasscfOrbitals(ipw.VBox):
         self.mult = ipw.BoundedIntText(value=ref['source_multiplicity'], min=1, max=99,
                                        description='Multiplicity (2S+1)', style=style)
         self.root = ipw.BoundedIntText(value=0, min=0, max=999, description='Root to optimize', style=style)
+        self.root.tooltip = 'State numbering starts at 0: the lowest state in the chosen charge and multiplicity.'
         self.single = ipw.HBox([self.mult, self.root], layout=ipw.Layout(flex_flow='row wrap'))
+        self.intent = ipw.HTML()
         self.blocks = ipw.VBox()
         self.add = ipw.Button(description='Add multiplicity', icon='plus', layout=ipw.Layout(width='auto'))
         self.add.on_click(lambda _: self._add_block())
@@ -40,7 +42,9 @@ class CasscfOrbitals(ipw.VBox):
                                        max=100000, description='Wall time (minutes)', style=style)
         self.steps = ipw.BoundedIntText(value=75, min=2, max=10000, description='Max macro-iterations', style=style)
         self.aux = ipw.Text(description='Correlation auxiliary basis', style=style)
-        self.force = ipw.Checkbox(description='Recompute CASSCF', value=False, indent=False)
+        self.force = ipw.Checkbox(description='Run again even if a matching result exists', value=False, indent=False,
+                                  layout=ipw.Layout(width='auto'))
+        self.force.tooltip = 'Normally reuse a matching running or successful calculation. Changed inputs already define a new request.'
         resources = ipw.Accordion(children=[ipw.VBox([self.nprocs, self.memory, self.wall, self.steps, self.aux, self.force])], selected_index=None)
         resources.set_title(0, 'Resources and convergence')
         self.review = ipw.Button(description='Review CASSCF', icon='list', button_style='primary')
@@ -64,7 +68,7 @@ class CasscfOrbitals(ipw.VBox):
             'orbital set for the states you select; their individual energies remain separate.</p>'
             '<p>These are <b>orbital-optimization weights</b>, not thermal populations, '
             'Clebsch–Gordan factors or spectral intensities. Existing results retain their original orbitals.</p>'),
-            self.mode, self.single, self.average, resources,
+            self.mode, self.single, self.average, self.intent, resources,
             ipw.HBox([self.review, self.submit], layout=ipw.Layout(flex_flow='row wrap')),
             self.review_text, self.message, self.saved, self.refresh, self.status, self.levels, self.inspect,
             ipw.HTML('<p>After successful optimization and saved-orbital readback, inspect and confirm the '
@@ -101,9 +105,23 @@ class CasscfOrbitals(ipw.VBox):
         single = self.mode.value == 'state_specific'
         self.single.layout.display = '' if single else 'none'
         self.average.layout.display = 'none' if single else ''
+        self._explain_objective()
+
+    def _explain_objective(self):
+        if self.mode.value == 'state_average':
+            text = 'Optimize one shared orbital set for the listed states. Each state retains its own energy.'
+        elif self.root.value == 0:
+            text = (f'Optimize one state: root 0, the lowest state with multiplicity {self.mult.value}. '
+                    'For more energy levels with these optimized orbitals, inspect them and continue with CASCI.')
+        else:
+            text = (f'Compute roots 0–{self.root.value}; only root {self.root.value} drives orbital optimization. '
+                    'Inspect the state character when following an excited root.')
+        self.intent.value = '<p>' + text + '</p>'
 
     def _invalidate(self, _=None):
         self.plan = None
+        if hasattr(self, 'intent'):
+            self._explain_objective()
         if hasattr(self, 'submit'):
             self.submit.disabled = True
             self.review_text.value = ''
@@ -129,14 +147,17 @@ class CasscfOrbitals(ipw.VBox):
         try:
             self.plan = service.review(self.reference_uuid, self.space, self._values(), force=self.force.value)
             p = self.plan
-            rows = ''.join(f'<tr><td>{b["multiplicity"]}</td><td>{r}</td><td>{w:.6g}</td></tr>'
+            cell = ' style="padding: 0.25em 1.5em 0.25em 0; text-align: left"'
+            rows = ''.join(f'<tr><td{cell}>{b["multiplicity"]}</td><td{cell}>{r}</td><td{cell}>{w:.6g}</td></tr>'
                            for b in p['settings']['states'] for r, w in enumerate(b['weights']))
+            processes = 'process' if p['settings']['nprocs'] == 1 else 'processes'
             self.review_text.value = (f'<p><b>{html.escape(p["action"].capitalize())}</b> · '
-                f'{html.escape(p["execution"])} · {p["settings"]["nprocs"]} processes · '
+                f'{html.escape(p["execution"])} · {p["settings"]["nprocs"]} {processes} · '
                 f'{memory_label(p["settings"]["memory_mb"])} · {p["settings"]["wallclock_seconds"] // 60} minutes. '
                 'One job runs orbital optimization followed by independent frozen-orbital verification; '
                 'wavefunction storage follows the selected reference.</p>'
-                '<table><tr><th>Multiplicity</th><th>Root</th><th>Normalized optimization weight</th></tr>' + rows + '</table>'
+                f'<table style="border-collapse: collapse"><tr><th{cell}>Multiplicity</th><th{cell}>Root</th>'
+                f'<th{cell}>Normalized optimization weight</th></tr>' + rows + '</table>'
                 '<details><summary>Review ORCA optimization and readback inputs</summary><pre>' +
                 html.escape(p['input']) + '</pre><pre>' + html.escape(p['readback_input']) + '</pre></details>')
             self.message.value = ''
@@ -188,7 +209,10 @@ class CasscfOrbitals(ipw.VBox):
         if state['success']:
             from .state_levels import StateEnergyLevels
             data = service.results(self.saved.value)
-            self.levels.children = [ipw.HTML('<p>Saved-orbital readback passed: largest state-energy difference '
+            explanation = ('<p>One state was requested. To compute additional energy levels using these orbitals, '
+                           'choose <b>Inspect optimized orbitals</b>, confirm the active space, then request '
+                           'several roots in CASCI.</p>') if len(data['states']) == 1 else ''
+            self.levels.children = [ipw.HTML(explanation + '<p>Saved-orbital readback passed: largest state-energy difference '
                 f'{data["readback_max_error_hartree"]:.2e} Hartree.</p>'), StateEnergyLevels([data])]
             self.inspect.disabled = False
 

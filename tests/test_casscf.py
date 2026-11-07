@@ -136,11 +136,15 @@ def test_open_review_edit_and_submit_are_distinct(monkeypatch):
     panel = gui.CasscfOrbitals('ref', SPACE, lambda _: calls.append(('inspect',)))
     try:
         assert calls == [] and panel.submit.disabled
+        assert 'Optimize one state: root 0' in panel.intent.value
+        assert 'continue with CASCI' in panel.intent.value
         panel.review.click()
         assert len(calls) == 1 and not panel.submit.disabled
         panel.root.value = 1
         assert panel.submit.disabled and panel.plan is None
+        assert 'only root 1 drives orbital optimization' in panel.intent.value
         panel.mode.value = 'state_average'
+        assert 'Each state retains its own energy' in panel.intent.value
         panel.review.click()
         assert calls[-1][1]['states'][0]['weights'] == [1, 1]
         assert 'Normalized optimization weight' in panel.review_text.value

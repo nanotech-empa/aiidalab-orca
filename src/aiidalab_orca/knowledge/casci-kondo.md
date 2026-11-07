@@ -146,6 +146,16 @@ independently optimized references. Arbitrary orbital reordering remains a
 separate capability and must not be inferred from this step.
 Verified imported fixed references remain distinct, provenance-linked sources.
 
+In the CASSCF form, **One selected state** with root 0 requests one energy in
+the chosen charge/multiplicity sector. CAS(n,m) counts electrons/orbitals, not
+states. For an energy ladder in the optimized orbital basis, inspect/reconfirm
+that reference and request several CASCI roots. A state average is a separate
+orbital objective; use it when several states should share the optimization.
+The openBIS companion adapter in `aiidalab-openbis#153` includes CASSCF reference
+and complete state tables in the entry's export, with the existing CAS method
+family. Verify that the installed exporter includes that mapping; the ORCA app
+alone does not upgrade it. No new server object type is needed.
+
 ### Scientific and execution inputs
 
 Explain the GUI terminology explicitly: **Common orbitals** are the shared

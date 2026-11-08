@@ -91,8 +91,10 @@ History browsing also preserves the diagram's selected energy zero and limits.
   requires these settings to be confirmed in ORCA output.
 - `empa_orca.electronic_storage`: supports explicit file bundles. Existing
   SCF/geometry callers retain their original GBW/density bundle. Common orbitals
-  preserve QRO and UNO files together, or the restricted GBW; CASCI preserves its output GBW. The
-  threshold and stash directory are inherited from the SCF preservation policy.
+  preserve QRO and UNO files together, or the restricted GBW. New CASCI requests
+  instead have an explicit **Full files** choice: leave the native log/GBW on the
+  calculation computer, or stash them at the reviewed directory. CASCI GBWs are
+  not retrieved; the stash route uses the storage CalcJob with a zero threshold.
 
 CASCI uses the electronic Hamiltonian in the prepared orbital basis; the DFT
 functional is not a CASCI Hamiltonian keyword. The source basis and element
@@ -105,7 +107,14 @@ AutoAux; this is editable and requires scientific review.
 multiplicity, root number, common-orbital reference UUID, geometry UUID, exact
 active-orbital indices, active electron count and RI auxiliary-basis model.
 The final state-averaged ORCA energy is **not** used as an individual root energy.
-Full output including printed determinant coefficients is retrieved. The
+New CASCI output is collected on the calculation computer by the configured
+`orca-tools` runtime. A compact `aiida.out`, a 64-KiB diagnostic tail and
+`native_output.json` are retrieved. The summary budget is 2 MiB; exceeding it
+rejects collection rather than accepting a truncated state table. All matching
+validation markers, including late warnings and repeated blocks, are retained.
+The full log remains at `native_output/aiida.out`; its size/checksum and the
+reviewed remote/stash policy are saved in `native_output_manifest`. Native
+property output is retained in the same directory. The
 printing threshold is recorded and is not a guarantee that truncated CI data
 will be sufficiently accurate for a later Dyson calculation.
 
@@ -116,9 +125,15 @@ plain data and UUIDs, not ORM nodes. No Python executable is selected in the UI.
 ## Reuse and missing files
 
 Reuse is explicit and independent of AiiDA caching. A matching completed CASCI
-calculation can supply its durable state energies and CI output even after
-scratch is gone. A later Dyson consumer must separately verify the binary/JSON
+calculation can supply its durable state energies even after scratch is gone.
+Historical records with full retrieved output remain readable without migration.
+A later Dyson consumer must separately verify the full CI log and binary/JSON
 files it requires; a visible energy diagram does not promise those files exist.
+
+New GUI submissions require an ORCA tools runtime supporting `compact_output.py`.
+Computer/code/runtime configuration belongs to `aiidalab-empa-setup`. No Python
+selector or PythonJob is introduced. Retention edits invalidate the reviewed
+request; reused/running calculations keep their original retention policy.
 
 A new charge/spin sector requires the original common orbitals. The resolver
 checks retrieved storage, native AiiDA stash, and the calculation directory.

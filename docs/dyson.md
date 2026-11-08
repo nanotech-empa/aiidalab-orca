@@ -81,10 +81,13 @@ missing sectors/roots are not a complete spectral sum.
   `orca_2json` CalcJob followed by the configured ORCA Dyson helper. A compressed
   bundle contains the matching MO coefficients, AO overlap, basis shells,
   geometry, printed CI vectors and provenance identity. Charge/spin, geometry,
-  electron counts, orbital orthonormality and CI norms are checked. Small bundles
-  receive a retrieved copy up to the reference WFN retrieval threshold; all
-  bundles are natively stashed in the reference's stash directory. Large exports
-  are not automatically retrieved. The small duplicate stash is intentional.
+  electron counts, orbital orthonormality and CI norms are checked. New workflow
+  submissions have an explicit **Full files** choice: leave full CI exports
+  remotely or stash them at the reviewed directory. These archives are never
+  retrieved by the new route. Historical retrieved/stashed exports remain
+  reusable. For compact-output CASCI, export stages the original native CI log
+  from its recorded directory/stash and verifies its checksum; it never uses the
+  retrieved summary as a replacement for the CI vectors.
 - `empa_orca.dyson`: combines compatible exported states through
   `dyson_orca_tools.dyson.Dyson`. It retrieves the transition table and compressed
   AO coefficient arrays. The recorded active indices are used explicitly, including fully occupied

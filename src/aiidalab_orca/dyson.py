@@ -41,6 +41,8 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.cubehandler_code = ipw.Dropdown(options=choices['cubehandler'],description='Cubehandler',style=style,layout=wide)
         self.loss = ipw.BoundedFloatText(value=1e-5,min=0,max=.01,description='Max. missing CI norm',style=style)
         self.force = ipw.Checkbox(value=False,description='Recompute Dyson coefficients',layout=ipw.Layout(width='auto'))
+        from .retention import FullFileRetention
+        self.full_files = FullFileRetention(directory=choices.get('storage_policy', {}).get('stash_directory', ''))
         advanced = ipw.Accordion(children=[ipw.VBox([self.loss,self.force,self.export_code,self.dyson_code,self.cubehandler_code])],selected_index=None)
         advanced.set_title(0,'Dyson validation and codes')
         self.review = ipw.Button(description='Review Dyson calculation',icon='list',button_style='primary',layout=ipw.Layout(width='auto'))
@@ -81,7 +83,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.calculation = ComputePanel('Compute / extend Dyson transitions…', [
             ipw.HTML('<p>Select an initial many-electron state and compatible N±1 final states at this fixed geometry. '
             'Missing sectors can be added in the Many-electron states view. No SCF or CASCI is silently repeated.</p>'),
-            self.side,self.finals,self.refresh,advanced,self.review,self.submit])
+            self.side,self.finals,self.refresh,self.full_files,advanced,self.review,self.submit])
         self.empty = ipw.HTML()
         self._view = 'spectrum'
         super().__init__([self.initial,self.previous,self.status,self.empty,self.calculation,self.message,
@@ -90,6 +92,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.side.observe(self._initial_changed,names='value')
         for w in (self.finals,self.loss,self.force,self.export_code,self.dyson_code):
             w.observe(self._invalidate,names='value')
+        self.full_files.observe(self._invalidate, names='revision')
         for w in (self.cube_states,self.blend,self.grid,self.retention,self.stash,self.cubehandler_code,self.dyson_code):
             w.observe(self._invalidate_cubes,names='value')
         self._initial_changed()
@@ -164,10 +167,16 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self._invalidate()
         try:
             self.plan = service.review(self.common_uuid,self.initial.value,self.finals.value,
-                {'export':self.export_code.value,'dyson':self.dyson_code.value},self.loss.value,self.force.value)
+                {'export':self.export_code.value,'dyson':self.dyson_code.value},self.loss.value,self.force.value,
+                retention_policy=self.full_files.values())
             text = '<p><b>'+('Reuse stored Dyson coefficients and transition energies.' if self.plan['action'] == 'reuse' else 'Compute selected Dyson transitions from existing CASCI wavefunctions.')+'</b></p>'
             text += ''.join('<p>'+html.escape(r['label']+' · '+r['action'])+'</p>' for r in self.plan['exports'])
-            text += '<p>Exports follow the reference wavefunction preservation policy: a size-limited retrieved copy and a native stash. CI coefficients are checked and retained without renormalization.</p>'
+            retention = self.plan['retention_policy']
+            destination = ('stashed at '+html.escape(retention['stash_directory'])
+                           if retention['mode'] == 'stash' else 'left on the calculation computer')
+            text += ('<p>New full CI exports are '+destination+
+                     '; they are not retrieved. Reused exports keep their recorded retention. '
+                     'CI coefficients are checked without renormalization.</p>')
             self.message.value = text
             self.submit.disabled = self._job_uuid is not None
         except Exception as exc:

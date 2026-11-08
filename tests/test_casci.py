@@ -185,7 +185,7 @@ def test_execution_summary_reads_the_prepared_reference_code_and_resources(commo
     expected=reference.get_dict()['settings']
     code=orm.load_code(common_reference[2])
     details=execution_details(reference.creator.uuid)
-    assert details=={'code':code.label,'computer':code.computer.label,
+    assert details=={'code':code.label,'computer':code.computer.label,'stash_directory':'',
                     **{key:expected[key] for key in ('nprocs','memory_mb','wallclock_seconds')}}
     assert all(isinstance(value,(str,int)) for value in details.values())
 
@@ -195,6 +195,7 @@ def test_calcjob_stages_shared_reference_and_never_retrieves_large_orbitals(comm
     ref, remote, code = orm.load_node(ref_uuid),orm.load_node(remote_uuid),orm.load_code(code_uuid)
     b = casci.CasciCalculation.get_builder()
     b.code,b.orbital_reference = code,ref
+    b.compact_code = code
     b.structure = orm.load_node(ref.get_dict()['structure_uuid'])
     b.active_space = orm.Dict(dict={'electrons':3,'orbitals':[6,7]})
     b.settings = orm.Dict(dict={'nroots':2})

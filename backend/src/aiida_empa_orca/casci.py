@@ -4,15 +4,18 @@ import hashlib
 import json
 import math
 import re
+from importlib.resources import files
 
 from aiida import common, engine, orm
 from aiida.parsers import Parser
 from aiida_orca.calculations.orca_orca import OrcaCalculation
 
-from .artifacts import resolve_electronic, storage_builder, storage_policy
+from .artifacts import resolve_electronic, storage_builder, stash_options
 from .common_orbitals import attach_orbital, copy_orbital, options, source_spec
 from .input import render_input
 from .reference import single_point_parameters
+from .native_logs import (DIRECTORY, MANIFEST, output_policy, read_state_summary,
+                          validate_manifest, validate_summary)
 
 PROCESS_TYPE = 'aiida.workflows:empa_orca.casci'
 HARTREE_TO_EV = 27.211386245988
@@ -144,24 +147,6 @@ def parse_states(text, reference, space, settings):
                        'energy_hartree':found[(mult, root)]} for mult, root in sorted(expected)]}
 
 
-def read_state_summary(handle):
-    """Stream the lines used by ``parse_states`` without retaining CI vectors.
-
-    Determinant printing can produce gigabytes of output. Keep every matching
-    line throughout the file, including late warnings and repeated blocks, so
-    the existing validation still sees contradictory or unconverged results.
-    This does not modify the full retrieved output or its CI coefficients.
-    """
-    markers = re.compile(
-        r'ORCA TERMINATED NORMALLY|Number of active (?:electrons|orbitals)|'
-        r'Total number of electrons|^\s*Active\s+\d+\s*-\s*\d+|'
-        r'CI-PROBLEM SOLVED|>>>\s*CAS-CI\.|'
-        r'^\s*(?:Active|Internal|External)\s+Orbitals|'
-        r'CAS-SCF STATES FOR BLOCK|^\s*ROOT\s+\d+\s*:|'
-        r'Spin-Determinant CI Printing|DENSITY MATRIX|^\s*WARNING:', re.I)
-    return ''.join(line for line in handle if markers.search(line))
-
-
 def validate_reference(reference_node, source_remote):
     producer = reference_node.creator
     allowed = ('aiida.calculations:empa_orca.common_orbitals', 'aiida.calculations:empa_orca.casscf')
@@ -182,13 +167,28 @@ class CasciCalculation(engine.CalcJob):
         spec.input('orbital_reference', valid_type=orm.Dict)
         spec.input('active_space', valid_type=orm.Dict)
         spec.input('settings', valid_type=orm.Dict)
+        spec.input('compact_code', valid_type=orm.AbstractCode, required=False,
+                   help='Configured ORCA tools runtime; required for new compact-output jobs.')
+        spec.input('native_output_policy', valid_type=orm.Dict,
+                   default=lambda: orm.Dict(dict={'mode': 'remote'}))
         source_spec(spec)
         spec.input('metadata.options.parser_name', default='empa_orca.casci')
         spec.input('metadata.options.withmpi', default=False)
         spec.output('state_energies', valid_type=orm.Dict)
+        spec.output('native_output_manifest', valid_type=orm.Dict, required=False)
         spec.exit_code(310, 'ERROR_STATES', message='CASCI states are missing or invalid; inspect aiida.out.')
 
     def prepare_for_submission(self, folder):
+        if 'compact_code' not in self.inputs:
+            raise ValueError('Configure the ORCA tools runtime before submitting compact-output CASCI')
+        if self.inputs.compact_code.computer.uuid != self.inputs.code.computer.uuid:
+            raise ValueError('Compact native output on the ORCA calculation computer')
+        if self.inputs.metadata.options.get('additional_retrieve_list'):
+            raise ValueError('Additional retrieval is incompatible with the bounded-output protocol')
+        policy = output_policy(self.inputs.native_output_policy.get_dict())
+        expected_stash = stash_options(policy['stash_directory'], DIRECTORY) if policy['mode'] == 'stash' else {}
+        if dict(self.inputs.metadata.options.get('stash', {})) != expected_stash:
+            raise ValueError('Native-log stash options differ from the reviewed retention policy')
         reference = self.inputs.orbital_reference.get_dict()
         if str(self.inputs.structure.uuid) != reference['structure_uuid']:
             raise ValueError('CASCI must use the exact prepared geometry node')
@@ -197,10 +197,19 @@ class CasciCalculation(engine.CalcJob):
         OrcaCalculation._write_structure(self.inputs.structure, folder, 'aiida.coords.xyz')
         info = common.CalcInfo()
         copy_orbital(info, self.inputs)
+        folder.get_subfolder(DIRECTORY, create=True)
+        with folder.open('native_output_request.json', 'w') as stream:
+            json.dump({'protocol': 'casci-v1', 'policy': policy}, stream)
+        with folder.open('compact_output.py', 'w') as stream:
+            stream.write(files('aiida_empa_orca').joinpath('native_logs.py').read_text())
         code = common.CodeInfo()
         code.code_uuid, code.cmdline_params = self.inputs.code.uuid, ['aiida.inp']
-        code.stdout_name, code.join_files = 'aiida.out', True
-        info.codes_info, info.retrieve_list = [code], ['aiida.out', 'aiida.property.txt']
+        code.stdout_name, code.join_files = DIRECTORY + '/aiida.out', True
+        compact = common.CodeInfo()
+        compact.code_uuid, compact.cmdline_params = self.inputs.compact_code.uuid, ['compact_output.py']
+        compact.stdout_name, compact.join_files = 'compact_output.log', True
+        info.codes_info, info.codes_run_mode = [code, compact], common.CodeRunMode.SERIAL
+        info.retrieve_list = ['aiida.out', MANIFEST, 'native_output_tail.txt', 'compact_output.log']
         return info
 
 
@@ -210,12 +219,24 @@ class CasciParser(Parser):
             reference = self.node.inputs.orbital_reference.get_dict()
             space = active_space(self.node.inputs.active_space.get_dict(), reference)
             settings = casci_settings(self.node.inputs.settings.get_dict(), reference, space)
+            record = None
+            if MANIFEST in self.retrieved.base.repository.list_object_names():
+                record = json.loads(self.retrieved.base.repository.get_object_content(MANIFEST))
+                validate_manifest(record)
+                content = self.retrieved.base.repository.get_object_content('aiida.out', mode='rb')
+                validate_summary(record, content)
+                if record['policy']['mode'] == 'stash' and 'remote_stash' not in self.node.outputs:
+                    raise ValueError('The requested full native-output stash is missing')
+            elif 'compact_code' in self.node.inputs:
+                raise ValueError('Compact native-output collection failed; inspect compact_output.log and the remote log')
             with self.retrieved.base.repository.open('aiida.out', mode='r') as handle:
                 text = read_state_summary(handle)
             data = parse_states(text, reference, space, settings)
             data['orbital_reference_uuid'] = str(self.node.inputs.orbital_reference.uuid)
             data['structure_uuid'] = str(self.node.inputs.structure.uuid)
             self.out('state_energies', orm.Dict(dict=data))
+            if record is not None:
+                self.out('native_output_manifest', orm.Dict(dict=record))
         except (KeyError, ValueError, OSError) as exc:
             self.logger.error(str(exc))
             return self.exit_codes.ERROR_STATES
@@ -241,10 +262,13 @@ class CasciWorkChain(engine.WorkChain):
                          'storage_policy':orm.Dict}.items():
             spec.input(key, valid_type=typ)
         spec.input('force_recompute', valid_type=orm.Bool, default=lambda:orm.Bool(False))
+        spec.input('native_output_policy', valid_type=orm.Dict,
+                   default=lambda: orm.Dict(dict={'mode': 'remote'}))
+        spec.output('native_output_manifest', valid_type=orm.Dict, required=False)
         for key, typ in {'state_energies':orm.Dict, 'retrieved':orm.FolderData, 'remote_folder':orm.RemoteData}.items():
             spec.output(key, valid_type=typ)
         spec.outline(cls.setup, engine.if_(cls.needs_calculation)(cls.run_casci, cls.inspect,
-                     cls.preserve, cls.inspect_storage), cls.results)
+                     engine.if_(cls.should_stash_wavefunction)(cls.preserve, cls.inspect_storage)), cls.results)
         spec.exit_code(400, 'ERROR_INPUT', message='Invalid CASCI request or missing common orbitals; see report.')
         spec.exit_code(401, 'ERROR_CASCI', message='CASCI calculation failed; inspect the child calculation.')
         spec.exit_code(402, 'ERROR_STORAGE', message='State energies are available, but CASCI orbital preservation failed.')
@@ -255,7 +279,7 @@ class CasciWorkChain(engine.WorkChain):
             ref = validate_reference(self.inputs.orbital_reference, self.inputs.source_remote)
             self.ctx.space = active_space(self.inputs.active_space.get_dict(), ref)
             self.ctx.settings = casci_settings(self.inputs.settings.get_dict(), ref, self.ctx.space)
-            storage_policy(self.inputs.storage_policy.get_dict())
+            self.ctx.native_output_policy = output_policy(self.inputs.native_output_policy.get_dict())
             if self.inputs.code.computer.uuid != self.inputs.storage_code.computer.uuid:
                 raise ValueError('ORCA and storage codes must use the same computer')
             if str(self.inputs.code.uuid) != str(self.inputs.orbital_reference.creator.inputs.code.uuid):
@@ -270,8 +294,8 @@ class CasciWorkChain(engine.WorkChain):
                                          casci_settings(node.inputs.settings.get_dict(), ref, self.ctx.space), node.inputs.code.uuid)
                     if previous != expected:
                         continue
-                    # Energies and CI printout survive scratch deletion. Later
-                    # Dyson consumers must separately check their required GBW.
+                    # Stored state summaries survive scratch deletion. Dyson
+                    # separately needs the preserved full CI log and GBW.
                     with node.outputs.retrieved.base.repository.open('aiida.out', mode='r') as handle:
                         text = read_state_summary(handle)
                     parsed = parse_states(text, ref, self.ctx.space, self.ctx.settings)
@@ -296,8 +320,12 @@ class CasciWorkChain(engine.WorkChain):
         b.structure = orm.load_node(ref['structure_uuid'])
         b.orbital_reference, b.active_space = self.inputs.orbital_reference, orm.Dict(dict=self.ctx.space)
         b.settings, b.code = orm.Dict(dict=self.ctx.settings), self.inputs.code
+        b.compact_code = self.inputs.storage_code
+        b.native_output_policy = orm.Dict(dict=self.ctx.native_output_policy)
         attach_orbital(b, self.ctx.location, ref['filename'])
         b.metadata.options = options(self.ctx.settings)
+        if self.ctx.native_output_policy['mode'] == 'stash':
+            b.metadata.options.stash = stash_options(self.ctx.native_output_policy['stash_directory'], DIRECTORY)
         # Explicit reuse above needs only durable state energies/CI text. A real
         # run also promises a new GBW, so a stale cached scratch must not win.
         b.metadata.disable_cache = True
@@ -309,10 +337,16 @@ class CasciWorkChain(engine.WorkChain):
         # Preserve useful energies even if the subsequent archive step fails.
         for key in ('state_energies', 'retrieved', 'remote_folder'):
             self.out(key, self.ctx.casci.outputs[key])
+        if 'native_output_manifest' in self.ctx.casci.outputs:
+            self.out('native_output_manifest', self.ctx.casci.outputs.native_output_manifest)
+
+    def should_stash_wavefunction(self):
+        return self.ctx.native_output_policy['mode'] == 'stash'
 
     def preserve(self):
         b = storage_builder(self.ctx.casci.outputs.remote_folder, self.inputs.storage_code,
-                            self.inputs.storage_policy.get_dict(), names=['aiida.gbw'])
+                            {'threshold_mb': 0, 'stash_directory': self.ctx.native_output_policy['stash_directory']},
+                            names=['aiida.gbw'])
         return engine.ToContext(storage=self.submit(b))
 
     def inspect_storage(self):
@@ -324,6 +358,8 @@ class CasciWorkChain(engine.WorkChain):
             node = orm.load_node(self.ctx.reuse_uuid)
             for key in ('state_energies', 'retrieved', 'remote_folder'):
                 self.out(key, node.outputs[key])
+            if 'native_output_manifest' in node.outputs:
+                self.out('native_output_manifest', node.outputs.native_output_manifest)
 
 
 def energy_diagram(datasets, reference_state=None):

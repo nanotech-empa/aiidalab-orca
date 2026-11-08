@@ -5,7 +5,7 @@ from aiida import orm
 from aiida.engine import submit
 
 from aiida_empa_orca import orbital_inspection as backend
-from aiida_empa_orca.artifacts import resolve_electronic
+from aiida_empa_orca.artifacts import resolve_electronic, native_retention
 from aiida_empa_orca.orbitals import cube_parameters, validate_cube_outputs
 from .property_services import helper_code, tool_codes
 
@@ -41,17 +41,22 @@ def catalog(common_uuid):
     return None
 
 
-def submit_catalog(common_uuid, export_uuid, force=False):
+def catalog_builder(common_uuid, export_uuid, force=False):
     node = common_node(common_uuid)
     if not export_uuid:
         raise ValueError('Configure and select the ORCA export code on this computer in Code setup')
     b = backend.OrbitalCatalogWorkChain.get_builder()
     b.orbital_reference, b.source_remote = node.outputs.orbital_reference,node.outputs.remote_folder
     b.storage_policy, b.storage_code = node.inputs.storage_policy,orm.load_code(helper_code(node.inputs.code.computer.uuid))
+    b.retention_policy = orm.Dict(dict=native_retention(node.outputs.remote_folder))
     b.export_code = orm.load_code(export_uuid)
     b.force_recompute = orm.Bool(force)
     b.metadata.label = 'Inspect common spatial orbitals'
-    return str(submit(b).uuid)
+    return b
+
+
+def submit_catalog(common_uuid, export_uuid, force=False):
+    return str(submit(catalog_builder(common_uuid, export_uuid, force)).uuid)
 
 
 def review_cubes(common_uuid, catalog_uuid, kind, parameters, selected_codes):
@@ -89,17 +94,22 @@ def review_cubes(common_uuid, catalog_uuid, kind, parameters, selected_codes):
             'codes':code_ids,'action':'reuse' if reuse else 'compute','reuse_uuid':reuse}
 
 
-def submit_cubes(plan):
+def cubes_builder(plan):
     node = common_node(plan['common_uuid'])
     b = backend.CommonOrbitalCubesWorkChain.get_builder()
     b.orbital_reference, b.source_remote = node.outputs.orbital_reference,node.outputs.remote_folder
     b.catalog, b.orbital_kind = orm.load_node(plan['catalog_uuid']),orm.Str(plan['kind'])
     b.parameters = orm.Dict(dict=plan['parameters'])
     b.storage_policy = node.inputs.storage_policy
+    b.orbital_retention_policy = orm.Dict(dict=native_retention(node.outputs.remote_folder))
     for key,value in plan['codes'].items():
         b[key] = orm.load_code(value)
     b.metadata.label = f'{plan["kind"]} orbital cubes'
-    return str(submit(b).uuid)
+    return b
+
+
+def submit_cubes(plan):
+    return str(submit(cubes_builder(plan)).uuid)
 
 
 def cube_runs(common_uuid, kind):

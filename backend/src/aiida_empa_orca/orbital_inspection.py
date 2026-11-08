@@ -7,9 +7,10 @@ from pathlib import PurePosixPath
 from aiida import common, engine, orm
 from aiida.parsers import Parser
 
-from .artifacts import resolve_electronic, storage_builder, storage_policy
+from .artifacts import resolve_electronic, storage_builder
 from .orbitals import OrbitalCubesCalculation, attach_source, cube_parameters, validate_cube_outputs
 from .rendering import calcjob_options
+from .native_logs import output_policy
 
 CATALOG_PROCESS = 'aiida.workflows:empa_orca.orbital_catalog'
 CUBES_PROCESS = 'aiida.workflows:empa_orca.common_orbital_cubes'
@@ -169,6 +170,7 @@ class OrbitalCatalogWorkChain(engine.WorkChain):
                         'storage_code':orm.AbstractCode,'storage_policy':orm.Dict}.items():
             spec.input(key,valid_type=typ)
         spec.input('force_recompute',valid_type=orm.Bool,default=lambda:orm.Bool(False))
+        spec.input('retention_policy',valid_type=orm.Dict,default=lambda:orm.Dict(dict={'mode':'remote'}))
         spec.output('catalog',valid_type=orm.Dict)
         spec.outline(cls.setup,engine.if_(cls.needs_execution)(cls.preserve,cls.export,cls.inspect),cls.results)
         spec.exit_code(400,'ERROR_SOURCE',message='Orbital files are unavailable; see the workflow report.')
@@ -179,7 +181,7 @@ class OrbitalCatalogWorkChain(engine.WorkChain):
         self.ctx.reuse_uuid, self.ctx.locations = None, {}
         try:
             ref = validate_reference(self.inputs.orbital_reference,self.inputs.source_remote)
-            storage_policy(self.inputs.storage_policy.get_dict())
+            output_policy(self.inputs.retention_policy.get_dict())
             if any(self.inputs[key].computer.uuid != self.inputs.source_remote.computer.uuid
                    for key in ('export_code','storage_code')):
                 raise ValueError('Export orbitals on the reference computer')
@@ -207,11 +209,14 @@ class OrbitalCatalogWorkChain(engine.WorkChain):
 
     def preserve(self):
         pending = {}
+        policy = output_policy(self.inputs.retention_policy.get_dict())
+        if policy['mode'] == 'remote':
+            return engine.ToContext()
         for kind,location in self.ctx.locations.items():
             if location['kind'] == 'remote':
                 name = variants(self.inputs.orbital_reference.get_dict())[kind]
                 b = storage_builder(self.inputs.source_remote,self.inputs.storage_code,
-                                    self.inputs.storage_policy.get_dict(),names=[name])
+                                    {'threshold_mb':0,'stash_directory':policy['stash_directory']},names=[name])
                 pending['storage_'+kind] = self.submit(b)
         return engine.ToContext(**pending)
 
@@ -251,6 +256,7 @@ class CommonOrbitalCubesWorkChain(engine.WorkChain):
                         'orbital_kind':orm.Str,'parameters':orm.Dict,'storage_policy':orm.Dict,
                         'storage_code':orm.AbstractCode,'plot_code':orm.AbstractCode,'cubehandler_code':orm.AbstractCode}.items():
             spec.input(key,valid_type=typ)
+        spec.input('orbital_retention_policy',valid_type=orm.Dict,default=lambda:orm.Dict(dict={'mode':'remote'}))
         for key,typ in {'manifest':orm.Dict,'retrieved':orm.FolderData,'remote_folder':orm.RemoteData,
                         'remote_stash':orm.RemoteStashFolderData}.items():
             spec.output(key,valid_type=typ,required=key != 'remote_stash')
@@ -276,7 +282,7 @@ class CommonOrbitalCubesWorkChain(engine.WorkChain):
             if any(self.inputs[key].computer.uuid != self.inputs.source_remote.computer.uuid
                    for key in ('storage_code','plot_code','cubehandler_code')):
                 raise ValueError('Generate orbitals on their storage computer')
-            storage_policy(self.inputs.storage_policy.get_dict())
+            output_policy(self.inputs.orbital_retention_policy.get_dict())
             self.ctx.parameters = p
             for uuid in runs(self.inputs.orbital_reference.uuid,CUBES_PROCESS):
                 old = orm.load_node(uuid)
@@ -303,10 +309,11 @@ class CommonOrbitalCubesWorkChain(engine.WorkChain):
         return self.ctx.reuse_uuid is None
 
     def preserve(self):
-        if self.ctx.location['kind'] == 'remote':
+        policy = output_policy(self.inputs.orbital_retention_policy.get_dict())
+        if self.ctx.location['kind'] == 'remote' and policy['mode'] == 'stash':
             name = self.inputs.catalog.get_dict()['sets'][self.inputs.orbital_kind.value]['filename']
             return engine.ToContext(storage=self.submit(storage_builder(self.inputs.source_remote,self.inputs.storage_code,
-                                       self.inputs.storage_policy.get_dict(),names=[name])))
+                                       {'threshold_mb':0,'stash_directory':policy['stash_directory']},names=[name])))
 
     def generate(self):
         if 'storage' in self.ctx and not self.ctx.storage.is_finished_ok:

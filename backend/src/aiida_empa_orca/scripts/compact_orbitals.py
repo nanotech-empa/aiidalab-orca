@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import re
 
+METADATA_LIMIT = 2 * 1024**2
+
 
 def compact_json(handle):
     """Read ORCA's pretty JSON with O(number of orbitals) memory.
@@ -14,24 +16,31 @@ def compact_json(handle):
     Reject an unexpected array format instead of misreading occupations.
     """
     kept = io.StringIO()
+    size = 0
+    def emit(text):
+        nonlocal size
+        size += len(text.encode('utf-8'))
+        if size > METADATA_LIMIT:
+            raise ValueError('Orbital metadata exceeds the compact-output budget; original orbitals remain remote')
+        kept.write(text)
     skipping = False
     for line in handle:
         if skipping:
             closing = re.fullmatch(r'\s*\](,?)\s*', line)
             if closing:
-                kept.write('[]'+closing[1]+'\n')
+                emit('[]'+closing[1]+'\n')
                 skipping = False
             elif not re.fullmatch(r'\s*[-+0-9.eE]+,?\s*', line):
                 raise ValueError('Unexpected ORCA MO-coefficient array format')
             continue
         match = re.fullmatch(r'(\s*"MOCoefficients"\s*:\s*)\[\s*', line)
         if match:
-            kept.write(match[1])
+            emit(match[1])
             skipping = True
         elif '"MOCoefficients"' in line:
             raise ValueError('Unexpected ORCA MO-coefficient array layout')
         else:
-            kept.write(line)
+            emit(line)
     if skipping:
         raise ValueError('Truncated ORCA MO-coefficient array')
     return json.loads(kept.getvalue())
@@ -57,7 +66,10 @@ def main():
                                 'source_filename': item['name'], 'size_bytes': item['size_bytes']}
         path.unlink()
         staged.unlink()  # Only this CalcJob's expendable staging copy.
-    Path('orbital_metadata.json').write_text(json.dumps(result, indent=2))
+    content = json.dumps(result, indent=2)
+    if len(content.encode('utf-8')) > METADATA_LIMIT:
+        raise ValueError('Combined orbital metadata exceeds the compact-output budget; original orbitals remain remote')
+    Path('orbital_metadata.json').write_text(content)
 
 
 if __name__ == '__main__':

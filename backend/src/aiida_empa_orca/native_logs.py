@@ -34,8 +34,14 @@ SCF_MARKERS = re.compile(
     r'FINAL SINGLE POINT ENERGY|THE OPTIMIZATION HAS CONVERGED|Program Version|'
     r'Expectation value of <S\*\*2>|Number of Electrons\s+NEL|Total number of electrons|'
     r'^\s*WARNING:|ERROR|DID NOT CONVERGE', re.I)
+COMMON_MARKERS = re.compile(
+    r'ORCA TERMINATED NORMALLY|MaxIter==0 has been chosen - skipping the SCF|'
+    r'SCF CONVERGED AFTER|Guess MOs are being read from file|'
+    r'Input Geometry matches current geometry|Input basis set matches current basis set|'
+    r'Number of (?:basis functions|contracted basis functions)|Number of Electrons\s+NEL|'
+    r'Quasi-Restricted Orbitals were saved in aiida.qro|^\s*WARNING:|ERROR|DID NOT CONVERGE', re.I)
 PROTOCOLS = {'casci-v1': ('aiida.out',), 'casscf-v1': ('aiida.out', 'verify.out'),
-             'scf-v1': ('aiida.out',), 'optimization-v1': ('aiida.out',)}
+             'scf-v1': ('aiida.out',), 'optimization-v1': ('aiida.out',), 'common-orbitals-v1': ('aiida.out',)}
 COMPACT_LIMITS = {'scf_results.json': 2 * 1024**2, 'aiida.xyz': 2 * 1024**2,
                   'aiida_trj.xyz': 8 * 1024**2}
 
@@ -133,7 +139,8 @@ def collect_output(request, root=Path('.')):
     policy, root = output_policy(request['policy']), Path(root)
     records, summaries, errors = [], [], []
     molecular = protocol in ('scf-v1', 'optimization-v1')
-    markers = SCF_MARKERS if molecular else STATE_MARKERS if protocol == 'casci-v1' else CASSCF_MARKERS
+    markers = (SCF_MARKERS if molecular else COMMON_MARKERS if protocol == 'common-orbitals-v1'
+               else STATE_MARKERS if protocol == 'casci-v1' else CASSCF_MARKERS)
     for name in PROTOCOLS[protocol]:
         tail = 'native_output_tail.txt' if name == 'aiida.out' else 'verify_tail.txt'
         original, summary, error = _collect_log(root, name, markers, tail)

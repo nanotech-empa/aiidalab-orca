@@ -14,6 +14,14 @@ ELECTRONIC_FILES = ('aiida.gbw', 'aiida.densities', 'aiida.densitiesinfo')
 STORAGE_PROCESS = 'aiida.calculations:empa_orca.electronic_storage'
 
 
+def native_retention(remote):
+    """The producing reference's recorded policy; never infer retrieval from size."""
+    from .native_logs import output_policy
+    producer = remote.creator
+    return output_policy(producer.inputs.native_output_policy.get_dict()
+                         if producer is not None and 'native_output_policy' in producer.inputs else None)
+
+
 def electronic_names(names):
     """Explicit flat file bundles, also supporting common orbitals and CASCI."""
     if not names or len(set(names)) != len(names) or any(

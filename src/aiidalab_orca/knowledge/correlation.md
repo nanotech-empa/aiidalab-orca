@@ -1,6 +1,6 @@
 # Correlation-energy operating guide
 
-Use the installed **Correlation energies · MP2 / NEVPT2** app workspace. The
+Use the installed **Correlation energies · MP2 / NEVPT2 / CASPT2** app workspace. The
 current chat form adapter does not submit these controls; do not claim an
 unexposed tool has done so. Inspect the source, actual form and native output.
 
@@ -44,8 +44,21 @@ vectors. Do not route it into current Dyson/Kondo, replace spectral peaks,
 recycle an old QPU Hamiltonian, or describe an energy correction as a corrected
 transition amplitude. Retain the independent shared-orbital CASCI path.
 
+CASPT2 is available in the same CASSCF correlation branch as a different
+perturbation model. Review explicit real/imaginary/IPEA shifts in Hartree;
+all default to zero, and ORCA's IPEA convention differs from OpenMolcas.
+Do not introduce a shift automatically or use CASPT2 as a silent remedy for
+a failed NEVPT2 result. Record reference weights and each excitation-class
+denominator, verify native shift readback and every residual iteration solve.
+ORCA may finish without aborting an unconverged CASPT2 solve. Native normal
+termination is insufficient. Distinguish reference weights from CASSCF
+state-average weights. Small weights/denominators require inspection, not a
+claim of validity from a single diagnostic. Full first-order wavefunction
+storage increases memory/disk needs on larger systems. The single-state
+one-shift-at-a-time checks test implementation, not universal protocol accuracy.
+
 Editing invalidates review; submission is explicit. Reuse matching running or
 successful requests unless recomputation is selected. Retain failed outputs,
 diagnose the cause and never weaken tolerances or optimize a new reference
-silently. CASPT2, F12, QD and nonorthogonal transition amplitudes are outside
+silently. CASPT2-K, F12, QD and nonorthogonal transition amplitudes are outside
 this increment. See [the user guide](../../../docs/correlation.md).

@@ -212,6 +212,82 @@ def test_pno_presets_do_not_leak_into_other_methods():
                              ref['settings'], ref['casscf_settings'])
 
 
+def caspt2_text():
+    text, expected = nevpt_text()
+    text = text.replace('PT2 = SC-NEVPT2', 'PT2 = CASPT2').replace('< NEVPT2  >', '< CASPT2  >')
+    text = text.replace('NEVPT2 Results', 'CASPT2 Results')
+    text = text.replace('Total Energy (E0+dE)', 'Reference Weight : W0 = 0.9\nTotal Energy (E0+dE)')
+    echo = '| 23> CASPT2_ishift 0.0\n| 24> CASPT2_rshift 0.0\n| 25> CASPT2_IPEAshift 0.0\n'
+    shifts = 'CASPT2 Real Levelshift ... 0.00e+00\nCASPT2 Im. Levelshift ... 0.00e+00\nCASPT2 IPEA Levelshift ... 0.00e+00\n'
+    solvers = ''
+    for row in expected['states']:
+        solvers += f'MULT {row["multiplicity"]}, ROOT {row["root"]}\n'
+        for kind in ['IJAB', 'ITAB', 'IJTA', 'TUAB', 'IJTU', 'ITAU', 'TUVA', 'ITUV']:
+            solvers += f'smallest energy denominator {kind} = 0.237441258\n'
+        solvers += '''CASPT2-D Energy = -999.0
+Iter EPT2 EHylleraas residual norm Time
+1 -0.2 -0.2 0.03 0.0
+2 -0.2 -0.2 0.00000288 0.0
+CASPT2 calculation converged in 2 iterations
+'''
+    text = echo + text.replace('< CASPT2  >', '< CASPT2  >\n' + shifts)
+    return text.replace('CASPT2 Results', solvers + 'CASPT2 Results'), expected
+
+
+def test_caspt2_preserves_diagnostics_and_does_not_use_the_diagonal_energy():
+    text, expected = caspt2_text()
+    ref = reference()
+    data = correlation.parse_result(text, ref['settings'], {'method': 'CASPT2'}, 15, ref, expected)
+    assert len(data['states']) == 3 and data['checks']['caspt2_states_converged'] == 3
+    assert data['states'][0]['energy_hartree'] == -100.2
+    assert data['states'][0]['reference_weight'] == .9
+    assert data['states'][0]['caspt2_iterations'] == 2
+    assert data['states'][0]['final_residual_norm'] == 2.88e-6
+    assert data['model']['shifts_hartree'] == {key: 0. for key in correlation.CASPT2_SHIFTS}
+    assert not data['dyson_compatible'] and not data['provides_transition_amplitudes']
+    native = correlation.correlation_input(ref['settings'], {'method': 'CASPT2'}, ref)
+    assert 'PTMethod FIC_CASPT2' in native and 'CanonStep' not in native
+    assert all(name + ' 0.0' in native for name in correlation.CASPT2_SHIFTS.values())
+
+
+@pytest.mark.parametrize('before,after', [
+    ('CASPT2 calculation converged in 2 iterations', 'CASPT2 did not converge'),
+    ('2 -0.2 -0.2 0.00000288 0.0', '2 -0.2 -0.2 nan 0.0'),
+    ('2 -0.2 -0.2 0.00000288 0.0', '2 -0.2 -0.2 -1 0.0'),
+    ('smallest energy denominator ITUV = 0.237441258', 'smallest energy denominator ITUV = -0.2'),
+    ('Reference Weight : W0 = 0.9', 'Reference Weight : W0 = 1.1'),
+    ('Reference Weight : W0 = 0.9', 'missing reference weight'),
+    ('CASPT2 Real Levelshift ... 0.00e+00', 'CASPT2 Real Levelshift ... 1.00e-01'),
+    ('PT2 = CASPT2', 'PT2 = CASPT2-K'),
+])
+def test_caspt2_rejects_native_success_without_complete_consistent_diagnostics(before, after):
+    text, expected = caspt2_text()
+    ref = reference()
+    with pytest.raises(ValueError):
+        correlation.parse_result(text.replace(before, after, 1), ref['settings'],
+                                 {'method': 'CASPT2'}, 15, ref, expected)
+
+
+def test_caspt2_checks_exact_shift_input_and_native_print_rounding():
+    text, expected = caspt2_text()
+    ref = reference()
+    changed = text.replace('CASPT2_ishift 0.0', 'CASPT2_ishift 0.123456').replace(
+        'CASPT2 Im. Levelshift ... 0.00e+00', 'CASPT2 Im. Levelshift ... 1.23e-01')
+    data = correlation.parse_result(changed, ref['settings'],
+        {'method': 'CASPT2', 'imaginary_shift_hartree': .123456}, 15, ref, expected)
+    assert data['model']['shifts_hartree']['imaginary_shift_hartree'] == .123456
+    with pytest.raises(ValueError, match='shift input'):
+        correlation.parse_result(changed, ref['settings'], {'method': 'CASPT2'}, 15, ref, expected)
+
+
+@pytest.mark.parametrize('value', [-.1, float('nan'), float('inf'), True, '0.1'])
+def test_caspt2_shift_validation_rejects_invalid_inputs(value):
+    ref = reference()
+    with pytest.raises(ValueError, match='finite nonnegative'):
+        correlation.settings({'method': 'CASPT2', 'imaginary_shift_hartree': value},
+                             ref['settings'], ref['casscf_settings'])
+
+
 def test_form_gates_nevpt2_and_requires_review_without_implicit_jobs(monkeypatch):
     from aiidalab_orca import correlation as gui
     calls = []
@@ -241,6 +317,15 @@ def test_form_gates_nevpt2_and_requires_review_without_implicit_jobs(monkeypatch
         panel.nevpt.value = 'FIC-NEVPT2'
         assert panel.pno.layout.display == 'none'
         assert 'pno_preset' not in panel._values()
+        panel.nevpt.value = 'CASPT2'
+        assert panel.caspt2_settings.layout.display == ''
+        assert panel._values()['ipea_shift_hartree'] == 0
+        panel.imaginary_shift.value = .1
+        assert panel.plan is None and panel.submit.disabled
+        assert panel._values()['imaginary_shift_hartree'] == .1
+        panel.nevpt.value = 'SC-NEVPT2'
+        assert panel.caspt2_settings.layout.display == 'none'
+        assert 'imaginary_shift_hartree' not in panel._values()
         panel.prepare.click()
         assert calls == ['prepare']
     finally:

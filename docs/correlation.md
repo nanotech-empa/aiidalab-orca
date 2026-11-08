@@ -1,6 +1,6 @@
 # Correlation energies
 
-Open **Correlation energies · MP2 / NEVPT2** from a completed geometry/SCF
+Open **Correlation energies · MP2 / NEVPT2 / CASPT2** from a completed geometry/SCF
 entry. These are fixed-geometry energy calculations; original results remain
 unchanged.
 
@@ -11,7 +11,7 @@ correlation correction and total separately. The UHF result also retains S²
 and its pure-spin target as diagnostics. MP2 is a single-reference energy
 method, not an excited-state solver.
 
-**CASSCF → NEVPT2** requires a successfully verified CASSCF reference.
+**CASSCF → correlation** requires a successfully verified CASSCF reference.
 Prepare and inspect it first, then explicitly select it here. The geometry,
 charge, active space, spin/root families and optimization weights are inherited.
 The auxiliary basis must match the CASSCF integral model. Choose the contraction
@@ -25,6 +25,21 @@ ORCA performs frozen CASCI followed by the selected RI-NEVPT2 correction with
 per-state canonicalization. DLPNO's intrinsic PNO construction belongs to that
 method; it is distinct from optimizing a new CASSCF reference.
 No additional orbital optimization is hidden in the correction step.
+
+**CASPT2** is a separate fully internally contracted RI correction using the
+same verified source. Real, imaginary and IPEA shifts are explicit in Hartree,
+under the closed CASPT2-settings section; all start at zero. ORCA's IPEA
+convention differs from OpenMolcas. No shift is chosen automatically and CASPT2
+is not an automatic fallback for a rejected NEVPT2 calculation. It uses more
+memory/disk for the full first-order wavefunction, which matters on larger systems.
+
+Each CASPT2 residual solve must converge. Its reference weight, smallest
+denominators, final residual norm and shift readback are retained per state.
+Reference weight is a perturbation diagnostic, distinct from state-average
+weights. Small weights or problematic denominators need inspection; normal
+termination or one diagnostic alone does not certify physical validity.
+The small single-state validation changes one shift at a time to check the
+controls; it does not define a universal shifted molecular protocol.
 
 The frozen-core checkbox chooses `FC_ELECTRONS` or `FC_NONE`. The result records
 the actual native frozen-electron count. Resources, auxiliary basis and forced
@@ -57,15 +72,17 @@ directory. The source CASSCF orbitals are unchanged.
 
 With the matching shared openBIS exporter, entry export discovers these stored
 analyses too. RI-MP2 uses the existing energy-calculation category; the complete
-SC-NEVPT2 state family stays together as a CAS simulation. No full remote files
+NEVPT2/CASPT2 state family stays together as a CAS simulation. No full remote files
 are fetched for export.
 
 The `correlation_energies` output is explicitly energy-only. It is not a CASCI
 wavefunction, orbital reference or Hamiltonian export. Current Dyson/Kondo
 calculations still require compatible shared-orbital CASCI sectors; corrected
-energies are not silently substituted into their spectra. CASPT2, F12,
+energies are not silently substituted into their spectra. CASPT2-K, F12,
 QD-NEVPT2 and corrected transition amplitudes are future additions.
 
 Conventions follow ORCA's [MP2](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/MP2.html),
 [NEVPT2](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/NEVPT2.html)
 and [frozen-core](https://www.faccts.de/docs/orca/6.1/manual/contents/essentialelements/frozencore.html) documentation.
+The [CASPT2 documentation](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/caspt2.html)
+also explains shift conventions and the need to verify every residual solve.

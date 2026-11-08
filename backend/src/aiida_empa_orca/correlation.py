@@ -13,7 +13,10 @@ from .reference import single_point_parameters
 
 PROCESS_TYPE = 'aiida.calculations:empa_orca.correlation'
 NEVPT_METHODS = ('SC-NEVPT2', 'FIC-NEVPT2', 'DLPNO-NEVPT2')
-METHODS = ('RI-MP2', *NEVPT_METHODS)
+CAS_METHODS = (*NEVPT_METHODS, 'CASPT2')
+METHODS = ('RI-MP2', *CAS_METHODS)
+CASPT2_SHIFTS = {'imaginary_shift_hartree': 'CASPT2_ishift',
+                'real_shift_hartree': 'CASPT2_rshift', 'ipea_shift_hartree': 'CASPT2_IPEAshift'}
 NUMBER = r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[EeDd][-+]?\d+)?'
 
 
@@ -25,6 +28,8 @@ def settings(values, electronic, optimized=None):
                 **{key: electronic[key] for key in ('nprocs', 'memory_mb', 'wallclock_seconds')}}
     if isinstance(values, dict) and values.get('method') == 'DLPNO-NEVPT2':
         defaults['pno_preset'] = 'NormalPNO'
+    if isinstance(values, dict) and values.get('method') == 'CASPT2':
+        defaults.update({key: 0. for key in CASPT2_SHIFTS})
     if not isinstance(values, dict) or set(values) - set(defaults):
         raise ValueError('Unknown correlation setting')
     result = defaults | values
@@ -32,6 +37,9 @@ def settings(values, electronic, optimized=None):
         raise ValueError('Choose a supported correlation method and an explicit frozen-core policy')
     if result.get('pno_preset', 'NormalPNO') not in ('NormalPNO', 'TightPNO'):
         raise ValueError('Choose NormalPNO or TightPNO explicitly')
+    for key in CASPT2_SHIFTS.keys() & result.keys():
+        if type(result[key]) not in (int, float) or not math.isfinite(result[key]) or result[key] < 0:
+            raise ValueError('CASPT2 shifts must be finite nonnegative numbers in Hartree')
     for key in ('nprocs', 'memory_mb', 'wallclock_seconds'):
         if type(result[key]) is not int or result[key] < 1:
             raise ValueError(key + ' must be a positive integer')
@@ -39,24 +47,26 @@ def settings(values, electronic, optimized=None):
         raise ValueError('Provide at least 256 MiB per process')
     from .protocols import _token
     result['auxiliary_basis'] = _token(result['auxiliary_basis'], 'Correlation auxiliary basis')
-    if result['method'] in NEVPT_METHODS and (not optimized or
+    if result['method'] in CAS_METHODS and (not optimized or
             result['auxiliary_basis'] != optimized['auxiliary_basis']):
-        raise ValueError('NEVPT2 requires the same integral model as its verified CASSCF reference')
+        raise ValueError('The correction requires the same integral model as its verified CASSCF reference')
     return result
 
 
 def correlation_input(electronic, values, reference=None):
     optimized = reference['casscf_settings'] if reference else None
     s = settings(values, electronic, optimized)
-    if s['method'] in NEVPT_METHODS:
+    if s['method'] in CAS_METHODS:
         if reference.get('preparation') != casscf.PREPARATION:
             raise ValueError('Select a verified CASSCF reference')
         objective = optimized | {key: s[key] for key in ('nprocs', 'memory_mb', 'wallclock_seconds')}
         text = casscf.casscf_input(reference, reference['optimized_active_space'], objective, readback=True)
         text = text.replace('%moinp "aiida.gbw"', '%moinp "reference.gbw"')
-        pt = ' PTMethod ' + s['method'].replace('-', '_') + '\n'
+        pt = ' PTMethod ' + ('FIC_CASPT2' if s['method'] == 'CASPT2' else s['method'].replace('-', '_')) + '\n'
         if s['method'] == 'SC-NEVPT2':
             pt += ' PTSettings\n  CanonStep canonical\n end\n'
+        elif s['method'] == 'CASPT2':
+            pt += ' PTSettings\n' + ''.join(f'  {native} {float(s[key])}\n' for key, native in CASPT2_SHIFTS.items()) + ' end\n'
         text = text.replace(' maxiter 1\n', ' maxiter 1\n' + pt)
         if s['method'] == 'DLPNO-NEVPT2':
             text = re.sub(r'^(! .+)$', lambda m: m[1] + ' ' + s['pno_preset'], text, flags=re.M)
@@ -131,6 +141,58 @@ def dlpno_checks(text, preset):
             'dlpno_states_checked': len(blocks), 'amplitude_solves_checked': cycles}
 
 
+def caspt2_checks(text, pt, settings):
+    """Read shifts and each state's actual residual solve, not CASPT2-D."""
+    labels = {'real_shift_hartree': 'Real', 'imaginary_shift_hartree': r'Im\.', 'ipea_shift_hartree': 'IPEA'}
+    native_shifts = {}
+    for key, label in labels.items():
+        echo = one_number(r'\|\s*\d+>\s*' + CASPT2_SHIFTS[key] + r'\s+(' + NUMBER + ')', text, key + ' input')
+        if echo != settings[key]:
+            raise ValueError('CASPT2 shift input differs from the reviewed value')
+        token = re.findall(r'CASPT2\s+' + label + r'\s+Levelshift\s+\.{2,}\s*(' + NUMBER + ')', pt)
+        if len(token) != 1:
+            raise ValueError('Missing or ambiguous native CASPT2 shift')
+        value = float(token[0])
+        # ORCA prints native shifts at three significant figures. Preserve
+        # the exact echoed request and allow only this output rounding.
+        mantissa, _, exponent = token[0].lower().partition('e')
+        decimals = len(mantissa.split('.')[1]) if '.' in mantissa else 0
+        rounding = .5 * 10 ** (int(exponent or 0) - decimals)
+        if not math.isfinite(value) or (value == 0 and settings[key] != 0) or abs(value - settings[key]) > rounding + 1e-14:
+            raise ValueError('The native CASPT2 shift differs from the reviewed value')
+        native_shifts[key] = value
+    prefix = pt.split('CASPT2 Results', 1)[0]
+    blocks = re.split(r'\bMULT\s+(\d+),\s*ROOT\s+(\d+)', prefix)
+    states = {}
+    for i in range(1, len(blocks), 3):
+        key, body = (int(blocks[i]), int(blocks[i + 1])), blocks[i + 2]
+        if key in states:
+            raise ValueError('Duplicated CASPT2 residual solve')
+        converged = re.findall(r'CASPT2 calculation converged in\s+(\d+)\s+iterations', body)
+        header = re.search(r'Iter\s+EPT2\s+EHylleraas\s+residual norm\s+Time', body)
+        if len(converged) != 1 or header is None:
+            raise ValueError('A CASPT2 residual solve did not converge')
+        iterations = re.findall(r'^\s*(\d+)\s+(' + NUMBER + r')\s+(' + NUMBER + r')\s+(' + NUMBER + r')\s+(' + NUMBER + r')\s*$', body[header.end():], re.M)
+        if not iterations or [int(row[0]) for row in iterations] != list(range(1, int(converged[0]) + 1)):
+            raise ValueError('Incomplete CASPT2 residual iteration table')
+        if any(not math.isfinite(float(v)) for row in iterations for v in row[1:]) or float(iterations[-1][3]) < 0:
+            raise ValueError('Invalid CASPT2 residual diagnostics')
+        denominators = {kind: float(value) for kind, value in re.findall(
+            r'smallest energy denominator\s+(\w+)\s*=\s*(' + NUMBER + ')', body)}
+        if set(denominators) != {'IJAB', 'ITAB', 'IJTA', 'TUAB', 'IJTU', 'ITAU', 'TUVA', 'ITUV'}:
+            raise ValueError('Incomplete CASPT2 denominator diagnostics')
+        if any(not math.isfinite(v) or v <= 0 for v in denominators.values()):
+            raise ValueError('A nonpositive CASPT2 denominator requires scientific review')
+        states[key] = {'smallest_denominators_hartree': denominators,
+                       'caspt2_iterations': int(converged[0]),
+                       'final_residual_norm': float(iterations[-1][3])}
+    if not states:
+        raise ValueError('No state-resolved CASPT2 residual solves')
+    if re.search(r'WARNING[^\n]*(?:intruder|denominator)|CASPT2 calculation[^\n]*(?:not converged|did not converge)', pt, re.I):
+        raise ValueError('Native CASPT2 convergence/intruder warning requires review')
+    return native_shifts, states
+
+
 def parse_result(text, electronic, values, expected_electrons, reference=None, reference_states=None):
     native_guard(text)
     s = settings(values, electronic, reference['casscf_settings'] if reference else None)
@@ -180,13 +242,15 @@ def parse_result(text, electronic, values, expected_electrons, reference=None, r
         rows = [{'charge': electronic['charge'], 'multiplicity': electronic['multiplicity'], 'root': 0,
                  'reference_energy_hartree': energy, 'correction_hartree': correction, 'energy_hartree': total}]
     else:
-        marker = text.find('< NEVPT2  >')
-        if marker < 0:
-            raise ValueError('No native NEVPT2 stage')
+        family = 'CASPT2' if s['method'] == 'CASPT2' else 'NEVPT2'
+        start = re.search(r'<\s*' + family + r'\s*>', text)
+        if start is None:
+            raise ValueError('No native ' + family + ' stage')
+        marker = start.start()
         # Keep the actual reference section and actual termination footer. PT2
         # prints its own repeated block headers, which are not a second CASCI.
         before = text[:marker]
-        methods = re.findall(r'\bPT2\s*=\s*((?:SC|FIC|DLPNO)-NEVPT2)\b', before)
+        methods = re.findall(r'\bPT2\s*=\s*((?:SC|FIC|DLPNO)-NEVPT2|CASPT2(?:-K)?)\b', before)
         if methods != [s['method']]:
             raise ValueError('The native perturbation method differs from the reviewed method')
         excerpt = before + text[text.rfind('ORCA TERMINATED NORMALLY'):]
@@ -196,7 +260,7 @@ def parse_result(text, electronic, values, expected_electrons, reference=None, r
         if ('>>> CAS-CI.' not in before or 'THE CAS-SCF GRADIENT HAS CONVERGED' in before or
                 any(not re.search(kind + r'\s+Orbitals\s+\.\.\.\s+unchanged', before)
                     for kind in ('Active', 'Internal', 'External'))):
-            raise ValueError('NEVPT2 must read the verified orbitals without hidden optimization')
+            raise ValueError('The correction must read the verified orbitals without hidden optimization')
         if ('Guess MOs are being read from file: reference.gbw' not in before or
                 'Input Geometry matches current geometry' not in before or
                 'Input basis set matches current basis set' not in before):
@@ -214,7 +278,13 @@ def parse_result(text, electronic, values, expected_electrons, reference=None, r
             checks.update(dlpno_checks(text, s['pno_preset']))
         elif 'DLPNO-NEVPT2 SETTINGS' in pt:
             raise ValueError('Unexpected local approximation in a canonical NEVPT2 request')
-        summary = pt[pt.find('NEVPT2 Results'):]
+        diagnostics = {}
+        if s['method'] == 'CASPT2':
+            shifts, diagnostics = caspt2_checks(text, pt, s)
+            checks.update(native_caspt2_shifts_hartree=shifts, caspt2_states_converged=len(diagnostics))
+        if family + ' Results' not in pt:
+            raise ValueError('Missing state-resolved correction results')
+        summary = pt[pt.find(family + ' Results'):]
         pattern = (r'MULT\s+(\d+),\s*ROOT\s+(\d+).*?Total Energy Correction\s*:\s*dE\s*=\s*(' + NUMBER +
                    r').*?Reference\s+Energy\s*:\s*E0\s*=\s*(' + NUMBER +
                    r').*?Total Energy \(E0\+dE\)\s*:\s*E\s*=\s*(' + NUMBER + ')')
@@ -223,14 +293,25 @@ def parse_result(text, electronic, values, expected_electrons, reference=None, r
             if key not in expected or any((r['multiplicity'], r['root']) == key for r in rows):
                 raise ValueError('Unexpected or duplicated corrected state')
             if abs(float(energy) - expected[key]) > 1e-7:
-                raise ValueError('NEVPT2 zero-order energy differs from the verified reference')
+                raise ValueError('The correction zero-order energy differs from the verified reference')
             rows.append({'charge': reference['charge'], 'multiplicity': key[0], 'root': key[1],
                          'reference_energy_hartree': float(energy), 'correction_hartree': float(correction),
                          'energy_hartree': float(total),
                          'averaging_weight': next(row['averaging_weight'] for row in reference_states['states']
                                                   if (row['multiplicity'], row['root']) == key)})
+        if s['method'] == 'CASPT2':
+            weights = re.findall(r'MULT\s+(\d+),\s*ROOT\s+(\d+).*?Reference\s+Weight\s*:\s*W0\s*=\s*(' + NUMBER + ')', summary, re.S)
+            weight_map = {(int(mult), int(root)): float(value) for mult, root, value in weights}
+            if len(weight_map) != len(weights) or set(weight_map) != set(expected) or set(diagnostics) != set(expected):
+                raise ValueError('Incomplete CASPT2 reference-weight/solver diagnostics')
+            for row in rows:
+                key = row['multiplicity'], row['root']
+                weight = weight_map[key]
+                if not math.isfinite(weight) or not 0 < weight <= 1:
+                    raise ValueError('Invalid CASPT2 reference weight')
+                row.update(reference_weight=weight, **diagnostics[key])
         if {(r['multiplicity'], r['root']) for r in rows} != set(expected):
-            raise ValueError('Incomplete NEVPT2 correction table')
+            raise ValueError('Incomplete correction table')
         if s['method'] == 'DLPNO-NEVPT2' and checks['dlpno_states_checked'] != len(rows):
             raise ValueError('Native PNO/solver evidence is incomplete for the requested states')
         counts = re.findall(r'Last\s+frozen\s+orbital\s+\.{2,}\s+(-?\d+)', pt)
@@ -242,7 +323,7 @@ def parse_result(text, electronic, values, expected_electrons, reference=None, r
             frozen = 0
             checks['frozen_core_count_evidence'] = 'native_correlated_ranges_start_at_zero'
         else:
-            raise ValueError('The NEVPT2 frozen-core count was not established')
+            raise ValueError('The correction frozen-core count was not established')
         if frozen > reference['n_electrons'] - space['electrons']:
             raise ValueError('Frozen core overlaps the active space')
         checks.update(reference_readback_max_error_hartree=error, reference_orbitals_unchanged=True,
@@ -258,11 +339,13 @@ def parse_result(text, electronic, values, expected_electrons, reference=None, r
     checks['energy_sum_max_error_hartree'] = error
     model = {'basis': electronic['basis'], 'auxiliary_basis': s['auxiliary_basis'],
              'integral_transform': 'RI', 'frozen_core': s['frozen_core'], 'frozen_core_electrons': frozen}
-    if s['method'] in NEVPT_METHODS:
+    if s['method'] in CAS_METHODS:
         model['contraction'] = 'strongly_contracted' if s['method'] == 'SC-NEVPT2' else 'fully_internally_contracted'
         model['local_approximation'] = s['method'] == 'DLPNO-NEVPT2'
     if s['method'] == 'DLPNO-NEVPT2':
         model['pno_preset'] = s['pno_preset']
+    elif s['method'] == 'CASPT2':
+        model['shifts_hartree'] = {key: float(s[key]) for key in CASPT2_SHIFTS}
     return {'schema_version': 1, 'method': s['method'], 'geometry_mode': 'fixed', 'energy_unit': 'hartree',
             'reference_method': 'HF' if s['method'] == 'RI-MP2' else 'CASSCF',
             'states': sorted(rows, key=lambda r: (r['multiplicity'], r['root'])),

@@ -111,7 +111,7 @@ class ResultsView(ipw.VBox):
             ('active', 'Inspect orbitals / active space', self._active_space),
             ('energy', 'Choose energy solver', self._energy_routes),
             ('casscf', 'Optimize orbitals · CASSCF', self._casscf),
-            ('correlation', 'Correlation energies · MP2 / NEVPT2', self._correlation),
+            ('correlation', 'Correlation energies · MP2 / NEVPT2 / CASPT2', self._correlation),
             ('quantum_energy', 'Quantum-assisted energy levels', self._quantum_energy),
             ('states', 'CASCI, Dyson & Kondo', self._states),
             ('vibrations', 'Vibrations', self._vibrations),

@@ -18,9 +18,14 @@ class CorrelationResults(ipw.VBox):
         cells = ' style="padding: .25em 1em .25em 0; text-align: right"'
         rows = ''.join(f'<tr><td{cells}>{r["multiplicity"]}</td><td{cells}>{r["root"]}</td>'
             f'<td{cells}>{r["reference_energy_hartree"]:.10f}</td><td{cells}>{r["correction_hartree"]:.10f}</td>'
-            f'<td{cells}>{r["energy_hartree"]:.10f}</td></tr>' for r in data['states'])
+            f'<td{cells}>{r["energy_hartree"]:.10f}</td>' +
+            (f'<td{cells}>{r["reference_weight"]:.4f}</td><td{cells}>{min(r["smallest_denominators_hartree"].values()):.4f}</td>'
+             if method == 'CASPT2' else '') + '</tr>' for r in data['states'])
+        labels = ('Multiplicity', 'Root', data['reference_method'] + ' energy (Ha)', 'Correction (Ha)', method + ' energy (Ha)')
+        if method == 'CASPT2':
+            labels += ('CAS reference weight', 'Smallest denominator (Ha)')
         table = ('<table style="border-collapse: collapse"><tr>' + ''.join(f'<th{cells}>{label}</th>' for label in
-            ('Multiplicity', 'Root', data['reference_method'] + ' energy (Ha)', 'Correction (Ha)', method + ' energy (Ha)')) +
+            labels) +
             '</tr>' + rows + '</table>')
         self.plot = ipw.HTML()
         self.energy_kind = ipw.ToggleButtons(options=[(method, 'energy_hartree'),
@@ -43,6 +48,14 @@ class CorrelationResults(ipw.VBox):
                 '; the parent method is FIC-NEVPT2.</p>'
             diagnostics += '<p>Native PNO thresholds: ' + html.escape(json.dumps(check['native_pno_thresholds'])) + \
                 f'. Checked amplitude solves: {check["amplitude_solves_checked"]}.</p>'
+        elif method == 'CASPT2':
+            shifts = data['model']['shifts_hartree']
+            model_note = ('<p>CASPT2 shifts (Ha): real ' + f'{shifts["real_shift_hartree"]:g}, imaginary '
+                f'{shifts["imaginary_shift_hartree"]:g}, IPEA {shifts["ipea_shift_hartree"]:g}. '
+                'Inspect reference weights and denominators when assessing the perturbation treatment.</p>')
+            diagnostics += '<p>Residual solves: ' + '; '.join(
+                f'M={r["multiplicity"]}, root {r["root"]}: {r["caspt2_iterations"]} iterations, '
+                f'final norm {r["final_residual_norm"]:.2e}' for r in data['states']) + '.</p>'
         encoded = base64.b64encode(json.dumps(data, indent=2).encode()).decode()
         download = f'<a download="correlation-energies.json" href="data:application/json;base64,{encoded}">Download energies and provenance</a>'
         super().__init__([ipw.HTML(f'<h4>{html.escape(method)} · validated energy results</h4>' + model_note + table + spin_note),
@@ -98,15 +111,24 @@ class CorrelationEnergies(ipw.VBox):
         self.plan, self.process_uuid, self._poll_task = None, None, None
         self._disposed = False
         style = {'description_width': 'initial'}
-        self.method = ipw.ToggleButtons(options=[('HF → RI-MP2', 'RI-MP2'), ('CASSCF → NEVPT2', 'SC-NEVPT2')],
+        self.method = ipw.ToggleButtons(options=[('HF → RI-MP2', 'RI-MP2'), ('CASSCF → correlation', 'SC-NEVPT2')],
             style={'button_width': 'auto'})
-        self.nevpt = ipw.Dropdown(description='NEVPT2 method', options=[
+        self.nevpt = ipw.Dropdown(description='Correlation method', options=[
             ('SC-NEVPT2 · strongly contracted', 'SC-NEVPT2'),
             ('FIC-NEVPT2 · fully internally contracted', 'FIC-NEVPT2'),
-            ('DLPNO-NEVPT2 · local approximation to FIC', 'DLPNO-NEVPT2')], style=style,
+            ('DLPNO-NEVPT2 · local approximation to FIC', 'DLPNO-NEVPT2'),
+            ('CASPT2 · fully internally contracted', 'CASPT2')], style=style,
             layout=ipw.Layout(width='95%', display='none'))
         self.pno = ipw.Dropdown(description='PNO accuracy', options=['NormalPNO', 'TightPNO'], style=style,
             layout=ipw.Layout(display='none'))
+        self.real_shift = ipw.FloatText(description='Real shift (Ha)', value=0., step=.01, style=style)
+        self.imaginary_shift = ipw.FloatText(description='Imaginary shift (Ha)', value=0., step=.01, style=style)
+        self.ipea_shift = ipw.FloatText(description='IPEA shift (Ha)', value=0., step=.01, style=style)
+        self.caspt2_settings = ipw.Accordion(children=[ipw.VBox([
+            ipw.HTML('<p>All shifts are explicit. No shift is introduced automatically; ORCA and OpenMolcas use different IPEA conventions.</p>'),
+            self.real_shift, self.imaginary_shift, self.ipea_shift])], selected_index=None,
+            layout=ipw.Layout(display='none'))
+        self.caspt2_settings.set_title(0, 'CASPT2 settings · shifts in Hartree')
         self.reference = ipw.Dropdown(description='Verified CASSCF', options=[('Select a reference', None)], style=style,
                                        layout=ipw.Layout(width='95%'))
         self.prepare = ipw.Button(description='Prepare / inspect a CASSCF reference', icon='arrow-right',
@@ -141,10 +163,12 @@ class CorrelationEnergies(ipw.VBox):
         super().__init__([ipw.HTML('<h3>Correlation energies</h3><p>Choose the route matching your reference. '
             'Each calculation keeps this geometry fixed and stores its reference energy, correlation correction '
             'and total energy separately.</p>'), self.method, self.nevpt, self.pno, self.reference, self.prepare, self.notice,
-            self.form, self.message, self.refresh, self.saved, self.output])
+            self.caspt2_settings, self.form, self.message, self.refresh, self.saved, self.output])
         self.method.observe(self._source_changed, names='value')
         self.nevpt.observe(self._source_changed, names='value')
         self.pno.observe(self._invalidate, names='value')
+        for control in (self.real_shift, self.imaginary_shift, self.ipea_shift):
+            control.observe(self._invalidate, names='value')
         self.reference.observe(self._source_changed, names='value')
         for control in (self.frozen, self.nprocs, self.memory, self.wall, self.aux, self.force):
             control.observe(self._invalidate, names='value')
@@ -162,6 +186,7 @@ class CorrelationEnergies(ipw.VBox):
         nevpt = self._method() != 'RI-MP2'
         self.nevpt.layout.display = '' if nevpt else 'none'
         self.pno.layout.display = '' if self._method() == 'DLPNO-NEVPT2' else 'none'
+        self.caspt2_settings.layout.display = '' if self._method() == 'CASPT2' else 'none'
         self.reference.layout.display = '' if nevpt else 'none'
         self.prepare.layout.display = '' if nevpt else 'none'
         self.aux.disabled = nevpt
@@ -182,6 +207,10 @@ class CorrelationEnergies(ipw.VBox):
             elif self._method() == 'DLPNO-NEVPT2':
                 self.notice.value += ('<p>DLPNO approximates FIC to reduce cost. Check PNO sensitivity against FIC where feasible; '
                     'a preset is not a universal error bound. Intrinsic PNO construction is part of this method.</p>')
+            elif self._method() == 'CASPT2':
+                self.notice.value += ('<p>CASPT2 uses a different perturbation model from NEVPT2. '
+                    'Review its explicit shifts and inspect reference weights, denominators and residual convergence. '
+                    'The full first-order wavefunction increases memory and disk demands on larger systems.</p>')
             self.notice.value += '<p>Small energy/log outputs are retrieved; full electronic files stay on the calculation computer.</p>'
         except (ValueError, KeyError, OSError) as exc:
             self.form.layout.display = 'none'
@@ -200,6 +229,9 @@ class CorrelationEnergies(ipw.VBox):
                 'auxiliary_basis': self.aux.value.strip()}
         if self._method() == 'DLPNO-NEVPT2':
             values['pno_preset'] = self.pno.value
+        elif self._method() == 'CASPT2':
+            values.update(real_shift_hartree=self.real_shift.value,
+                          imaginary_shift_hartree=self.imaginary_shift.value, ipea_shift_hartree=self.ipea_shift.value)
         return values
 
     def _review(self, _=None):
@@ -222,6 +254,9 @@ class CorrelationEnergies(ipw.VBox):
                 '<details><summary>Review native input</summary><pre>' + html.escape(p['input']) + '</pre></details>')
             if p['method'] == 'DLPNO-NEVPT2':
                 self.review_text.value += '<p>Local FIC approximation: ' + html.escape(p['settings']['pno_preset']) + '.</p>'
+            elif p['method'] == 'CASPT2':
+                self.review_text.value += (f'<p>CASPT2 shifts (Ha): real {p["settings"]["real_shift_hartree"]:g}, '
+                    f'imaginary {p["settings"]["imaginary_shift_hartree"]:g}, IPEA {p["settings"]["ipea_shift_hartree"]:g}.</p>')
             self.message.value = ''
             self.submit.disabled = False
         except (ValueError, KeyError, OSError, RuntimeError) as exc:

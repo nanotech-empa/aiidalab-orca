@@ -27,9 +27,9 @@ def context(source_uuid, method):
     if method == 'RI-MP2':
         n = source_node(source_uuid)
         return n.inputs.settings.get_dict(), None
-    if (method not in correlation.NEVPT_METHODS or n.process_type != 'aiida.workflows:empa_orca.casscf'
+    if (method not in correlation.CAS_METHODS or n.process_type != 'aiida.workflows:empa_orca.casscf'
             or not n.is_finished_ok):
-        raise ValueError('Select a verified CASSCF calculation before NEVPT2')
+        raise ValueError('Select a verified CASSCF calculation before its correlation correction')
     ref = n.outputs.orbital_reference.get_dict()
     if ref['preparation'] != 'casscf_verified_v1' or ref['readback_max_error_hartree'] > 1e-7:
         raise ValueError('The CASSCF source did not pass saved-orbital verification')
@@ -51,8 +51,15 @@ def history(source_uuid, method):
     rows = []
     for uid in ids:
         old = orm.load_node(uid)
-        if old.inputs.settings.get_dict()['method'] == method:
-            rows.append((f'{old.ctime:%Y-%m-%d %H:%M} · {method} · {old.process_state.value}', str(uid)))
+        settings = old.inputs.settings.get_dict()
+        if settings['method'] == method:
+            detail = 'chemical core frozen' if settings['frozen_core'] else 'all electrons correlated'
+            if method == 'CASPT2':
+                detail += (f' · shifts (Ha): real {settings["real_shift_hartree"]:g}, '
+                    f'imaginary {settings["imaginary_shift_hartree"]:g}, IPEA {settings["ipea_shift_hartree"]:g}')
+            elif method == 'DLPNO-NEVPT2':
+                detail += ' · ' + settings['pno_preset']
+            rows.append((f'{old.ctime:%Y-%m-%d %H:%M} · {method} · {detail} · {old.process_state.value}', str(uid)))
     return rows
 
 

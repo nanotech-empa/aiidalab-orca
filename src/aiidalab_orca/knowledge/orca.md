@@ -49,6 +49,17 @@ preview. In Resources, review code/computer, process count, wall time, memory
 and electronic-file retention. Memory displays GiB; the chat/API field
 `memory_mb` remains integer MiB: 2 GiB = 2048 MiB.
 
+Computer/code setup and scheduler wrappers belong to `aiidalab-empa-setup`.
+Use the visible compatible codes configured in AiiDA; do not assume a particular
+computer name, transport or scheduler. The application does not configure them.
+
+Large artifacts must remain remote or be stashed according to the user's
+explicit retention choice. Only compact results, bounded diagnostics, manifests
+and reduced previews belong in permanent retrieval. This also applies to CI
+logs and exports, not only wavefunctions and HQ cubes. Native-log retrieval still
+needs the cleanup recorded in the release-readiness guide; streaming by itself
+does not satisfy this storage requirement.
+
 **Optimize geometry** moves atoms; single-point SCF holds supplied coordinates
 fixed. SCF and geometry convergence are separate. Inspect native optimization
 convergence and any constraints; normal program termination alone is insufficient.

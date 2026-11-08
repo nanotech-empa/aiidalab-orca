@@ -54,11 +54,13 @@ python -m pip install -r requirements.txt
 python -m pip check
 ```
 
-ORCA is installed separately. Configure an `InstalledCode`, such as
-`orca@localhost`, using its **absolute executable path**, the `orca.orca` input
-plugin, and the required ORCA/Open MPI environment. Use `core.local` transport,
-`core.direct` scheduling, and `with_mpi=False`: ORCA launches its own MPI workers
-from `%pal`. This milestone deliberately supports local execution only.
+ORCA is installed separately. Computer, code, transport, scheduler and wrapper
+configuration belongs to `aiidalab-empa-setup`. The app discovers visible ORCA
+codes already registered in AiiDA, independently of the computer name, transport
+or scheduler. It does not install or reconfigure them. Local and batch-scheduled
+calculations use the selected computer's AiiDA plugins; its resource requirements
+still apply. ORCA launches its own MPI workers from `%pal`, so its driver is
+submitted with `with_mpi=False` and the reviewed process count.
 
 For a source-built Open MPI, enable Fortran support even though ORCA is
 distributed as an executable. ORCA uses MPI numeric-type lookups that can fail

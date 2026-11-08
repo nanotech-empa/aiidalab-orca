@@ -72,6 +72,25 @@ These counts identify this development checkpoint, not a permanent CI target.
 
 ## Before release
 
+### Native-log retention cleanup
+
+Large files must remain remote or be stashed after an explicit user choice;
+the AiiDA repository receives compact results, bounded diagnostics, manifests
+and reduced previews. This includes large CI logs and exports, not only GBW
+and full-resolution cubes. Computer/code setup belongs to `aiidalab-empa-setup`;
+the application must use compatible configured codes without machine-specific
+or scheduler/transport allowlists.
+
+The native `aiida.out` retrieval in CASCI, CASSCF and other calculation classes
+is not yet uniformly size bounded. Before release, extract and validate compact
+results on the calculation computer, preserve large originals through the
+reviewed remote/stash policy, and update consumers that currently parse the
+retrieved full log. Existing streaming fixes address memory use but do not close
+this retention gate. Do not simply omit a file required by a parser or change
+scientific acceptance checks, and do not alter stored historical nodes.
+
+### Remaining acceptance
+
 - Run the affected ORCA and shared-exporter regression suites and package checks
   against the intended revisions. Keep their exact commands and results in the
   delivery record; check the packaged agent guides and AiiDA entry points too.

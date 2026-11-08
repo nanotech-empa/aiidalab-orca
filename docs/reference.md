@@ -92,8 +92,10 @@ node = submit(builder)
 print(node.uuid)
 ```
 
-This milestone uses local direct scheduling and ORCA 6.1. The geometry backend's
-historical `get_builder(..., optimize=False)` still means structure only; use
+Use a visible ORCA code already registered by the setup app. The SCF workflow
+does not restrict the computer name, scheduler or transport; AiiDA handles
+execution on the selected computer. ORCA 6.1 is the validated engine family.
+The geometry backend's historical `get_builder(..., optimize=False)` still means structure only; use
 `get_reference_builder` to request SCF explicitly.
 
 ## Validation and next boundary

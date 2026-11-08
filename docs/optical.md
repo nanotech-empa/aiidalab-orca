@@ -84,9 +84,9 @@ explicitly when needed. Blue/gold surfaces mark amplitude signs, not hole and
 particle identities. Saved views and rendering still refer to the selected
 member. Full-cube
 retention is explicit: leave, stash or delete after preview validation.
-Selected native NTO electronic files use the stated size-aware preservation
-limit/directory; only reduced cube previews are retrieved. Full files remain
-external when stored remotely. Missing/unreachable files are reported rather
+Native NTO electronic files inherit the optical calculation's remote/stash
+choice; no retrieval threshold is offered. Only reduced cube previews are
+retrieved. Missing/unreachable files are reported rather
 than silently recomputed. Triplet energies are supported, but **triplet NTO
 generation is not qualified in this draft**; unavailable NTOs cannot be selected
 as though they belonged to a singlet transition.
@@ -130,6 +130,21 @@ agreement with a different literature geometry or method. The NTO pipeline
 also checks complete native hole/particle pairs, full-cube normalization and
 reduced-preview provenance; preview grids are for inspection, not quantitative
 integration.
+
+## Full native files and previews
+
+Review **Full files** before a new optical submission: leave complete logs,
+GBW/density and NTO files on the calculation computer, or stash the bundle in
+an explicitly chosen directory there. Only a validation summary (at most 2 MiB),
+a 64 KiB diagnostic tail and a checksum manifest are retrieved. The existing
+response convergence, continued-reference energy and state/NTO identity checks
+still run against retained native validation text. An exceeded budget fails
+collection; it never silently accepts a truncated spectrum.
+
+NTO hole/particle previews inherit this choice. Stashed native files remain
+usable for new previews; full cubes retain their separate leave/stash/delete
+choice and pass through cubehandler before reduced previews are retrieved.
+Historical results remain readable without migration.
 
 ## Export and runtime acceptance
 

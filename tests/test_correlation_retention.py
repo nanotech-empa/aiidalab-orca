@@ -100,10 +100,11 @@ def test_correlation_resources_and_retention_do_not_depend_on_computer_name(elec
 
 
 @pytest.mark.parametrize('label',['tigu','another configured computer'])
-def test_optical_review_also_respects_configured_resources(electronic_source, label):  # noqa: F811
+def test_optical_review_also_respects_configured_resources(electronic_source, label, monkeypatch):  # noqa: F811
     from aiidalab_orca import optical_services
     uid,_=electronic_source()
     source=orm.load_node(uid)
+    monkeypatch.setattr(optical_services,'helper_code',lambda _:str(source.inputs.code.uuid))
     source.inputs.code.computer.label=label
     plan=optical_services.review(uid,{'nprocs':16,'memory_mb':8192},True)
     builder=optical_services.builder(plan)

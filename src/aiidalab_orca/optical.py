@@ -9,6 +9,7 @@ import ipywidgets as ipw
 import numpy as np
 
 from . import optical_services as service
+from .retention import description as retention_description
 from . import optical_data as display
 from .casci_services import progress
 from .interactive_svg import InteractiveSvg
@@ -178,13 +179,11 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
         self.retention = ipw.Dropdown(description='Full cubes', style=STYLE, layout=ipw.Layout(**WIDE),
             options=[('Leave in calculation directory', 'leave'), ('Stash full cubes', 'stash'), ('Delete after preview validation', 'delete')])
         self.stash = ipw.Text(value=initial['storage_policy']['stash_directory'], description='Stash directory', style=STYLE, layout=ipw.Layout(**WIDE))
-        self.threshold = ipw.BoundedFloatText(value=initial['storage_policy']['threshold_mb'], min=0, max=10000,
-                                             description='NTO retrieval limit (MiB)', style=STYLE)
         self.codes = {key: ipw.Dropdown(description=label, style=STYLE, options=initial['codes'][key], layout=ipw.Layout(**WIDE))
                       for key, label in [('plot', 'ORCA plot'), ('cubehandler', 'Cubehandler')]}
-        advanced = ipw.Accordion(children=[ipw.VBox([self.grid, self.threshold, *self.codes.values(),
-            ipw.HTML('<p>Selected native NTO files use size-aware electronic preservation: below this limit they are retrieved; larger files are stashed in the directory above. Full cube retention is a separate choice. Only cubehandler-reduced cube previews are retrieved.</p>')])], selected_index=None)
-        advanced.set_title(0, 'Grid, electronic storage and codes')
+        advanced = ipw.Accordion(children=[ipw.VBox([self.grid, *self.codes.values(),
+            ipw.HTML('<p>Native NTO files inherit the optical calculation’s remote/stash choice. Full cube retention is separate. Only cubehandler-reduced cube previews are retrieved.</p>')])], selected_index=None)
+        advanced.set_title(0, 'Grid and codes')
         self.review = ipw.Button(description='Review NTO previews', icon='list', layout=ipw.Layout(width='auto'))
         self.submit = ipw.Button(description='Generate hole/particle previews', icon='play', disabled=True, layout=ipw.Layout(width='auto'))
         self.review.on_click(self._review)
@@ -208,7 +207,7 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
         super().__init__([ipw.HTML('<h4>Natural transition orbitals</h4>'), self.note,
                           ipw.HBox([self.previous, self.refresh], layout=ipw.Layout(flex_flow='row wrap')), self.availability_note,
                           self.compute, self.message, self.member_controls, self.cube, self.download, self.cube_box])
-        for control in (self.pairs, self.grid, self.retention, self.stash, self.threshold, *self.codes.values()):
+        for control in (self.pairs, self.grid, self.retention, self.stash, *self.codes.values()):
             control.observe(self._invalidate, names='value')
         self._refresh()
 
@@ -235,7 +234,7 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
         try:
             self.plan = service.review_cubes(self.optical_uuid, {'state_id': self.state_id, 'pairs': list(self.pairs.value)},
                 {'grid_points': self.grid.value, 'retention': self.retention.value, 'stash_directory': self.stash.value.strip()},
-                {'threshold_mb': self.threshold.value, 'stash_directory': self.stash.value.strip()},
+                {'threshold_mb': 0, 'stash_directory': self.stash.value.strip()},
                 {key: control.value for key, control in self.codes.items()})
             self.message.value = f'<p><b>{"Reuse saved previews" if self.plan["reuse_uuid"] else "Generate and reduce both NTO pair members"}</b> · {len(self.pairs.value)} pairs · {self.grid.value} grid points/axis · full cubes: {self.retention.value}.</p>'
             self.submit.disabled = False
@@ -399,11 +398,14 @@ class OpticalExcitations(ipw.VBox):
         self.wall = ipw.BoundedIntText(value=10, min=1, max=100000, description='Wall time (minutes)', style=STYLE)
         self.iterations = ipw.BoundedIntText(value=100, min=1, max=1000, description='Maximum response iterations', style=STYLE)
         self.force = ipw.Checkbox(description='Run again even if a matching result exists', value=False, indent=False, layout=ipw.Layout(width='auto'))
+        from .retention import FullFileRetention
+        from .property_services import default_stash_directory
+        self.full_files = FullFileRetention(directory=default_stash_directory())
         self.review = ipw.Button(description='Review optical calculation', icon='list', button_style='primary', layout=ipw.Layout(width='auto'))
         self.submit = ipw.Button(description='Submit reviewed calculation', icon='play', disabled=True, layout=ipw.Layout(width='auto'))
         advanced = ipw.Accordion(children=[ipw.VBox([self.nto_states, self.nprocs, self.memory, self.wall, self.iterations, self.force])], selected_index=None)
         advanced.set_title(0, 'Resources and advanced settings')
-        self.compute = ComputePanel('Compute / extend optical excitations…', [self.method, self.roots, self.triplets, self.nto, advanced,
+        self.compute = ComputePanel('Compute / extend optical excitations…', [self.method, self.roots, self.triplets, self.nto, self.full_files, advanced,
             ipw.HBox([self.review, self.submit], layout=ipw.Layout(flex_flow='row wrap')), self.review_text])
         super().__init__([ipw.HTML('<h3>Optical excitations · UV–Vis</h3><p>Continue the selected DFT reference at this fixed geometry. '
             'TDA and full TDDFT are explicit choices. These optical states do not supply the current CASCI/Dyson/Kondo vectors.</p>'),
@@ -415,6 +417,7 @@ class OpticalExcitations(ipw.VBox):
         self.submit.on_click(self._submit)
         for control in (self.method, self.roots, self.triplets, self.nto, self.nto_states, self.nprocs, self.memory, self.wall, self.iterations, self.force):
             control.observe(self._invalidate, names='value')
+        self.full_files.observe(self._invalidate, names='revision')
         try:
             default = service.defaults(source_uuid)
             self.nprocs.value, self.memory.value, self.wall.value = default['nprocs'], default['memory_mb'], max(1, default['wallclock_seconds']//60)
@@ -436,9 +439,11 @@ class OpticalExcitations(ipw.VBox):
             self.plan = service.review(self.source_uuid, {'method': self.method.value, 'nroots': self.roots.value,
                 'triplets': self.triplets.value, 'nto': self.nto.value, 'nto_states': roots,
                 'maxiter': self.iterations.value, 'nprocs': self.nprocs.value, 'memory_mb': self.memory.value,
-                'wallclock_seconds': self.wall.value*60}, self.force.value)
+                'wallclock_seconds': self.wall.value*60}, self.force.value,
+                native_output_policy=self.full_files.values())
             self.review_text.value = ('<p><b>' + ('Reuse matching optical calculation' if self.plan['reuse_uuid'] else 'Compute vertical optical excitations') +
-                '</b> · ' + html.escape(self.plan['execution']) + '</p><p>Geometry, charge, DFT functional, basis and grids follow this reference. '
+                '</b> · ' + html.escape(self.plan['execution']) + '</p><p>Full files: ' +
+                html.escape(retention_description(self.plan['native_output_policy'])) + '. Reused results keep their recorded storage policy.</p><p>Geometry, charge, DFT functional, basis and grids follow this reference. '
                 'SCF is continued from its saved orbitals and its energy must agree within 10⁻⁷ Hartree. No excited-state geometry optimization, SOC, spin flip or automatic scientific remedy is added.</p>'
                 '<details><summary>Native ORCA input</summary><pre>' + html.escape(self.plan['input']) + '</pre></details>')
             self.submit.disabled = False

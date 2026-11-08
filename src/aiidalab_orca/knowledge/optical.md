@@ -1,5 +1,13 @@
 # Optical-excitation operating guide
 
+Before a new submission, review **Full files**: leave complete native logs,
+electronic files and NTOs on the calculation computer, or stash them in a chosen
+directory there. Only bounded validation text, a diagnostic tail and a checksum
+manifest enter AiiDA. NTO previews inherit that retention; no wavefunction
+retrieval threshold is offered. Full cubes retain their separate leave/stash/
+delete choice. Reused results retain their original storage policy. Historical
+data remain readable; do not migrate or rewrite their nodes.
+
 Open **Optical excitations · UV–Vis** from a completed DFT geometry/SCF entry.
 This independent route needs no CAS, CASSCF or Hamiltonian export. The chat's
 form adapter does not currently submit these controls; describe the actual

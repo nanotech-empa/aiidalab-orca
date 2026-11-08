@@ -55,11 +55,29 @@ CORRELATION_MARKERS = re.compile(
     r'LMP2-Iter=|\|\s*\d+>|CASPT2.*Levelshift|CASPT2 calculation|'
     r'Iter\s+EPT2\s+EHylleraas\s+residual norm\s+Time|'
     r'^\s*\d+\s+[-+.\dEeDd]+\s+[-+.\dEeDd]+\s+[-+.\dEeDd]+\s+[-+.\dEeDd]+\s*$', re.I)
+OPTICAL_MARKERS = re.compile(
+    SCF_MARKERS.pattern + r'|ORCA-CIS/TD-DFT FINISHED WITHOUT ERROR|'
+    r'NOT CONVERGED|poorly\s+normalized|imaginary\s+excitation|negative\s+excitation|'
+    r'ORCA finished by error|Segmentation fault|\b(?:Charge|Mult)\s+\.{2,}|'
+    r'^\s*Total Energy\s*:|Tamm-Dancoff approximation|'
+    r'Number of roots to be determined|Convergence tolerance for the residual|'
+    r'Maximum residual norm|CONVERGENCE OF RESIDUAL NORM REACHED|'
+    r'^TD-DFT(?:/TDA)? EXCITED STATES|^STATE\s+\d+:|'
+    r'^\s*\d+[ab]\s*->\s*\d+[ab]\s*:|NATURAL TRANSITION ORBITALS|'
+    r'Natural Transition Orbitals were saved in|^\s*E=\s*[-+.\dEeDd]+ au|'
+    r'ABSORPTION SPECTRUM VIA TRANSITION (?:ELECTRIC DIPOLE MOMENTS|VELOCITY)|'
+    r'^\s*\d+-\d+\S*\s+->\s+\d+-\d+\S*\s+', re.I)
+VIBRATION_MARKERS = re.compile(
+    SCF_MARKERS.pattern + r'|RAMAN SPECTRUM|'
+    r'^\s*\d+:\s+[-\d.]+\s+[-\d.Ee+]+\s+[-\d.Ee+]+(?:\s*\(|\s*$|\s+[-\d.Ee+]+\s*\()', re.I)
 PROTOCOLS = {'casci-v1': ('aiida.out',), 'casscf-v1': ('aiida.out', 'verify.out'),
              'scf-v1': ('aiida.out',), 'optimization-v1': ('aiida.out',),
-             'common-orbitals-v1': ('aiida.out',), 'correlation-v1': ('aiida.out',)}
+             'common-orbitals-v1': ('aiida.out',), 'correlation-v1': ('aiida.out',),
+             'optical-v1': ('aiida.out',), 'vibrations-v1': ('aiida.out',)}
 COMPACT_LIMITS = {'scf_results.json': 2 * 1024**2, 'aiida.xyz': 2 * 1024**2,
-                  'aiida_trj.xyz': 8 * 1024**2}
+                  'aiida_trj.xyz': 8 * 1024**2, 'aiida.hess': 16 * 1024**2}
+HESSIAN_SECTIONS = {'hessian', 'normal_modes', 'vibrational_frequencies', 'atoms',
+                    'dipole_derivatives', 'polarizability_derivatives', 'ir_spectrum', 'frequency_scale_factor'}
 
 
 def output_policy(values=None):
@@ -154,6 +172,29 @@ def _collect_log(root, name, markers, tail_name, *, mark_omissions=False):
             {'name': name, 'size_bytes': len(summary), 'sha256': hashlib.sha256(summary).hexdigest()}, error)
 
 
+def _collect_hessian(root):
+    """Keep the exact numeric sections consumed by the existing vibration parser."""
+    source, target = root / 'aiida.hess', root / DIRECTORY / 'aiida.hess'
+    if source.is_symlink() or not source.is_file() or target.exists():
+        raise ValueError('Missing or unsafe native Hessian')
+    source.replace(target)
+    record = _file_record(target)
+    content, active = bytearray(), False
+    with target.open('rb') as stream:
+        while raw := stream.readline(LINE_LIMIT + 1):
+            if len(raw) > LINE_LIMIT:
+                raise ValueError('Native Hessian line exceeds the compact-output budget')
+            line = raw.decode('utf-8').strip()
+            if line.startswith('$'):
+                active = line[1:] in HESSIAN_SECTIONS
+            if active and line and not line.startswith('#'):
+                content.extend((' '.join(line.split()) + '\n').encode())
+                if len(content) > COMPACT_LIMITS['aiida.hess']:
+                    raise ValueError('Vibrational result exceeds the compact-Hessian budget')
+    source.write_bytes(content)
+    return record, _file_record(source)
+
+
 def collect_output(request, root=Path('.')):
     """Bound each summary and tail; exhausting a budget never accepts partial data."""
     protocol = request.get('protocol')
@@ -162,13 +203,15 @@ def collect_output(request, root=Path('.')):
     policy, root = output_policy(request['policy']), Path(root)
     records, summaries, errors = [], [], []
     molecular = protocol in ('scf-v1', 'optimization-v1')
-    markers = (CORRELATION_MARKERS if protocol == 'correlation-v1'
+    markers = (OPTICAL_MARKERS if protocol == 'optical-v1'
+               else VIBRATION_MARKERS if protocol == 'vibrations-v1'
+               else CORRELATION_MARKERS if protocol == 'correlation-v1'
                else SCF_MARKERS if molecular else COMMON_MARKERS if protocol == 'common-orbitals-v1'
                else STATE_MARKERS if protocol == 'casci-v1' else CASSCF_MARKERS)
     for name in PROTOCOLS[protocol]:
         tail = 'native_output_tail.txt' if name == 'aiida.out' else 'verify_tail.txt'
         original, summary, error = _collect_log(root, name, markers, tail,
-                                               mark_omissions=protocol == 'correlation-v1')
+                                               mark_omissions=protocol in ('correlation-v1', 'optical-v1', 'vibrations-v1'))
         records.append(original)
         summaries.append(summary)
         if error:
@@ -183,22 +226,28 @@ def collect_output(request, root=Path('.')):
                 raise ValueError('Refusing to overwrite a preserved native property output')
             prop.replace(target)  # Only this CalcJob's output, without copying it.
             records.append(_file_record(target))
-    if protocol == 'correlation-v1':
-        # Energy-only results are not orbital references for another app route.
-        # Preserve this job's generated electronic files in the same native
-        # bundle, without copying inputs or touching the parent wavefunction.
+    compact = []
+    if protocol == 'vibrations-v1':
+        try:
+            original, result = _collect_hessian(root)
+            records.append(original)
+            compact.append(result)
+        except (OSError, ValueError, UnicodeError) as exc:
+            errors.append(str(exc))
+    if protocol in ('correlation-v1', 'optical-v1', 'vibrations-v1'):
+        # Preserve this job's generated files without copying inputs or touching
+        # the parent wavefunction. Optical NTOs remain resolvable from this bundle.
         for path in sorted(root.iterdir()):
             if (not re.fullmatch(r'aiida[._][A-Za-z0-9_.-]+', path.name)
-                    or path.name in ('aiida.out', 'aiida.inp', 'aiida.coords.xyz')):
+                    or path.name in ('aiida.out', 'aiida.inp', 'aiida.coords.xyz', 'aiida.hess')):
                 continue
             if path.is_symlink() or not path.is_file():
-                raise ValueError('Unsupported native correlation output: ' + path.name)
+                raise ValueError('Unsupported native output: ' + path.name)
             target = root / DIRECTORY / path.name
             if target.exists():
-                raise ValueError('Refusing to overwrite native correlation output: ' + path.name)
+                raise ValueError('Refusing to overwrite native output: ' + path.name)
             path.replace(target)
             records.append(_file_record(target))
-    compact = []
     if molecular and not errors:
         try:
             # orca-tools uses runpy without adding the CalcJob directory to
@@ -221,6 +270,8 @@ def collect_output(request, root=Path('.')):
         record['additional_summaries'] = summaries[1:]
     if molecular:
         record['compact_files'] = compact
+    if protocol == 'vibrations-v1':
+        record['compact_files'] = compact
     (root / MANIFEST).write_text(json.dumps(record, allow_nan=False, indent=2))
     return record
 
@@ -242,14 +293,15 @@ def validate_manifest(record):
         raise ValueError('Missing or ambiguous full native output')
     for item in [*summaries, *record['files']]:
         allowed = (item['name'] in expected + [n.replace('.out', '.property.txt') for n in expected]
-                   + ['aiida.xyz', 'aiida_trj.xyz'] or record['protocol'] == 'correlation-v1'
+                   + ['aiida.xyz', 'aiida_trj.xyz'] or record['protocol'] in ('correlation-v1', 'optical-v1', 'vibrations-v1')
                    and re.fullmatch(r'aiida[._][A-Za-z0-9_.-]+', item['name']))
         if (not allowed
                 or type(item['size_bytes']) is not int or item['size_bytes'] < 0
                 or not re.fullmatch('[0-9a-f]{64}', item['sha256'])):
             raise ValueError('Invalid native-output identity')
-    if record['protocol'] in ('scf-v1', 'optimization-v1'):
-        expected_files = ['scf_results.json'] + (['aiida.xyz', 'aiida_trj.xyz'] if record['protocol'] == 'optimization-v1' else [])
+    if record['protocol'] in ('scf-v1', 'optimization-v1', 'vibrations-v1'):
+        expected_files = (['aiida.hess'] if record['protocol'] == 'vibrations-v1' else
+                          ['scf_results.json'] + (['aiida.xyz', 'aiida_trj.xyz'] if record['protocol'] == 'optimization-v1' else []))
         compact = record.get('compact_files', [])
         if [item['name'] for item in compact] != expected_files:
             raise ValueError('Missing compact SCF/geometry results')

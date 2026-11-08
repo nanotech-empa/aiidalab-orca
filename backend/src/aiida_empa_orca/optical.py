@@ -7,12 +7,13 @@ from aiida import common, engine, orm
 from aiida.parsers import Parser
 from aiida_orca.calculations.orca_orca import OrcaCalculation
 
-from .artifacts import resolve_electronic, storage_builder
-from .common_orbitals import attach_orbital, copy_orbital, options, source_spec, validate_source
+from .artifacts import native_retention, resolve_electronic, storage_builder
+from .common_orbitals import copy_orbital, source_spec, validate_source
 from .input import render_input
 from .protocols import reference as reference_type
 from .reference import reference_settings, single_point_parameters
 from .choices import PURE_DFT, HYBRID_DFT
+from .native_output import compact_spec, prepare_compact, read_manifest
 
 PROCESS_TYPE = 'aiida.calculations:empa_orca.optical'
 NTO_PROCESS = 'aiida.workflows:empa_orca.nto_cubes'
@@ -229,6 +230,7 @@ class OpticalCalculation(engine.CalcJob):
     @classmethod
     def define(cls, spec):
         super().define(spec)
+        compact_spec(spec)
         for key, typ in {'structure': orm.StructureData, 'electronic_settings': orm.Dict,
                          'settings': orm.Dict, 'source_retrieved': orm.FolderData,
                          'source_remote': orm.RemoteData}.items():
@@ -251,13 +253,14 @@ class OpticalCalculation(engine.CalcJob):
         code = common.CodeInfo()
         code.code_uuid, code.cmdline_params = self.inputs.code.uuid, ['aiida.inp']
         code.stdout_name, code.join_files = 'aiida.out', True
-        info.codes_info, info.retrieve_list = [code], ['aiida.out']
-        return info
+        info.codes_info = [code]
+        return prepare_compact(info, self.inputs, folder, 'optical-v1')
 
 
 class OpticalParser(Parser):
     def parse(self, **kwargs):
         try:
+            manifest = read_manifest(self.node, self.retrieved.base.repository, 'optical-v1')
             electronic = self.node.inputs.electronic_settings.get_dict()
             source = self.node.inputs.source_retrieved.base.repository.get_object_content('aiida.out')
             from .parser import reference_summary
@@ -267,6 +270,8 @@ class OpticalParser(Parser):
                 expected_energy=expected)
             result.update(structure_uuid=str(self.node.inputs.structure.uuid), source_retrieved_uuid=str(self.node.inputs.source_retrieved.uuid))
             self.out('excitations', orm.Dict(dict=result))
+            if manifest is not None:
+                self.out('native_output_manifest', orm.Dict(dict=manifest))
         except (KeyError, ValueError, OSError) as exc:
             self.logger.error(str(exc))
             return self.exit_codes.ERROR_OPTICAL
@@ -333,11 +338,13 @@ class NtoCubesWorkChain(engine.WorkChain):
             return self.exit_codes.ERROR_SOURCE
 
     def needs_storage(self):
-        return self.ctx.location['kind'] == 'remote'
+        return (self.ctx.location['kind'] == 'remote'
+                and native_retention(self.inputs.source_remote)['mode'] == 'stash')
 
     def store(self):
         b = storage_builder(self.inputs.source_remote, self.inputs.code,
-                            self.inputs.storage_policy.get_dict(), names=[self.ctx.filename])
+                            {'threshold_mb': 0, 'stash_directory': native_retention(self.inputs.source_remote)['stash_directory']},
+                            names=[self.ctx.filename])
         b.metadata.call_link_label = 'preserve_nto'
         return engine.ToContext(storage=self.submit(b))
 

@@ -1,5 +1,14 @@
 # ORCA harmonic IR/Raman: choosing the reference geometry
 
+Review **Full files** before submitting: full logs, original Hessian and
+electronic files remain on the calculation computer or in its selected stash.
+AiiDA retains bounded native validation text and the exact numeric Hessian
+sections required for spectra, animations and durable reuse. The compact Hessian
+has a 16 MiB limit; exceeding it fails collection instead of retrieving the
+large original. No frequencies, displacement vectors or response tensors are
+rounded, rediagonalized or rescaled by this retention step. Reused results keep
+their recorded storage policy; historical nodes are unchanged.
+
 Start with `orca.app` for molecule/SCF preparation and chat-tool capabilities.
 
 Check the installed GUI and live calculation UUIDs before advising. A successful

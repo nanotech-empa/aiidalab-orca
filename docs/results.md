@@ -41,6 +41,7 @@ different spin or submits a prerequisite calculation automatically.
 | Overview | Final geometry, reference method/charge/spin/energy, XYZ download and optional optimization-convergence plot |
 | Orbitals & density | SCF orbital levels and optional cubes/spin density; a separate QRO/UNO inspection view |
 | PDOS & orbital character | Atom/fragment and angular projections, with the standard structure viewer and orbital candidates |
+| Optical excitations · UV–Vis | Independent fixed-geometry TDA/TDDFT, clickable spectrum/states and reviewed NTO hole/particle previews; see [optical analysis](optical.md) |
 | 1. Prepare orbital reference | Prepare or reuse the shared spatial orbitals without SCF iterations |
 | 2. Inspect / confirm active space | Inspect occupations/shapes and explicitly select the CAS input orbitals/electrons |
 | 3. Choose energy solver | Continue with fixed-orbital ORCA CASCI, optional CASSCF optimization or quantum-assisted energies |

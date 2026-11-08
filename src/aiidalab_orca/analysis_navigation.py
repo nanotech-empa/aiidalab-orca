@@ -4,6 +4,7 @@ import ipywidgets as ipw
 
 
 ANALYSES = {
+    'optical': ('Optical excitations · UV–Vis', 'Continue a converged DFT reference at fixed geometry, choose TDA or full TDDFT, then inspect the absorption spectrum and native NTO hole/particle pairs. Each calculation and preview requires review.'),
     'orbitals': ('Orbitals & density', 'Inspect SCF levels, orbital cubes and spin density. QRO/UNO inspection uses a prepared common-orbital reference.'),
     'casci': ('CAS energy levels', 'Inspect and confirm the active space, optionally optimize shared orbitals with CASSCF, then choose ORCA CASCI or quantum-assisted energies. ORCA CASCI requires no separate Hamiltonian export and holds the chosen orbitals fixed.'),
     'correlation': ('Correlation energies · MP2 / NEVPT2 / CASPT2', 'For single-reference correlation, converge a fresh HF reference and compute RI-MP2. For dynamical correlation beyond an active space, select verified CASSCF orbitals and choose SC, FIC or DLPNO-NEVPT2, or CASPT2 with explicit shifts. These energy-only results do not replace Dyson/Kondo state vectors.'),

@@ -108,6 +108,7 @@ class ResultsView(ipw.VBox):
         self.tabs = LazyStack([
             ('overview', 'Overview', self._overview),
             ('orbitals', 'Orbitals & density', self._orbitals),
+            ('optical', 'Optical excitations · UV–Vis', self._optical),
             ('active', 'Inspect orbitals / active space', self._active_space),
             ('energy', 'Choose energy solver', self._energy_routes),
             ('casscf', 'Optimize orbitals · CASSCF', self._casscf),
@@ -435,6 +436,10 @@ class ResultsView(ipw.VBox):
     def _correlation(self):
         from .correlation import CorrelationEnergies
         return CorrelationEnergies(self.data['uuid'], lambda: self.open_analysis('casscf'))
+
+    def _optical(self):
+        from .optical import OpticalExcitations
+        return OpticalExcitations(self.data['uuid'])
 
     def _export(self):
         from .openbis import OpenbisExport

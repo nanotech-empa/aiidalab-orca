@@ -57,11 +57,14 @@ def main():
             manifest['cubes'].append({**metadata, 'filename': target, 'full': inspect_cube(full/target)})
         grid = ['4', str(p['grid_points'])]
         for spin, index in p['orbitals']:
-            filename = (f'{identity["kind"].lower()}_{index:04d}.cube' if identity else
+            filename = (f'nto_{"ab"[spin]}_{index:04d}.cube' if identity and identity['kind'] == 'NTO' else
+                        f'{identity["kind"].lower()}_{index:04d}.cube' if identity else
                         f'orbital_{"ab"[spin]}_{index:04d}.cube')
             metadata = {'kind':'orbital','spin':spin,'index':index}
             if identity:
-                metadata.update(identity['levels'][index],orbital_type=identity['kind'])
+                if identity['kind'] != 'NTO':
+                    metadata.update(identity['levels'][index])
+                metadata['orbital_type'] = identity['kind']
             plot(grid+['2',str(index),'3',str(spin)], f'aiida.mo{index}{"ab"[spin]}.cube',
                  filename, metadata)
         if p['spin_density']:

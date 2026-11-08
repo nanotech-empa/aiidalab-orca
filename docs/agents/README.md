@@ -7,6 +7,7 @@ also readable here on GitHub. Do not maintain a separate copy for each model.
 | Read in this order | Installed guide ID | Markdown source |
 | --- | --- | --- |
 | App orientation, geometry/SCF, step-by-step routes and official references | `orca.app` | [Start here](../../src/aiidalab_orca/knowledge/orca.md) |
+| Fixed-geometry TDA/TDDFT, optical spectra and NTO hole/particle inspection | `orca.optical` | [Optical operating guide](../../src/aiidalab_orca/knowledge/optical.md) |
 | Common orbitals, CASCI, Dyson, Kondo and scientific acceptance | `orca.casci-kondo` | [Electronic-analysis guide](../../src/aiidalab_orca/knowledge/casci-kondo.md) |
 | Harmonic IR/Raman, geometry selection and the acknowledged fixed-geometry route | `orca.vibrations` | [Vibrations guide](../../src/aiidalab_orca/knowledge/vibrations.md) |
 | ORCA CASCI versus full exported or QPU/simulator-selected Hamiltonian solves, sampling checks and saved ORCA comparisons | `orca.quantum-energy` | [Quantum-assisted energy guide](../../src/aiidalab_orca/knowledge/quantum-energy.md) |

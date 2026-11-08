@@ -1,0 +1,292 @@
+                         Program Version 6.1.1  -  RELEASE   -
+ Total Charge           Charge          ....    0
+ Multiplicity           Mult            ....    1
+ Number of Electrons    NEL             ....   42
+               *           SCF CONVERGED AFTER  14 CYCLES          *
+
+Total Energy       :       -247.79114598098997 Eh           -6742.73988 eV
+                        ORCA TD-DFT/TDA CALCULATION
+------------------------------------------------------------------------------
+
+Input orbitals are from        ... aiida.gbw
+CI-vector output               ... aiida.cis
+Solver                         ... FN-2001
+Tamm-Dancoff approximation     ... operative
+CIS-Integral strategy          ... AO-integrals
+Integral handling              ... AO integral Direct
+Max. core memory used          ... 768 MB
+Reference state                ... RHF
+Generation of triplets         ... off
+Follow IRoot                   ... off
+Number of operators            ... 1
+Orbital ranges used for CIS calculation:
+ Operator 0:  Orbitals   6... 20  to  21...108
+XAS localization array:
+ Operator 0:  Orbitals  -1... -1
+
+-------------------
+XC-INTEGRATION GRID
+-------------------
+
+General Integration Accuracy     IntAcc      ... 3.467
+Radial Grid Type                 RadialGrid  ... OptM3 with GC (2021)
+Angular Grid (max. ang.)         AngularGrid ... 1 (Lebedev-50)
+Angular grid pruning method      GridPruning ... 4 (adaptive)
+Weight generation scheme         WeightScheme... mBecke (2022)
+Basis function cutoff            BFCut       ... 1.0000e-11
+Integration weight cutoff        WCut        ... 1.0000e-14
+Partially contracted basis set               ... off
+Rotationally invariant grid construction     ... off
+Angular grids for H and He will be reduced by one unit
+
+Total number of grid points                  ...     7744
+Total number of batches                      ...      126
+Average number of points per batch           ...       61
+Average number of grid points per atom       ...      704
+
+---------------
+TD-DFT XC SETUP
+---------------
+
+DFT calculation                         ... on
+Name of the grid file                   ... aiida.grid_cis.tmp
+RI-approximation                        ... on
+Aux-basis dimension                     ... 0
+Exchange functional (TD-DFT)            ... PBE
+   PBE kappa parameter  XKappa (TD-DFT) ...  0.804000
+   PBE mue parameter   XMuePBE (TD-DFT) ...  0.219520
+Correlation functional (TD-DFT)         ... PBE
+   PBE beta parameter CBetaPBE (TD-DFT) ...  0.066725
+ LDA part of GGA corr.  LDAOpt (TD-DFT) ... PW91-LDA
+
+Building densities             ... done
+Calculating rho(r) on the grid ... done
+Building xc-kernel on the grid ... done
+                    *** TD-DFT CALCULATION INITIALIZED ***
+
+------------------------
+DAVIDSON-DIAGONALIZATION
+------------------------
+
+Dimension of the eigenvalue problem            ...   1320
+Number of roots to be determined               ...      5
+Maximum size of the expansion space            ...     50
+Maximum number of iterations                   ...    100
+Convergence tolerance for the residual         ...    2.500e-07
+Convergence tolerance for the energies         ...    2.500e-07
+Orthogonality tolerance                        ...    1.000e-14
+Level Shift                                    ...    0.000e+00
+Constructing the preconditioner                ... o.k.
+Building the initial guess                     ... o.k.
+Number of trial vectors determined             ...     50
+
+
+                       ****Iteration    0****
+   Time for iteration     :  TOTAL=0.4 TRAFO=0.0 RIJ=0.1 XC=0.3
+   Size of expansion space: 15
+   Lowest Energy          :     0.158201442812
+   Maximum Energy change  :     0.261022348256 (vector 4)
+   Maximum residual norm  :     0.004261121727
+
+                       ****Iteration    1****
+   Time for iteration     :  TOTAL=0.2 TRAFO=0.0 RIJ=0.1 XC=0.1
+   Size of expansion space: 20
+   Lowest Energy          :     0.157831845789
+   Maximum Energy change  :     0.003508929858 (vector 2)
+   Maximum residual norm  :     0.000611736659
+
+                       ****Iteration    2****
+   Time for iteration     :  TOTAL=0.2 TRAFO=0.0 RIJ=0.1 XC=0.1
+   Size of expansion space: 25
+   Lowest Energy          :     0.157830806655
+   Maximum Energy change  :     0.005952373971 (vector 4)
+   Maximum residual norm  :     0.011040086036
+
+                       ****Iteration    3****
+   Time for iteration     :  TOTAL=0.2 TRAFO=0.0 RIJ=0.1 XC=0.1
+   Size of expansion space: 30
+   Lowest Energy          :     0.157830805178
+   Maximum Energy change  :     0.006750183136 (vector 4)
+   Maximum residual norm  :     0.000099589285
+
+                       ****Iteration    4****
+   Time for iteration     :  TOTAL=0.2 TRAFO=0.0 RIJ=0.1 XC=0.1
+   Size of expansion space: 35
+   Lowest Energy          :     0.157830805177
+   Maximum Energy change  :     0.000164069864 (vector 3)
+   Maximum residual norm  :     0.000003596142
+
+                       ****Iteration    5****
+   Time for iteration     :  TOTAL=0.2 TRAFO=0.0 RIJ=0.1 XC=0.1
+   Size of expansion space: 39
+   Lowest Energy          :     0.157830805177
+   Maximum Energy change  :     0.000004111952 (vector 3)
+   Maximum residual norm  :     0.000000068510
+
+      *** CONVERGENCE OF RESIDUAL NORM REACHED ***
+
+Storing the converged CI vectors               ... aiida.cis1
+
+                 *** DAVIDSON DONE ***
+
+Total time for solving the CIS problem:     1.293sec
+
+------------------------------------
+TD-DFT/TDA EXCITED STATES (SINGLETS)
+------------------------------------
+
+the weight of the individual excitations are printed if larger than 1.0e-02
+
+STATE  1:  E=   0.157831 au      4.295 eV    34639.9 cm**-1 <S**2> =   0.000000 Mult 1
+    20a ->  22a  :     0.999294 (c=  0.99964674)
+
+STATE  2:  E=   0.158973 au      4.326 eV    34890.5 cm**-1 <S**2> =   0.000000 Mult 1
+    20a ->  21a  :     0.992522 (c=  0.99625408)
+
+STATE  3:  E=   0.200016 au      5.443 eV    43898.4 cm**-1 <S**2> =   0.000000 Mult 1
+    18a ->  22a  :     0.360966 (c= -0.60080453)
+    19a ->  21a  :     0.631528 (c= -0.79468755)
+
+STATE  4:  E=   0.241794 au      6.580 eV    53067.7 cm**-1 <S**2> =   0.000000 Mult 1
+    15a ->  25a  :     0.023055 (c=  0.15183851)
+    18a ->  21a  :     0.357198 (c=  0.59766035)
+    19a ->  22a  :     0.546923 (c= -0.73954265)
+    20a ->  23a  :     0.043979 (c=  0.20971245)
+
+STATE  5:  E=   0.247660 au      6.739 eV    54355.0 cm**-1 <S**2> =   0.000000 Mult 1
+    19a ->  22a  :     0.055497 (c= -0.23557865)
+    20a ->  23a  :     0.930004 (c= -0.96436733)
+
+Storing amplitudes in GBW file ...
+... GBW file created
+
+------------------------------------------
+NATURAL TRANSITION ORBITALS FOR STATE    1
+------------------------------------------
+
+Making the (pseudo)densities                       ... done
+Solving eigenvalue problem for the occupied space  ... done
+Solving eigenvalue problem for the virtual space   ... done
+Natural Transition Orbitals were saved in aiida.s1.nto
+Threshold for printing occupation numbers 0.000100
+
+ E=   0.157831 au      4.295 eV    34639.9 cm**-1
+    20a ->  21a  : n=  0.99945993
+    19a ->  22a  : n=  0.00018772
+    18a ->  23a  : n=  0.00018562
+
+
+------------------------------------------
+NATURAL TRANSITION ORBITALS FOR STATE    2
+------------------------------------------
+
+Making the (pseudo)densities                       ... done
+Solving eigenvalue problem for the occupied space  ... done
+Solving eigenvalue problem for the virtual space   ... done
+Natural Transition Orbitals were saved in aiida.s2.nto
+Threshold for printing occupation numbers 0.000100
+
+ E=   0.158973 au      4.326 eV    34890.5 cm**-1
+    20a ->  21a  : n=  0.99857289
+    19a ->  22a  : n=  0.00054014
+    18a ->  23a  : n=  0.00039643
+    17a ->  24a  : n=  0.00029339
+
+
+------------------------------------------
+NATURAL TRANSITION ORBITALS FOR STATE    3
+------------------------------------------
+
+Making the (pseudo)densities                       ... done
+Solving eigenvalue problem for the occupied space  ... done
+Solving eigenvalue problem for the virtual space   ... done
+Natural Transition Orbitals were saved in aiida.s3.nto
+Threshold for printing occupation numbers 0.000100
+
+ E=   0.200016 au      5.443 eV    43898.4 cm**-1
+    20a ->  21a  : n=  0.63243468
+    19a ->  22a  : n=  0.36314467
+    18a ->  23a  : n=  0.00120185
+    17a ->  24a  : n=  0.00103035
+    16a ->  25a  : n=  0.00063379
+    15a ->  26a  : n=  0.00051555
+    14a ->  27a  : n=  0.00040257
+    13a ->  28a  : n=  0.00020605
+    12a ->  29a  : n=  0.00013070
+    11a ->  30a  : n=  0.00010297
+
+
+-----------------------------
+TD-DFT/TDA-EXCITATION SPECTRA
+-----------------------------
+
+Center of mass = (  0.0000,  0.0000,  0.0036)
+Generating CIS transition densities           ... done
+
+----------------------------------------------------------------------------------------------------
+                     ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS
+----------------------------------------------------------------------------------------------------
+     Transition      Energy     Energy  Wavelength fosc(D2)      D2        DX        DY        DZ
+                      (eV)      (cm-1)    (nm)                 (au**2)    (au)      (au)      (au)
+----------------------------------------------------------------------------------------------------
+  0-1A  ->  1-1A    4.294795   34639.9   288.7   0.000000000   0.00000   0.00000   0.00000  -0.00000
+  0-1A  ->  2-1A    4.325874   34890.5   286.6   0.003830923   0.03615  -0.19012  -0.00000  -0.00000
+  0-1A  ->  3-1A    5.442702   43898.4   227.8   0.019114327   0.14335  -0.00000  -0.37861   0.00000
+  0-1A  ->  4-1A    6.579556   53067.7   188.4   0.017637725   0.10942  -0.00000  -0.00000  -0.33078
+  0-1A  ->  5-1A    6.739163   54355.0   184.0   0.007560799   0.04579  -0.00000   0.00000  -0.21399
+
+----------------------------------------------------------------------------------------------------
+                     ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS
+----------------------------------------------------------------------------------------------------
+     Transition      Energy     Energy  Wavelength fosc(P2)      P2        PX        PY        PZ
+                      (eV)      (cm-1)    (nm)                 (au**2)    (au)      (au)      (au)
+----------------------------------------------------------------------------------------------------
+  0-1A  ->  1-1A    4.294795   34639.9   288.7   0.000000000   0.00000   0.00000  -0.00000   0.00000
+  0-1A  ->  2-1A    4.325874   34890.5   286.6   0.000001475   0.00000  -0.00059   0.00000   0.00000
+  0-1A  ->  3-1A    5.442702   43898.4   227.8   0.000602185   0.00018   0.00000  -0.01344  -0.00000
+  0-1A  ->  4-1A    6.579556   53067.7   188.4   0.002114123   0.00077   0.00000   0.00000   0.02769
+  0-1A  ->  5-1A    6.739163   54355.0   184.0   0.000399596   0.00015  -0.00000  -0.00000   0.01218
+
+------------------------------------------------------------------------------------------
+                     CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS
+------------------------------------------------------------------------------------------
+     Transition      Energy     Energy  Wavelength    R        MX        MY        MZ
+                      (eV)      (cm-1)    (nm)   (1e40*cgs)   (au)      (au)      (au)
+------------------------------------------------------------------------------------------
+  0-1A  ->  1-1A    4.294795   34639.9   288.7   -0.00000  -0.00000  -0.00000  -0.01762
+  0-1A  ->  2-1A    4.325874   34890.5   286.6    0.00000  -0.00000   0.27856  -0.00000
+  0-1A  ->  3-1A    5.442702   43898.4   227.8    0.00000   0.07458   0.00000   0.00000
+  0-1A  ->  4-1A    6.579556   53067.7   188.4    0.00000  -0.00000  -0.00000   0.00000
+  0-1A  ->  5-1A    6.739163   54355.0   184.0    0.00000   0.00000   0.00000   0.00000
+
+------------------------------------------------------------------------------------------
+                     CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS
+------------------------------------------------------------------------------------------
+     Transition      Energy     Energy  Wavelength    R        MX        MY        MZ
+                      (eV)      (cm-1)    (nm)   (1e40*cgs)   (au)      (au)      (au)
+------------------------------------------------------------------------------------------
+  0-1A  ->  1-1A    4.294795   34639.9   288.7   -0.00000  -0.00000  -0.00000  -0.01762
+  0-1A  ->  2-1A    4.325874   34890.5   286.6    0.00000  -0.00000   0.27856  -0.00000
+  0-1A  ->  3-1A    5.442702   43898.4   227.8    0.00000   0.07458   0.00000   0.00000
+  0-1A  ->  4-1A    6.579556   53067.7   188.4    0.00000  -0.00000  -0.00000   0.00000
+  0-1A  ->  5-1A    6.739163   54355.0   184.0    0.00000   0.00000   0.00000   0.00000
+
+Total run time:        1.347 sec
+
+           *** ORCA-CIS/TD-DFT FINISHED WITHOUT ERROR ***
+-----------------------
+CIS/TD-DFT TOTAL ENERGY
+-----------------------
+
+    E(SCF)  =   -247.791145981 Eh
+    DE(CIS) =      0.157830805 Eh (Root  1)
+    ----------------------------- ---------
+    E(tot)  =   -247.633315176 Eh
+
+
+Maximum memory used throughout the entire CIS-calculation: 11.6 MB
+=> NOW LEAVING ORCA_CIS
+
+-------------------------   --------------------
+FINAL SINGLE POINT ENERGY      -247.633315175813
+ORCA TERMINATED NORMALLY

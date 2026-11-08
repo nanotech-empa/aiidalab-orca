@@ -81,6 +81,11 @@ Small initial CAS values are examples, not validated choices for the molecule.
 
 ## 3. CASCI states and charge/spin batches
 
+Optical excitations are a separate **Optical excitations · UV–Vis** workspace
+from a converged DFT reference. Consult `orca.optical` for TDA/full-TDDFT,
+spin-family/state indexing, linked spectra and native NTO hole/particle previews.
+This needs no CAS and supplies no current Dyson/Kondo state vectors.
+
 After active-space confirmation, **3. Choose energy solver** offers fixed-orbital
 CASCI, optional CASSCF orbital optimization, or quantum-assisted energies.
 For a Dyson/Kondo goal, only the compatible ORCA state-vector route is offered.

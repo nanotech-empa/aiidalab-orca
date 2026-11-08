@@ -9,6 +9,7 @@ import ipywidgets as ipw
 from . import casscf_services as service
 from .casci_services import progress, reference_data
 from .resources import MemoryInput, memory_label
+from .retention import FullFileRetention
 
 
 class CasscfOrbitals(ipw.VBox):
@@ -45,6 +46,7 @@ class CasscfOrbitals(ipw.VBox):
         self.force = ipw.Checkbox(description='Run again even if a matching result exists', value=False, indent=False,
                                   layout=ipw.Layout(width='auto'))
         self.force.tooltip = 'Normally reuse a matching running or successful calculation. Changed inputs already define a new request.'
+        self.full_files = FullFileRetention()
         resources = ipw.Accordion(children=[ipw.VBox([self.nprocs, self.memory, self.wall, self.steps, self.aux, self.force])], selected_index=None)
         resources.set_title(0, 'Resources and convergence')
         self.review = ipw.Button(description='Review CASSCF', icon='list', button_style='primary')
@@ -68,7 +70,7 @@ class CasscfOrbitals(ipw.VBox):
             'orbital set for the states you select; their individual energies remain separate.</p>'
             '<p>These are <b>orbital-optimization weights</b>, not thermal populations, '
             'Clebsch–Gordan factors or spectral intensities. Existing results retain their original orbitals.</p>'),
-            self.mode, self.single, self.average, self.intent, resources,
+            self.mode, self.single, self.average, self.intent, self.full_files, resources,
             ipw.HBox([self.review, self.submit], layout=ipw.Layout(flex_flow='row wrap')),
             self.review_text, self.message, self.saved, self.refresh, self.status, self.levels, self.inspect,
             ipw.HTML('<p>After successful optimization and saved-orbital readback, inspect and confirm the '
@@ -78,6 +80,7 @@ class CasscfOrbitals(ipw.VBox):
         for control in (self.mode, self.mult, self.root, self.nprocs, self.memory, self.wall, self.steps, self.aux, self.force):
             control.observe(self._invalidate, names='value')
         self.mode.observe(self._mode_changed, names='value')
+        self.full_files.observe(self._invalidate, names='revision')
         self._mode_changed()
         self._refresh()
 
@@ -145,17 +148,22 @@ class CasscfOrbitals(ipw.VBox):
     def _review(self, _=None):
         self._invalidate()
         try:
-            self.plan = service.review(self.reference_uuid, self.space, self._values(), force=self.force.value)
+            self.plan = service.review(self.reference_uuid, self.space, self._values(), force=self.force.value,
+                                       native_output_policy=self.full_files.values())
             p = self.plan
             cell = ' style="padding: 0.25em 1.5em 0.25em 0; text-align: left"'
             rows = ''.join(f'<tr><td{cell}>{b["multiplicity"]}</td><td{cell}>{r}</td><td{cell}>{w:.6g}</td></tr>'
                            for b in p['settings']['states'] for r, w in enumerate(b['weights']))
             processes = 'process' if p['settings']['nprocs'] == 1 else 'processes'
+            retention = self.full_files.values()
+            destination = ('stashed at ' + html.escape(retention['stash_directory'])
+                           if retention['mode'] == 'stash' else 'left on the calculation computer')
             self.review_text.value = (f'<p><b>{html.escape(p["action"].capitalize())}</b> · '
                 f'{html.escape(p["execution"])} · {p["settings"]["nprocs"]} {processes} · '
                 f'{memory_label(p["settings"]["memory_mb"])} · {p["settings"]["wallclock_seconds"] // 60} minutes. '
                 'One job runs orbital optimization followed by independent frozen-orbital verification; '
-                'wavefunction storage follows the selected reference.</p>'
+                f'new full logs and wavefunction are {destination}. Only bounded summaries and diagnostics '
+                'are retrieved. Reused/running results keep their recorded retention.</p>'
                 f'<table style="border-collapse: collapse"><tr><th{cell}>Multiplicity</th><th{cell}>Root</th>'
                 f'<th{cell}>Normalized optimization weight</th></tr>' + rows + '</table>'
                 '<details><summary>Review ORCA optimization and readback inputs</summary><pre>' +

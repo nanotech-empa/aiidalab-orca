@@ -101,6 +101,7 @@ def test_calcjob_runs_two_native_inputs_without_retrieving_full_wavefunctions(co
     ref_uuid, remote_uuid, code_uuid, _ = common_reference
     b = casscf.CasscfCalculation.get_builder()
     b.orbital_reference, b.code = orm.load_node(ref_uuid), orm.load_code(code_uuid)
+    b.compact_code = b.code
     b.structure = orm.load_node(b.orbital_reference.get_dict()['structure_uuid'])
     b.active_space, b.settings = orm.Dict(dict=SPACE), orm.Dict(dict=objective())
     common_orbitals.attach_orbital(b, artifacts.resolve_electronic(orm.load_node(remote_uuid), names=['aiida.qro']), 'aiida.qro')
@@ -110,7 +111,8 @@ def test_calcjob_runs_two_native_inputs_without_retrieving_full_wavefunctions(co
         with SandboxFolder() as folder:
             info = process.prepare_for_submission(folder)
             assert info.codes_run_mode == CodeRunMode.SERIAL
-            assert [c.cmdline_params for c in info.codes_info] == [['aiida.inp'], ['verify.inp']]
+            assert [c.cmdline_params for c in info.codes_info] == [['aiida.inp'], ['verify.inp'], ['compact_output.py']]
+            assert [c.stdout_name for c in info.codes_info[:2]] == ['native_output/aiida.out', 'native_output/verify.out']
             assert 'aiida.gbw' not in info.retrieve_list and 'verify.out' in info.retrieve_list
     finally:
         process.close()
@@ -140,6 +142,11 @@ def test_open_review_edit_and_submit_are_distinct(monkeypatch):
         assert 'continue with CASCI' in panel.intent.value
         panel.review.click()
         assert len(calls) == 1 and not panel.submit.disabled
+        panel.full_files.mode.value = 'stash'
+        assert panel.submit.disabled and panel.plan is None
+        panel.full_files.directory.value = '/user/stash'
+        panel.review.click()
+        assert 'stashed at /user/stash' in panel.review_text.value
         panel.root.value = 1
         assert panel.submit.disabled and panel.plan is None
         assert 'only root 1 drives orbital optimization' in panel.intent.value

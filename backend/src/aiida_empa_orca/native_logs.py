@@ -23,6 +23,13 @@ STATE_MARKERS = re.compile(
     r'^\s*(?:Active|Internal|External)\s+Orbitals|'
     r'CAS-SCF STATES FOR BLOCK|^\s*ROOT\s+\d+\s*:|'
     r'Spin-Determinant CI Printing|DENSITY MATRIX|^\s*WARNING:', re.I)
+CASSCF_MARKERS = re.compile(
+    STATE_MARKERS.pattern + r'|Guess MOs are being read from file|'
+    r'Input Geometry matches current geometry|Input basis set matches current basis set|'
+    r'THE CAS-SCF GRADIENT HAS CONVERGED|DOING ONE FINAL ITERATION FOR PRINTING|'
+    r'^BLOCK\s+\d+\s+WEIGHT=|^\s+Multiplicity\s+\.\.\.|ROOT=\d+\s+WEIGHT=|'
+    r'^\s+PrintLevel|(?:CI|CAS[- ]?SCF).*?(?:NOT CONVERGED|DID NOT CONVERGE)', re.I)
+PROTOCOLS = {'casci-v1': ('aiida.out',), 'casscf-v1': ('aiida.out', 'verify.out')}
 
 
 def output_policy(values=None):
@@ -70,17 +77,8 @@ def _file_record(path):
     return {'name': path.name, 'size_bytes': after.st_size, 'sha256': checksum}
 
 
-def collect_output(request, root=Path('.')):
-    """Collect CASCI output with bounded memory and bounded retrieved files.
-
-    Exhausting a software budget invalidates the summary; no lines or states
-    are silently dropped from an accepted result. The complete source survives.
-    """
-    if request.get('protocol') != 'casci-v1':
-        raise ValueError('Unsupported native-output collection protocol')
-    policy = output_policy(request['policy'])
-    root = Path(root)
-    original = root / DIRECTORY / 'aiida.out'
+def _collect_log(root, name, markers, tail_name):
+    original = root / DIRECTORY / name
     selected, size, error = [], 0, None
     checksum = hashlib.sha256()
     before = original.stat()
@@ -94,10 +92,10 @@ def collect_output(request, root=Path('.')):
                 for chunk in iter(lambda: stream.read(1024**2), b''):
                     checksum.update(chunk)
                 break
-            if STATE_MARKERS.search(raw.decode('utf-8', errors='replace')):
+            if markers.search(raw.decode('utf-8', errors='replace')):
                 size += len(raw)
                 if size > SUMMARY_LIMIT:
-                    error = 'CASCI validation summary exceeds the compact-output budget'
+                    error = 'Native validation summary exceeds the compact-output budget'
                 elif error is None:
                     raw.decode('utf-8')  # Scientific validation lines must decode exactly.
                     selected.append(raw)
@@ -105,60 +103,83 @@ def collect_output(request, root=Path('.')):
     if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
         error = 'Native output changed during collection'
     summary = b''.join(selected)
-    header = b'# Compact ORCA validation summary. Full log: native_output/aiida.out; see native_output.json.\n'
+    header = f'# Compact ORCA validation summary. Full log: native_output/{name}; see native_output.json.\n'.encode()
     if error is None:
         if len(header) + len(summary) > SUMMARY_LIMIT:
-            error = 'CASCI validation summary exceeds the compact-output budget'
+            error = 'Native validation summary exceeds the compact-output budget'
         else:
             summary = header + summary
-    (root / 'aiida.out').write_bytes(summary)
+    (root / name).write_bytes(summary)
     with original.open('rb') as stream:
         stream.seek(max(0, after.st_size - TAIL_LIMIT))
-        (root / 'native_output_tail.txt').write_bytes(stream.read(TAIL_LIMIT))
-    records = [{'name': 'aiida.out', 'size_bytes': after.st_size, 'sha256': checksum.hexdigest()}]
-    prop = root / 'aiida.property.txt'
-    if prop.exists():
-        if prop.is_symlink() or not prop.is_file():
-            raise ValueError('Native property output is not a regular file')
-        target = root / DIRECTORY / prop.name
-        if target.exists():
-            raise ValueError('Refusing to overwrite a preserved native property output')
-        prop.replace(target)  # Move only this CalcJob's output, without copying it.
-        records.append(_file_record(target))
-    record = {'schema': SCHEMA, 'protocol': 'casci-v1', 'policy': policy,
+        (root / tail_name).write_bytes(stream.read(TAIL_LIMIT))
+    return ({'name': name, 'size_bytes': after.st_size, 'sha256': checksum.hexdigest()},
+            {'name': name, 'size_bytes': len(summary), 'sha256': hashlib.sha256(summary).hexdigest()}, error)
+
+
+def collect_output(request, root=Path('.')):
+    """Bound each summary and tail; exhausting a budget never accepts partial data."""
+    protocol = request.get('protocol')
+    if protocol not in PROTOCOLS:
+        raise ValueError('Unsupported native-output collection protocol')
+    policy, root = output_policy(request['policy']), Path(root)
+    records, summaries, errors = [], [], []
+    markers = STATE_MARKERS if protocol == 'casci-v1' else CASSCF_MARKERS
+    for name in PROTOCOLS[protocol]:
+        tail = 'native_output_tail.txt' if name == 'aiida.out' else 'verify_tail.txt'
+        original, summary, error = _collect_log(root, name, markers, tail)
+        records.append(original)
+        summaries.append(summary)
+        if error:
+            errors.append(name + ': ' + error)
+    for name in PROTOCOLS[protocol]:
+        prop = root / name.replace('.out', '.property.txt')
+        if prop.exists():
+            if prop.is_symlink() or not prop.is_file():
+                raise ValueError('Native property output is not a regular file')
+            target = root / DIRECTORY / prop.name
+            if target.exists():
+                raise ValueError('Refusing to overwrite a preserved native property output')
+            prop.replace(target)  # Only this CalcJob's output, without copying it.
+            records.append(_file_record(target))
+    error = '; '.join(errors) or None
+    record = {'schema': SCHEMA, 'protocol': protocol, 'policy': policy,
               'status': 'error' if error else 'complete', 'error': error,
               'directory': DIRECTORY, 'files': records,
-              'summary': {'name': 'aiida.out', 'size_bytes': len(summary),
-                          'sha256': hashlib.sha256(summary).hexdigest()},
+              'summary': summaries[0],
               'diagnostic_tail_limit': TAIL_LIMIT}
+    if len(summaries) > 1:
+        record['additional_summaries'] = summaries[1:]
     (root / MANIFEST).write_text(json.dumps(record, allow_nan=False, indent=2))
     return record
 
 
 def validate_manifest(record):
-    if (record.get('schema') != SCHEMA or record.get('protocol') != 'casci-v1'
+    if (record.get('schema') != SCHEMA or record.get('protocol') not in PROTOCOLS
             or record.get('directory') != DIRECTORY):
         raise ValueError('Unsupported native-output manifest')
     output_policy(record['policy'])
     if record.get('status') != 'complete':
         raise ValueError(record.get('error') or 'Native-output collection did not complete')
-    summary = record['summary']
-    if summary['name'] != 'aiida.out' or not 0 <= summary['size_bytes'] <= SUMMARY_LIMIT:
-        raise ValueError('Invalid compact-output budget or filename')
+    summaries = [record['summary'], *record.get('additional_summaries', [])]
+    expected = list(PROTOCOLS[record['protocol']])
+    if [s['name'] for s in summaries] != expected or any(
+            not 0 <= s['size_bytes'] <= SUMMARY_LIMIT for s in summaries):
+        raise ValueError('Invalid compact-output budget or filenames')
     names = [f['name'] for f in record['files']]
-    if not names or names[0] != 'aiida.out' or len(set(names)) != len(names):
+    if names[:len(expected)] != expected or len(set(names)) != len(names):
         raise ValueError('Missing or ambiguous full native output')
-    for item in [summary, *record['files']]:
-        if (item['name'] not in ('aiida.out', 'aiida.property.txt')
+    for item in [*summaries, *record['files']]:
+        if (item['name'] not in expected + [n.replace('.out', '.property.txt') for n in expected]
                 or type(item['size_bytes']) is not int or item['size_bytes'] < 0
                 or not re.fullmatch('[0-9a-f]{64}', item['sha256'])):
             raise ValueError('Invalid native-output identity')
     return record
 
 
-def validate_summary(record, content):
+def validate_summary(record, content, name='aiida.out'):
     validate_manifest(record)
-    item = record['summary']
+    item = next(s for s in [record['summary'], *record.get('additional_summaries', [])] if s['name'] == name)
     if len(content) != item['size_bytes'] or hashlib.sha256(content).hexdigest() != item['sha256']:
         raise ValueError('Compact output differs from its recorded checksum')
 

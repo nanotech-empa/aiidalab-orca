@@ -7,12 +7,14 @@ from aiida import common, engine, orm
 from aiida.parsers import Parser
 from aiida_orca.calculations.orca_orca import OrcaCalculation
 
-from .artifacts import resolve_electronic, storage_builder, storage_policy
+from .artifacts import resolve_electronic, storage_builder, stash_options
 from .casci import active_space, spin_sector_dimension, validate_reference
 from .common_orbitals import attach_orbital, copy_orbital, options, source_spec
 from .input import render_input
 from .pdos_workflow import OrbitalCharacterMixin
 from .reference import single_point_parameters
+from .native_logs import DIRECTORY, output_policy
+from .native_output import compact_spec, prepare_compact, read_manifest
 
 PROCESS_TYPE = 'aiida.workflows:empa_orca.casscf'
 PREPARATION = 'casscf_verified_v1'
@@ -197,6 +199,7 @@ class CasscfCalculation(engine.CalcJob):
                          'active_space': orm.Dict, 'settings': orm.Dict}.items():
             spec.input(key, valid_type=typ)
         source_spec(spec)
+        compact_spec(spec)
         spec.input('metadata.options.parser_name', default='empa_orca.casscf')
         spec.input('metadata.options.withmpi', default=False)
         spec.output('orbital_reference', valid_type=orm.Dict)
@@ -220,8 +223,7 @@ class CasscfCalculation(engine.CalcJob):
             code.stdout_name, code.join_files = name + '.out', True
             info.codes_info.append(code)
         info.codes_run_mode = common.CodeRunMode.SERIAL
-        info.retrieve_list = ['aiida.out', 'verify.out', 'aiida.property.txt']
-        return info
+        return prepare_compact(info, self.inputs, folder, 'casscf-v1')
 
 
 class CasscfParser(Parser):
@@ -231,6 +233,7 @@ class CasscfParser(Parser):
             space = active_space(self.node.inputs.active_space.get_dict(), ref)
             settings = casscf_settings(self.node.inputs.settings.get_dict(), ref, space)
             repository = self.retrieved.base.repository
+            manifest = read_manifest(self.node, repository, 'casscf-v1')
             data = verified_result(repository.get_object_content('aiida.out'),
                                    repository.get_object_content('verify.out'), ref, space, settings)
             from .artifacts import remote_files
@@ -247,6 +250,8 @@ class CasscfParser(Parser):
             data['orbital_reference_uuid'] = str(orbital_node.uuid)
             self.out('orbital_reference', orbital_node)
             self.out('state_energies', orm.Dict(dict=data))
+            if manifest is not None:
+                self.out('native_output_manifest', orm.Dict(dict=manifest))
         except (KeyError, ValueError, OSError) as exc:
             self.logger.error(str(exc))
             return self.exit_codes.ERROR_CASSCF
@@ -263,8 +268,12 @@ class CasscfWorkChain(OrbitalCharacterMixin, engine.WorkChain):
         for key, typ in {'orbital_reference': orm.Dict, 'state_energies': orm.Dict,
                          'remote_folder': orm.RemoteData, 'retrieved': orm.FolderData}.items():
             spec.output(key, valid_type=typ)
+        spec.input('native_output_policy', valid_type=orm.Dict,
+                   default=lambda: orm.Dict(dict={'mode': 'remote'}))
+        spec.output('native_output_manifest', valid_type=orm.Dict, required=False)
         cls.character_spec(spec)
-        spec.outline(cls.setup, cls.calculate, cls.inspect, cls.preserve, cls.inspect_storage,
+        spec.outline(cls.setup, cls.calculate, cls.inspect,
+                     engine.if_(cls.should_stash)(cls.preserve, cls.inspect_storage),
                      cls.results, cls.run_orbital_character, cls.inspect_orbital_character)
         spec.exit_code(400, 'ERROR_INPUT', message='Invalid CASSCF request or unavailable input orbitals; see report.')
         spec.exit_code(401, 'ERROR_CASSCF', message='CASSCF optimization/readback failed; do not reuse this candidate.')
@@ -280,7 +289,7 @@ class CasscfWorkChain(OrbitalCharacterMixin, engine.WorkChain):
                 raise ValueError('Use the same ORCA code as the orbital source')
             if self.inputs.storage_code.computer.uuid != self.inputs.code.computer.uuid:
                 raise ValueError('Preserve the reference on its calculation computer')
-            storage_policy(self.inputs.storage_policy.get_dict())
+            self.ctx.retention = output_policy(self.inputs.native_output_policy.get_dict())
             self.ctx.location = resolve_electronic(self.inputs.source_remote, names=[ref['filename']])
         except (KeyError, ValueError, OSError, RuntimeError) as exc:
             self.report(str(exc))
@@ -291,8 +300,12 @@ class CasscfWorkChain(OrbitalCharacterMixin, engine.WorkChain):
         for key in ('structure', 'orbital_reference', 'active_space', 'code'):
             b[key] = self.inputs[key]
         b.settings = orm.Dict(dict=self.ctx.settings)
+        b.compact_code = self.inputs.storage_code
+        b.native_output_policy = orm.Dict(dict=self.ctx.retention)
         attach_orbital(b, self.ctx.location, self.inputs.orbital_reference.get_dict()['filename'])
         b.metadata.options = options(self.ctx.settings)
+        if self.ctx.retention['mode'] == 'stash':
+            b.metadata.options.stash = stash_options(self.ctx.retention['stash_directory'], DIRECTORY)
         b.metadata.disable_cache = True
         return engine.ToContext(calculation=self.submit(b))
 
@@ -302,13 +315,19 @@ class CasscfWorkChain(OrbitalCharacterMixin, engine.WorkChain):
 
     def preserve(self):
         b = storage_builder(self.ctx.calculation.outputs.remote_folder, self.inputs.storage_code,
-                            self.inputs.storage_policy.get_dict(), names=['aiida.gbw'])
+                            {'threshold_mb': 0, 'stash_directory': self.ctx.retention['stash_directory']},
+                            names=['aiida.gbw'])
         return engine.ToContext(storage=self.submit(b))
 
     def inspect_storage(self):
         if not self.ctx.storage.is_finished_ok:
             return self.exit_codes.ERROR_STORAGE
 
+    def should_stash(self):
+        return self.ctx.retention['mode'] == 'stash'
+
     def results(self):
         for key in ('orbital_reference', 'state_energies', 'remote_folder', 'retrieved'):
             self.out(key, self.ctx.calculation.outputs[key])
+        if 'native_output_manifest' in self.ctx.calculation.outputs:
+            self.out('native_output_manifest', self.ctx.calculation.outputs.native_output_manifest)

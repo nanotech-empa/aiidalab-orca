@@ -4,6 +4,7 @@ from aiida import engine, orm
 from aiida_empa_orca import casscf
 from aiida_empa_orca.artifacts import resolve_electronic
 from aiida_empa_orca.casci import signature, validate_reference
+from aiida_empa_orca.native_logs import output_policy
 
 
 def optimized_references(retrieved_uuid, code_uuid):
@@ -17,8 +18,9 @@ def optimized_references(retrieved_uuid, code_uuid):
             if str(orm.load_node(uuid).inputs.code.uuid) == str(code_uuid)]
 
 
-def review(reference_uuid, space, values, *, force=False):
+def review(reference_uuid, space, values, *, force=False, native_output_policy=None):
     from .casci_services import reference_data
+    retention = output_policy(native_output_policy)
     node = orm.load_node(reference_uuid)
     ref = reference_data(reference_uuid)
     validate_reference(node.outputs.orbital_reference, node.outputs.remote_folder)
@@ -40,6 +42,7 @@ def review(reference_uuid, space, values, *, force=False):
     if not reuse:
         resolve_electronic(node.outputs.remote_folder, names=[ref['filename']])
     return {'reference_uuid': str(reference_uuid), 'active_space': space, 'values': values,
+            'native_output_policy': retention,
             'force_recompute': bool(force),
             'settings': settings, 'signature': key, 'reuse_uuid': reuse,
             'action': 'reuse' if reuse else 'compute',
@@ -50,7 +53,8 @@ def review(reference_uuid, space, values, *, force=False):
 
 
 def builder(plan):
-    current = review(plan['reference_uuid'], plan['active_space'], plan['values'], force=plan.get('force_recompute', False))
+    current = review(plan['reference_uuid'], plan['active_space'], plan['values'], force=plan.get('force_recompute', False),
+                     native_output_policy=plan.get('native_output_policy'))
     if any(current[k] != plan[k] for k in ('signature', 'code_uuid', 'input', 'readback_input')):
         raise ValueError('The CASSCF request changed; review it again')
     node = orm.load_node(plan['reference_uuid'])
@@ -60,6 +64,7 @@ def builder(plan):
     b.orbital_reference, b.source_remote = node.outputs.orbital_reference, node.outputs.remote_folder
     b.active_space, b.settings = orm.Dict(dict=plan['active_space']), orm.Dict(dict=plan['settings'])
     b.code, b.storage_code, b.storage_policy = node.inputs.code, node.inputs.storage_code, node.inputs.storage_policy
+    b.native_output_policy = orm.Dict(dict=current['native_output_policy'])
     from aiida_empa_orca.pdos_workflow import configure, default_plan
     configure(b, default_plan(node.inputs.code.computer.uuid))
     b.metadata.label = b.structure.get_formula() + ' · ' + ('SA-CASSCF' if plan['settings']['mode'] == 'state_average' else 'CASSCF')
@@ -67,7 +72,8 @@ def builder(plan):
 
 
 def submit(plan):
-    current = review(plan['reference_uuid'], plan['active_space'], plan['values'], force=plan.get('force_recompute', False))
+    current = review(plan['reference_uuid'], plan['active_space'], plan['values'], force=plan.get('force_recompute', False),
+                     native_output_policy=plan.get('native_output_policy'))
     if current['signature'] != plan['signature']:
         raise ValueError('The request changed; review CASSCF again')
     return current['reuse_uuid'] or str(engine.submit(builder(plan)).uuid)

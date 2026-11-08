@@ -505,7 +505,7 @@ class CasciStates(ipw.VBox):
         if getattr(self,'_diagram',None):
             self._diagram.close()
             self._diagram = None
-        from .app import close_widget_tree
+        from .widget_lifecycle import close_widget_tree
         if self.on_inspect:
             close_widget_tree(self.inspection_box)
         for child in self.children:

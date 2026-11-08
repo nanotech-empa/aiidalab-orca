@@ -43,7 +43,7 @@ class MolecularStructureViewer(StructureDataViewer):
             return
         self._closed = True
         self.unobserve(self._selection_text, names='selection')
-        from .app import close_widget_tree
+        from .widget_lifecycle import close_widget_tree
         for child in self.children:
             close_widget_tree(child)
         super().close()
@@ -118,7 +118,7 @@ class GeometryInspection(ipw.VBox):
         self.frame.unobserve(self._frame_changed, names='value')
         if self.tabs:
             self.tabs.unobserve(self._tab_changed, names='selected_index')
-        from .app import close_widget_tree
+        from .widget_lifecycle import close_widget_tree
         for child in self.children:
             close_widget_tree(child)
         super().close()

@@ -371,7 +371,7 @@ class PdosPanel(ipw.VBox):
             self.structure_viewer.unobserve(self._viewer_atoms_changed, names='selection')
         if self._task:
             self._task.cancel()
-        from .app import close_widget_tree
+        from .widget_lifecycle import close_widget_tree
         for child in self.children:
             close_widget_tree(child)
         super().close()

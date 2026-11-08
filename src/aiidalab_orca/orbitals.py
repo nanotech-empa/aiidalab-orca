@@ -7,6 +7,7 @@ import ipywidgets as ipw
 from aiidalab_widgets_empa.cube import CubeViewer
 
 from . import property_services as service
+from .widget_lifecycle import close_widget_tree
 
 
 class CubeDisplayMixin:
@@ -21,9 +22,9 @@ class CubeDisplayMixin:
             return
         content=service.preview_content(self.process_uuid,self.cube.value)
         if getattr(self,'render_panel',None):
-            self.render_panel.close()
+            close_widget_tree(self.render_panel)
         if self._cube_view:
-            self._cube_view.close()
+            close_widget_tree(self._cube_view)
         from .rendering import RenderPanel
         self.render_panel=RenderPanel(self.process_uuid,self.cube.value)
         self._cube_view=CubeViewer(periodic=False,on_render=self.render_panel.submit)
@@ -239,10 +240,15 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
         return data['finished']
 
     def close(self):
-        if self._poll_task:
+        if getattr(self, '_disposed', False):
+            return
+        self._disposed = True
+        if getattr(self, '_poll_task', None):
             self._poll_task.cancel()
         if getattr(self,'render_panel',None):
-            self.render_panel.close()
-        if self._cube_view:
-            self._cube_view.close()
+            close_widget_tree(self.render_panel)
+        if getattr(self, '_cube_view', None):
+            close_widget_tree(self._cube_view)
+        for child in self.children:
+            close_widget_tree(child)
         super().close()

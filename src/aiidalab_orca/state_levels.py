@@ -95,7 +95,7 @@ class StateEnergyLevels(ipw.VBox):
             self.lower.unobserve(self._redraw, names='value')
             self.upper.unobserve(self._redraw, names='value')
             self.reset.on_click(self._reset, remove=True)
-            from .app import close_widget_tree
+            from .widget_lifecycle import close_widget_tree
             for child in self.children:
                 close_widget_tree(child)
         super().close()

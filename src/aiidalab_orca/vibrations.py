@@ -132,7 +132,7 @@ class VibrationalSpectroscopy(ipw.VBox):
             record = service.result(uuid)
             from .vibration_viewer import spectra_view
             view = spectra_view(record)
-            from .app import close_widget_tree
+            from .widget_lifecycle import close_widget_tree
             for child in self.viewer.children:
                 close_widget_tree(child)
             self.viewer.children = (view,)

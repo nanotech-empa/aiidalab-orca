@@ -269,7 +269,7 @@ class SpectralViewer(ipw.VBox):
             return
         self._disposed = True
         self.on_change = self.on_selection = self.on_use = None
-        from .app import close_widget_tree
+        from .widget_lifecycle import close_widget_tree
         for child in self.children:
             close_widget_tree(child)
         super().close()

@@ -121,7 +121,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self._invalidate()
         self._invalidate_cubes()
         if self.spectrum:
-            from .app import close_widget_tree
+            from .widget_lifecycle import close_widget_tree
             close_widget_tree(self.spectrum)
             self.spectrum = None
         self.record = None
@@ -248,7 +248,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             self.map_panel = None
         self.map_box.children = ()
         if self.spectrum:
-            from .app import close_widget_tree
+            from .widget_lifecycle import close_widget_tree
             close_widget_tree(self.spectrum)
         diagram_states = service.diagram_states(self.record['data'],self.state_rows)
         self.spectrum = SpectralViewer(self.record['data'],self._invalidate_cubes,states=diagram_states,
@@ -365,7 +365,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self._disposed = True
         if self._poll_task:
             self._poll_task.cancel()
-        from .app import close_widget_tree
+        from .widget_lifecycle import close_widget_tree
         for child in self.children:
             close_widget_tree(child)
         super().close()

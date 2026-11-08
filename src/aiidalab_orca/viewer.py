@@ -305,7 +305,7 @@ class ResultsView(ipw.VBox):
             return
         old = self.tabs.panels.pop('active',None)
         if old:
-            from .app import close_widget_tree
+            from .widget_lifecycle import close_widget_tree
             close_widget_tree(old)
         self._selection_reference = str(panel.reference.value)
 

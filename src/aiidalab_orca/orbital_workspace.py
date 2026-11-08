@@ -75,7 +75,7 @@ class OrbitalWorkspace(ipw.VBox):
 
     def _reference_changed(self, change):
         if self.inspection:
-            from .app import close_widget_tree
+            from .widget_lifecycle import close_widget_tree
             close_widget_tree(self.inspection)
             self.inspection = None
         if not change['new']:

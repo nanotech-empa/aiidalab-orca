@@ -302,7 +302,7 @@ class DysonMaps(ipw.VBox):
             self._task.cancel()
         for w in self._plane_controls:
             w.unobserve(self.invalidate, names='value')
-        from .app import close_widget_tree
+        from .widget_lifecycle import close_widget_tree
         for child in self.children:
             close_widget_tree(child)
         super().close()

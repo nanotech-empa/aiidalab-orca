@@ -11,6 +11,7 @@ from . import services, structure_io
 from .history import HistoryWidget, inspect_run
 from .viewer import show_result
 from .analysis_navigation import ANALYSES, AnalysisChooser, goal_path
+from .widget_lifecycle import close_widget_tree  # Preserve the historical import path.
 
 
 # Classic Notebook auto-scrolls tall outputs as widgets expand. Scope this to
@@ -457,15 +458,3 @@ class OrcaApp(ipw.VBox):
         if hasattr(self, "structure"):
             self.structure.close()
         super().close()
-
-
-def close_widget_tree(widget):
-    """Dispose owned result widgets when replacing a result view."""
-    if getattr(widget, '_orca_tree_closed', False):
-        return
-    widget._orca_tree_closed = True
-    if hasattr(widget, 'set_active'):
-        widget.set_active(False)
-    for child in getattr(widget, "children", ()):
-        close_widget_tree(child)
-    widget.close()

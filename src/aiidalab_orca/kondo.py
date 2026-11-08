@@ -206,7 +206,7 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
         self._disposed = True
         if self._task:
             self._task.cancel()
-        from .app import close_widget_tree
+        from .widget_lifecycle import close_widget_tree
         for child in self.children:
             close_widget_tree(child)
         super().close()

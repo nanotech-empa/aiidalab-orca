@@ -15,6 +15,7 @@ from .interactive_svg import InteractiveSvg
 from .orbitals import CubeDisplayMixin
 from .presentation import ComputePanel
 from .resources import MemoryInput
+from .widget_lifecycle import close_widget_tree
 
 STYLE = {'description_width': 'initial'}
 WIDE = {'width': '95%'}
@@ -288,10 +289,10 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
             self.cube.options = []
             self.download.value = ''
             if self._cube_view:
-                self._cube_view.close()
+                close_widget_tree(self._cube_view)
                 self._cube_view = None
             if self.render_panel:
-                self.render_panel.close()
+                close_widget_tree(self.render_panel)
                 self.render_panel = None
             self._view_context = None
             self.cube_box.children = []
@@ -373,11 +374,10 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
         if self._poll_task:
             self._poll_task.cancel()
         self.on_availability = None
-        # The app's recursive disposer may already have closed this child.
-        if self._cube_view and not getattr(self._cube_view, '_orca_tree_closed', False):
-            self._cube_view.close()
+        if self._cube_view:
+            close_widget_tree(self._cube_view)
         if self.render_panel:
-            self.render_panel.close()
+            close_widget_tree(self.render_panel)
         super().close()
 
 

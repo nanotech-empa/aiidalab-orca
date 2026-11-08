@@ -309,7 +309,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self._show_cube()
 
     def _clear_cube(self):
-        from .app import close_widget_tree
+        from .widget_lifecycle import close_widget_tree
         if self.render_panel:
             close_widget_tree(self.render_panel)
             self.render_panel = None
@@ -326,7 +326,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         if self._poll_task:
             self._poll_task.cancel()
         self._clear_cube()
-        from .app import close_widget_tree
+        from .widget_lifecycle import close_widget_tree
         for child in self.children:
             close_widget_tree(child)
         super().close()

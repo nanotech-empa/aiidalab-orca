@@ -70,6 +70,13 @@ and total energies remain together in the downloadable table. Small logs and
 structured results are retrieved; full electronic files stay in the calculation
 directory. The source CASSCF orbitals are unchanged.
 
+A large total correlation correction need not imply a large change in a gap:
+the gap changes by the final-state correction minus the initial-state correction.
+Compare the same labelled states with consistent models; the methods are not
+ranked by how negative their total energies are. The
+[stage validation record](release-readiness.md) lists the completed pilots and
+the remaining multistate and release-acceptance gates.
+
 With the matching shared openBIS exporter, entry export discovers these stored
 analyses too. RI-MP2 uses the existing energy-calculation category; the complete
 NEVPT2/CASPT2 state family stays together as a CAS simulation. No full remote files

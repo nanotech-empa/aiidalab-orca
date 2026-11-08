@@ -19,8 +19,9 @@ instead**, select a completed SCF/optimization in **Search calculations**, then
 click **View results**. This opens the selected goal for that reference.
 
 **Results** has one **Analysis / results** selector for the overview, orbitals,
-orbital preparation, active-space confirmation, CASCI, Dyson spectra/maps,
-Kondo, vibrations and calculation details. A missing
+PDOS, orbital preparation, active-space confirmation, energy solver, optional
+CASSCF, correlation energies, CASCI, quantum-assisted energies, Dyson spectra/maps,
+Kondo, vibrations, export and calculation details. A missing
 prerequisite keeps the requested analysis selected and offers an explicit action
 such as **Prepare orbital reference**, **Inspect and choose active orbitals**,
 or **Compute Dyson transitions**. The final goal
@@ -39,9 +40,15 @@ different spin or submits a prerequisite calculation automatically.
 | --- | --- |
 | Overview | Final geometry, reference method/charge/spin/energy, XYZ download and optional optimization-convergence plot |
 | Orbitals & density | SCF orbital levels and optional cubes/spin density; a separate QRO/UNO inspection view |
+| PDOS & orbital character | Atom/fragment and angular projections, with the standard structure viewer and orbital candidates |
 | 1. Prepare orbital reference | Prepare or reuse the shared spatial orbitals without SCF iterations |
 | 2. Inspect / confirm active space | Inspect occupations/shapes and explicitly select the CAS input orbitals/electrons |
-| 3. CASCI states and multiplicities; Dyson; Kondo | Request states only after preparation, then continue to compatible transitions and channels |
+| 3. Choose energy solver | Continue with fixed-orbital ORCA CASCI, optional CASSCF optimization or quantum-assisted energies |
+| Optimize orbitals · CASSCF | Optimize one state or an explicit state average; verify, inspect and confirm the new reference |
+| ORCA CASCI states and multiplicities | Request fixed-orbital states after preparation and inspect compatible charge/spin sectors |
+| Quantum-assisted energy levels | Export the selected reference's Hamiltonian and follow the separate sampling/energy workflow |
+| Correlation energies · MP2 / NEVPT2 / CASPT2 | Fresh-HF MP2 or verified-CASSCF corrections, with independent energies and diagnostics |
+| Dyson spectrum; Dyson orbitals & maps; Kondo orbitals & maps | Compatible transitions and channels, with separate optional cube/map calculations |
 | Vibrations | Stored IR/Raman spectra and animated modes, plus an optional frequency-calculation form |
 | XPS · Work in progress | Informational placeholder; XPS calculation controls are unavailable |
 | Calculation details | Effective reference inputs, electronic-file storage status and provenance identifiers |
@@ -69,7 +76,7 @@ the interface does not group calculations just because their formulas match.
 
 ## Connected electronic analysis
 
-**Analysis / results → 3. CASCI states and multiplicities** opens the CASCI diagram without
+**Analysis / results → ORCA CASCI states and multiplicities** opens the CASCI diagram without
 constructing a Dyson viewer. **Inspect active orbitals** opens the corresponding
 reference and active window in **2. Inspect / confirm active space**.
 Applying an inspected window returns to the CASCI controls with that reference.
@@ -90,8 +97,10 @@ tab is hidden, then resume only if the user had left them playing. A deliberate
 manual pause is retained. Replacing the loaded reference disposes its viewers
 and polling tasks once.
 
-The backend workflows, scientific parameters, physical conventions and package
-pins are unchanged by this presentation refactor.
+Correlation energies form a separate branch; the corrected results do not
+replace current Dyson/Kondo vectors or spectral peak energies. See the
+[correlation guide](correlation.md) and [validation record](release-readiness.md)
+for supported methods, rejection checks and remaining qualification work.
 
 ## Export to openBIS
 

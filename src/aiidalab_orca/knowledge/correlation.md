@@ -57,6 +57,13 @@ claim of validity from a single diagnostic. Full first-order wavefunction
 storage increases memory/disk needs on larger systems. The single-state
 one-shift-at-a-time checks test implementation, not universal protocol accuracy.
 
+Interpret corrections through consistent energy differences. A large total
+correlation correction can largely cancel between states; a corrected gap
+changes by the final-state correction minus the initial-state correction.
+SC, FIC and CASPT2 are different approximations, so a lower total energy does
+not by itself establish greater accuracy. The current single-state CASPT2
+pilot does not establish excitation-gap accuracy for a state average.
+
 Editing invalidates review; submission is explicit. Reuse matching running or
 successful requests unless recomputation is selected. Retain failed outputs,
 diagnose the cause and never weaken tolerances or optimize a new reference

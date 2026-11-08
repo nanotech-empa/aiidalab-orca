@@ -55,8 +55,11 @@ cannot be combined. Independently optimized charge states would require a
 separate nonorthogonal-orbital implementation. For quantum-assisted energies,
 export a new Hamiltonian from the optimized reference; an old export belongs
 to the original orbitals. A QPU energy result cannot replace the CI state vectors
-required by the current Dyson path. NEVPT2 and other correlation corrections
-are separate future steps.
+required by the current Dyson path. For energy corrections, open the separate
+[CASSCF → correlation branch](correlation.md): SC/FIC/DLPNO-NEVPT2 or CASPT2.
+These return energies and diagnostics, without replacing the current
+Dyson/Kondo state vectors. The [stage validation record](release-readiness.md)
+distinguishes completed pilots from unvalidated cases.
 
 The scientific input convention follows the [ORCA 6.1 CASSCF manual](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/CASSCF.html).
 The current general active-space preparation still defines its supported

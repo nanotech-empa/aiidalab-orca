@@ -6,7 +6,8 @@ The experiment, molecule and material selectors are part of that same form.
 There is no separate ORCA result picker or intermediate review button.
 
 Choose the destination and review the complete entry together: geometry/SCF,
-PDOS, orbital references, CASCI, vibrations, Dyson/Kondo results, cubes, maps and
+PDOS, orbital references, CASSCF, CASCI, correlation energies, vibrations,
+Dyson/Kondo results, cubes, maps and
 saved figures where available. The exporter follows stored AiiDA provenance at
 the exact final geometry, including independent analysis workflows. A different
 optimized geometry is a separate entry; matching formulae or names do not link
@@ -31,7 +32,13 @@ Orbital cubes and spatial maps, including **Dyson and Kondo**, use
 `SPM_SIMULATION` with orbital-kind/source settings preserved. UNO occupations
 are not an energy DOS. Complete CASCI state tables, Dyson transition data and
 Kondo exchange matrices use the labelled `UNCLASSIFIED_SIMULATION` fallback
-until a separate searchable schema is reviewed. XPS/research workflows without
+until a separate searchable schema is reviewed. CASSCF and NEVPT2/CASPT2 keep
+their complete labelled state family in `UNCLASSIFIED_SIMULATION` with method
+family `CAS`; objective weights, correction models, explicit shifts and native
+diagnostics stay with that family. RI-MP2 uses `ENERGY_CALCULATION`, with method
+family `OTHER` and its fresh-HF reference/correction/total decomposition.
+CASSCF orbital cubes use `SPM_SIMULATION` with method family `CAS`.
+XPS/research workflows without
 an exporter are not advertised as supported.
 
 The optional shared component must contain `aiida_openbis.export` and its ORCA
@@ -52,3 +59,7 @@ The whole-entry action creates or reuses all these records together. For a
 complete workspace on import, select the entry's source geometry, references,
 states and spatial records together. Shared AiiDA UUIDs reconnect their archived
 provenance; exporting a whole entry does not invent a synthetic workflow parent.
+
+The companion adapter is covered by local mapping, archive and recovery tests.
+A live-server publish/import round trip is a separate acceptance gate, not
+established by those tests. See the [stage validation record](release-readiness.md).

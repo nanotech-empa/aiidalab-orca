@@ -111,6 +111,7 @@ class ResultsView(ipw.VBox):
             ('active', 'Inspect orbitals / active space', self._active_space),
             ('energy', 'Choose energy solver', self._energy_routes),
             ('casscf', 'Optimize orbitals · CASSCF', self._casscf),
+            ('correlation', 'Correlation energies · MP2 / NEVPT2 / CASPT2', self._correlation),
             ('quantum_energy', 'Quantum-assisted energy levels', self._quantum_energy),
             ('states', 'CASCI, Dyson & Kondo', self._states),
             ('vibrations', 'Vibrations', self._vibrations),
@@ -430,6 +431,10 @@ class ResultsView(ipw.VBox):
                                   + input_details(data.get('input_files', {}))))
         items.append(ipw.HTML('<h4>Provenance and identifiers</h4>'+provenance))
         return ipw.VBox(items)
+
+    def _correlation(self):
+        from .correlation import CorrelationEnergies
+        return CorrelationEnergies(self.data['uuid'], lambda: self.open_analysis('casscf'))
 
     def _export(self):
         from .openbis import OpenbisExport

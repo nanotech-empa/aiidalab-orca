@@ -100,7 +100,8 @@ by selection in **Search calculations** and **View results**.
 Kondo views of the same retained state workspace. Missing prerequisites keep
 the requested analysis selected and offer an explicit prerequisite action.
 The main path is **1. Prepare orbital reference → 2. Inspect / confirm active
-space → 3. CASCI states and multiplicities → 4. Dyson → 5. Kondo**, stopping at
+space → 3. Choose energy solver → ORCA CASCI → 4. Dyson spectrum →
+5. Kondo orbitals & maps**, stopping at
 the chosen goal and reusing completed steps. The final goal remains visible
 during preparation, and **Continue to…** checks its next required step. Navigation never
 submits calculations or changes the physical model. CASCI holds orbitals fixed
@@ -155,6 +156,12 @@ The openBIS companion adapter in `aiidalab-openbis#153` includes CASSCF referenc
 and complete state tables in the entry's export, with the existing CAS method
 family. Verify that the installed exporter includes that mapping; the ORCA app
 alone does not upgrade it. No new server object type is needed.
+
+The separate correlation workspace can reuse verified CASSCF for
+SC/FIC/DLPNO-NEVPT2 or CASPT2 energies; consult `orca.correlation` for its
+diagnostics and rejection gates. Those outputs supply no compatible state
+vectors or corrected transition amplitudes. Keep the current shared-orbital
+CASCI → Dyson/Kondo branch intact rather than routing energy corrections into it.
 
 ### Scientific and execution inputs
 

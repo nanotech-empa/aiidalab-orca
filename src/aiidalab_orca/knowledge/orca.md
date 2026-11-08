@@ -59,7 +59,8 @@ optimizations. Full numerical cubes and reduced interactive previews have
 different roles and retention policies.
 
 For CASCI/Dyson/Kondo follow **1. Prepare orbital reference → 2. Inspect / confirm
-active space → 3. CASCI states and multiplicities**. Restricted references retain
+active space → 3. Choose energy solver → ORCA CASCI states and multiplicities**.
+Restricted references retain
 restricted spatial orbitals. Unrestricted references provide QROs for the
 current general CASCI input and spin-summed UNOs for inspection. UNO occupations
 lie between 0 and 2; UNOs are not separate alpha/beta lists. A restricted
@@ -89,6 +90,12 @@ optimization weights; they are unrelated to populations or spectral weights.
 Successful optimization requires a passing independent frozen-orbital readback.
 Inspect and confirm the new natural-orbital reference before requesting CASCI
 sectors or a new QPU Hamiltonian export. Never mix old and new references.
+
+The separate **Correlation energies · MP2 / NEVPT2 / CASPT2** workspace offers
+fresh-HF RI-MP2 and verified-CASSCF SC/FIC/DLPNO-NEVPT2 or CASPT2. Consult
+`orca.correlation` before guiding that route. These are energy-only results;
+they do not replace the CI vectors or peak energies of current Dyson/Kondo
+calculations. A lower corrected total energy is not an automatic accuracy ranking.
 
 Use the same fixed geometry and common orbitals for compatible charge/spin
 sectors. **Charges** accepts absolute molecular charges, e.g. `0 +1 -1`;

@@ -44,6 +44,12 @@ def workflow_guides():
         'source': 'aiidalab_orca/knowledge/casci-kondo.md',
         'text': files('aiidalab_orca').joinpath('knowledge/casci-kondo.md').read_text(),
     }, {
+        'id': 'orca.correlation',
+        'title': 'ORCA MP2, NEVPT2 and CASPT2 energy routes',
+        'topics': ['orca', 'mp2', 'nevpt2', 'fic', 'dlpno', 'caspt2', 'correlation', 'frozen core', 'casscf'],
+        'source': 'aiidalab_orca/knowledge/correlation.md',
+        'text': files('aiidalab_orca').joinpath('knowledge/correlation.md').read_text(),
+    }, {
         'id': 'orca.vibrations',
         'title': 'ORCA harmonic IR/Raman geometry selection',
         'topics': ['orca', 'ir', 'raman', 'vibrations', 'frequencies', 'hessian'],

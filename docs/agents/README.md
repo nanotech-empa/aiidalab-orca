@@ -10,6 +10,7 @@ also readable here on GitHub. Do not maintain a separate copy for each model.
 | Common orbitals, CASCI, Dyson, Kondo and scientific acceptance | `orca.casci-kondo` | [Electronic-analysis guide](../../src/aiidalab_orca/knowledge/casci-kondo.md) |
 | Harmonic IR/Raman, geometry selection and the acknowledged fixed-geometry route | `orca.vibrations` | [Vibrations guide](../../src/aiidalab_orca/knowledge/vibrations.md) |
 | ORCA CASCI versus full exported or QPU/simulator-selected Hamiltonian solves, sampling checks and saved ORCA comparisons | `orca.quantum-energy` | [Quantum-assisted energy guide](../../src/aiidalab_orca/knowledge/quantum-energy.md) |
+| Fresh-HF MP2, verified-CASSCF NEVPT2/CASPT2, native rejection checks and energy-only limits | `orca.correlation` | [Correlation operating guide](../../src/aiidalab_orca/knowledge/correlation.md) |
 
 In the AiiDAlab chat, consult the guides delivered in the current instructions
 or use `read_workflow_guide(guide_id)`. The shared assistant discovers them
@@ -36,12 +37,19 @@ Ask for the workflow UUID or missing scientific choice only when the current
 selection and available tools do not supply it. Never invent completed jobs,
 active spaces, capabilities or a molecule-specific recipe for a new system.
 
-The guides describe the assembled standard-app preview. Its constituent
-navigation, batch CASCI, spectral-map, resource and vibration changes can be
-open PRs rather than merged releases. Check the installed GUI before promising
-a control. XPS is a **Work in progress** placeholder. The standard quantum-assisted energy
+The guides describe the standard app and the CASSCF/correlation candidate.
+Use the [stage validation record](../release-readiness.md) to distinguish
+implemented paths, native pilots and remaining release/server acceptance.
+Verify the installed revision and GUI before promising a control; an assembled
+preview can contain unmerged components. XPS is a **Work in progress** placeholder.
+The standard quantum-assisted energy
 route is covered by `orca.quantum-energy`; separate QPU/DMRG research extensions
 must not be disturbed by navigation.
+
+The [correlation-energy guide](../correlation.md), available as
+`orca.correlation`, describes fresh-HF RI-MP2 and verified-CASSCF NEVPT2/CASPT2,
+including explicit CASPT2 shifts and reference-weight/residual diagnostics.
+Their energy-only outputs cannot replace Dyson/Kondo wavefunctions.
 
 The optional [CASSCF route](../casscf.md) creates a new shared orbital reference
 after explicit active-space confirmation. Its state-specific/state-average

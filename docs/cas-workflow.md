@@ -67,9 +67,20 @@ UNOs, and equal QRO/UNO indices do not identify the same orbital. Optional
 correlated natural occupations. Inspect and confirm that new reference before
 continuing; no orbital permutation or optimization happens implicitly.
 
-## 3. Request CASCI states and multiplicities
+## 3. Choose the solver and request states
 
-After confirmation, enter one charge/multiplicity or lists such as charges
+**3. Choose energy solver** offers fixed-orbital ORCA CASCI, optional
+[CASSCF / SA-CASSCF orbital optimization](casscf.md), or the
+[quantum-assisted energy route](quantum-energy.md). CASSCF creates a new
+verified reference: inspect and confirm it before requesting CASCI sectors or
+exporting its Hamiltonian. The Dyson/Kondo goal retains the compatible ORCA
+state-vector route.
+
+For dynamical-correlation energies, use the separate
+[Correlation energies](correlation.md) workspace after verified CASSCF.
+NEVPT2/CASPT2 results do not feed the current Dyson/Kondo amplitudes.
+
+For ORCA CASCI after confirmation, enter one charge/multiplicity or lists such as charges
 `0 +1 -1 +2 -2` and multiplicities `1 2 3 4` (spaces or commas). Charges are
 absolute molecular charges. Set **Electronic states** per allowed sector.
 **Review charge / spin combinations** lists every pair, active electron count,

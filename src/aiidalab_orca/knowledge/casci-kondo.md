@@ -135,9 +135,26 @@ recorded choice; changing the orbital reference requires review again.
 Restricted references retain their restricted orbitals. Unrestricted preparation
 provides QROs for the current CAS input and UNOs for inspection. UNO occupations
 are SCF diagnostics, not correlated natural occupations; inspecting UNOs does
-not switch the CAS basis. Arbitrary reordering, correlated natural-orbital
-preparation and general orbital-optimized CASSCF are not implemented in this GUI.
+not switch the CAS basis. After confirming the active space, optional **Optimize
+orbitals · CASSCF** creates a new shared reference from one state or a weighted
+state average at fixed charge/geometry. Multiplicities remain distinct; the
+optimization weights are not populations, Clebsch–Gordan factors or intensities.
+Native orbital-gradient convergence and a frozen-orbital energy readback must
+pass. Inspect its natural occupations/shapes and confirm the new reference
+before computing compatible CASCI sectors for Dyson/Kondo. Never combine
+independently optimized references. Arbitrary orbital reordering remains a
+separate capability and must not be inferred from this step.
 Verified imported fixed references remain distinct, provenance-linked sources.
+
+In the CASSCF form, **One selected state** with root 0 requests one energy in
+the chosen charge/multiplicity sector. CAS(n,m) counts electrons/orbitals, not
+states. For an energy ladder in the optimized orbital basis, inspect/reconfirm
+that reference and request several CASCI roots. A state average is a separate
+orbital objective; use it when several states should share the optimization.
+The openBIS companion adapter in `aiidalab-openbis#153` includes CASSCF reference
+and complete state tables in the entry's export, with the existing CAS method
+family. Verify that the installed exporter includes that mapping; the ORCA app
+alone does not upgrade it. No new server object type is needed.
 
 ### Scientific and execution inputs
 

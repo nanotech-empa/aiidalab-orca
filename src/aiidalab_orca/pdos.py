@@ -130,7 +130,7 @@ class PdosPanel(ipw.VBox):
             self.lower.step = self.upper.step = 1 if natural else .01
             self.width.layout.display = 'none' if natural else ''
             self.reset.description = 'Fractional occupation range' if natural else 'HOMO − 1 to LUMO + 1 eV'
-            text = ('UNO occupations and character: these are not KS-energy levels.' if natural else
+            text = (f'{self.kind.value} occupations and character: these are not KS-energy levels.' if natural else
                     'QRO energies are reference labels, not canonical KS eigenvalues.' if self.kind.value == 'QRO' else
                     'SCF orbital DOS; virtual and occupied orbitals both contribute.')
             self.note.value = ('<p>'+text+' Gaussian broadening is a display choice. DOS counts orbitals '

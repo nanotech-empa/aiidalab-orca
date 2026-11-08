@@ -42,3 +42,9 @@ open PRs rather than merged releases. Check the installed GUI before promising
 a control. XPS is a **Work in progress** placeholder. The standard quantum-assisted energy
 route is covered by `orca.quantum-energy`; separate QPU/DMRG research extensions
 must not be disturbed by navigation.
+
+The optional [CASSCF route](../casscf.md) creates a new shared orbital reference
+after explicit active-space confirmation. Its state-specific/state-average
+weights optimize orbitals; they are not populations or tunnelling factors.
+Require successful optimization and frozen readback, then inspect/reconfirm
+the new orbitals before CASCI/Dyson or a new quantum Hamiltonian export.

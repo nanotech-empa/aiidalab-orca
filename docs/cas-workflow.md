@@ -62,9 +62,10 @@ new confirmation unless compatible saved CASCI states already define it.
 
 The current GUI supports contiguous windows in the prepared orbital ordering.
 UNO inspection is diagnostic: it does not switch the CAS input from QROs to
-UNOs, and equal QRO/UNO indices do not identify the same orbital. Correlated
-natural-orbital preparation, general orbital reordering and orbital-optimized
-CASSCF need separate implementations; they are not implicit options here.
+UNOs, and equal QRO/UNO indices do not identify the same orbital. Optional
+[CASSCF orbital optimization](casscf.md) produces a separate reference with
+correlated natural occupations. Inspect and confirm that new reference before
+continuing; no orbital permutation or optimization happens implicitly.
 
 ## 3. Request CASCI states and multiplicities
 
@@ -83,8 +84,8 @@ inspect individual runs without filtering the diagram, changing its energy
 zero/limits, or editing the submission lists.
 See [the batch rules](casci.md#request-several-chargespin-sectors).
 
-CASCI keeps orbitals fixed; CASSCF would optimize them. The current general
-app path implements CASCI. [The CASCI guide](casci.md) details its validation,
+CASCI keeps orbitals fixed; optional CASSCF optimizes a new shared orbital
+reference first. [The CASCI guide](casci.md) details its validation,
 state counts, resources and common energy reference.
 
 ## 4–5. Continue to Dyson and Kondo

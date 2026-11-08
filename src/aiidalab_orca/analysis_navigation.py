@@ -5,7 +5,7 @@ import ipywidgets as ipw
 
 ANALYSES = {
     'orbitals': ('Orbitals & density', 'Inspect SCF levels, orbital cubes and spin density. QRO/UNO inspection uses a prepared common-orbital reference.'),
-    'casci': ('CAS energy levels', 'Prepare common spatial orbitals, choose the active space, then choose ORCA CASCI or a quantum-assisted route. ORCA CASCI requires no separate Hamiltonian export. CASCI holds the orbitals fixed; it does not optimize them as CASSCF would.'),
+    'casci': ('CAS energy levels', 'Inspect and confirm the active space, optionally optimize shared orbitals with CASSCF, then choose ORCA CASCI or quantum-assisted energies. ORCA CASCI requires no separate Hamiltonian export and holds the chosen orbitals fixed.'),
     'dyson': ('Dyson spectra & maps', 'Use compatible CASCI states for the initial system and its N−1/N+1 electron sectors, then review Dyson transitions. Cubes and maps are separate optional calculations.'),
     'kondo': ('Kondo orbitals & maps', 'Use Dyson transitions for a spin-pure local moment with S > 0, review the charged states and chemical potential, then compute exchange channels and optional maps.'),
     'vibrations': ('IR / Raman', 'Start from a completed geometry optimization, then review the frequency calculation. Electronic-state calculations are independent.'),

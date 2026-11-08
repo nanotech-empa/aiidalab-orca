@@ -21,9 +21,14 @@ averaging, quasi-degenerate mixing or correction methods implicitly.
 
 Record the explicit frozen-core policy and actual native count, basis, auxiliary
 basis and software version. Preserve scheduler/account context and requested
-resources, with at most 12 processes per tigu submission. Native science runs
-only in CalcJobs. Full electronic files stay in the work directory; there is
-no automatic stash or remote retrieval.
+resources, respecting the user's limits and the configured scheduler policy.
+Do not infer resource limits from a computer label. Native science runs
+only in CalcJobs. In the compact-output candidate, **Full files** explicitly
+chooses remote retention or stashing. Full logs/properties and generated
+electronic files remain in `native_output/` remotely or in its stash; no full
+electronic file is retrieved. Only a bounded validation summary, diagnostic
+tail and checksum manifest enter AiiDA. Inputs and the parent reference stay
+intact. Verify installed helper support before promising the controls.
 
 Require native normal completion, no error/nonconvergence/projection/norm warning,
 correct electron/spin identity, and finite reference/correction/total energies

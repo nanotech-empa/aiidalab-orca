@@ -295,7 +295,7 @@ def test_form_gates_nevpt2_and_requires_review_without_implicit_jobs(monkeypatch
     monkeypatch.setattr(gui.service, 'history', lambda *a: [])
     monkeypatch.setattr(gui.service, 'defaults', lambda *a: {
         'nprocs': 1, 'memory_mb': 1024, 'wallclock_seconds': 600, 'auxiliary_basis': 'def2-SVP/C'})
-    monkeypatch.setattr(gui.service, 'review', lambda source, method, values, force: {
+    monkeypatch.setattr(gui.service, 'review', lambda source, method, values, force, **kwargs: {
         'action': 'compute', 'method': method, 'execution': 'orca@test', 'settings': deepcopy(values),
         'reference_summary': {'charge': 0, 'multiplicity': 2}, 'input': 'input'})
     monkeypatch.setattr(gui.service, 'submit', lambda p: calls.append(p))
@@ -304,6 +304,11 @@ def test_form_gates_nevpt2_and_requires_review_without_implicit_jobs(monkeypatch
         assert not calls and panel.submit.disabled
         panel.review.click()
         assert not panel.submit.disabled
+        panel.full_files.mode.value = 'stash'
+        assert panel.submit.disabled and panel.plan is None
+        panel.full_files.directory.value = '/chosen/stash'
+        panel.review.click()
+        assert 'stashed at /chosen/stash' in panel.review_text.value
         panel.frozen.value = False
         assert panel.submit.disabled and panel.plan is None
         panel.method.value = 'SC-NEVPT2'

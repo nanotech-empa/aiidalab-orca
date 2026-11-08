@@ -37,8 +37,6 @@ def review(source_uuid, values, force=False):
     source = source_node(source_uuid)
     electronic = source.inputs.settings.get_dict()
     effective = optical.settings(values, electronic)
-    if source.inputs.code.computer.label == 'tigu' and effective['nprocs'] > 12:
-        raise ValueError('Use at most 12 processes per tigu submission')
     identity = {'source_retrieved_uuid': str(source.outputs.retrieved.uuid), 'settings': effective,
                 'structure_uuid': str(source.outputs.structure.uuid), 'code_uuid': str(source.inputs.code.uuid)}
     key = _signature(identity)

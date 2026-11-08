@@ -204,11 +204,9 @@ on these property jobs. Configure an absolute persistent stash path on the
 remote machine. WFN policies recorded with the reference are inherited; cube
 retention has its own directory and is never used to overwrite that policy.
 
-**Validation boundary:** local direct execution and browser submission have
-been exercised. The intended ORCA and HQ-rendering computer is **tigu**; remote
-execution there has not yet been tested. The initial SCF/GEO_OPT
-workflows still have their local-only milestone guard; lifting that guard,
-exposing the target scheduler allocation settings there, and installing/testing the matching
-ORCA/ORCA tools/render wrappers through the tigu computer/code setup
-are prerequisites for deployment on tigu. This change does not claim a
-verified remote app deployment or modify existing remote codes.
+**Validation boundary:** the recorded pilots exercise local direct execution
+and browser submission. The application uses compatible configured codes and
+the selected AiiDA scheduler, without a local-only gate or process limits based
+on computer names. Remote deployment still requires installing/qualifying the
+matching ORCA/tools/render runtimes through setup. Source support does not
+establish qualification of every configured computer or modify existing codes.

@@ -10,6 +10,7 @@ from . import casscf
 from .common_orbitals import copy_orbital, validate_source
 from .input import render_input
 from .reference import single_point_parameters
+from .native_output import compact_spec, prepare_compact, read_manifest
 
 PROCESS_TYPE = 'aiida.calculations:empa_orca.correlation'
 NEVPT_METHODS = ('SC-NEVPT2', 'FIC-NEVPT2', 'DLPNO-NEVPT2')
@@ -357,6 +358,7 @@ class CorrelationCalculation(engine.CalcJob):
     @classmethod
     def define(cls, spec):
         super().define(spec)
+        compact_spec(spec)
         for key, typ in {'structure': orm.StructureData, 'electronic_settings': orm.Dict, 'settings': orm.Dict}.items():
             spec.input(key, valid_type=typ)
         for key, typ in {'source_retrieved': orm.FolderData, 'orbital_reference': orm.Dict,
@@ -376,8 +378,6 @@ class CorrelationCalculation(engine.CalcJob):
         if (self.inputs.metadata.options.resources.get('num_mpiprocs_per_machine', 1) != s['nprocs']
                 or self.inputs.metadata.options.withmpi):
             raise ValueError('Allocate the reviewed ORCA processes; ORCA manages MPI internally')
-        if self.inputs.code.computer.label == 'tigu' and s['nprocs'] > 12:
-            raise ValueError('The current tigu allocation is limited to 12 processes per submission')
         info = common.CalcInfo()
         if s['method'] == 'RI-MP2':
             if ref or any(key in self.inputs for key in ('source_filename', 'source_repository', 'source_folder', 'source_stash')):
@@ -407,13 +407,13 @@ class CorrelationCalculation(engine.CalcJob):
         code = common.CodeInfo()
         code.code_uuid, code.cmdline_params, code.stdout_name, code.join_files = self.inputs.code.uuid, ['aiida.inp'], 'aiida.out', True
         info.codes_info = [code]
-        info.retrieve_list = ['aiida.out', 'aiida.property.txt']
-        return info
+        return prepare_compact(info, self.inputs, folder, 'correlation-v1')
 
 
 class CorrelationParser(Parser):
     def parse(self, **kwargs):
         try:
+            manifest = read_manifest(self.node, self.retrieved.base.repository, 'correlation-v1')
             ref = self.node.inputs.orbital_reference.get_dict() if 'orbital_reference' in self.node.inputs else None
             expected = ref['n_electrons'] if ref else electron_count(
                 self.node.inputs.source_retrieved.base.repository.get_object_content('aiida.out'))
@@ -427,6 +427,8 @@ class CorrelationParser(Parser):
             else:
                 data['source_retrieved_uuid'] = str(self.node.inputs.source_retrieved.uuid)
             self.out('correlation_energies', orm.Dict(dict=data))
+            if manifest is not None:
+                self.out('native_output_manifest', orm.Dict(dict=manifest))
         except (KeyError, ValueError, OSError) as exc:
             self.logger.error(str(exc))
             return self.exit_codes.ERROR_CORRELATION.format(reason=str(exc))

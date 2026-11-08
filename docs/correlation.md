@@ -66,9 +66,26 @@ Inspect the affected states and reference before separately reviewing a remedy.
 
 For several states, switch between reference and corrected excitation diagrams;
 each uses its own lowest computed state as zero. Exact reference, correction
-and total energies remain together in the downloadable table. Small logs and
-structured results are retrieved; full electronic files stay in the calculation
-directory. The source CASSCF orbitals are unchanged.
+and total energies remain together in the downloadable table.
+
+**Full files** chooses remote retention or an explicit stash destination.
+New jobs retrieve only a validation summary bounded at 2 MiB, a 64-KiB
+diagnostic tail, and a size/checksum manifest. The summary keeps the native
+residual solves, denominator checks, state weights, frozen-core evidence,
+PNO settings and all relevant failure markers used by the existing parser.
+Exceeding the collection budget rejects the result instead of accepting
+partial scientific evidence.
+
+The complete native output/property files and generated `aiida.*`/`aiida_*`
+electronic files are retained together under `native_output/` in the job
+directory, or stashed from there. Inputs and the staged parent reference are
+excluded from that relocation. These energy-only jobs are not orbital
+references for another app route; the source CASSCF orbitals remain unchanged.
+Historical full-output results remain readable. Reused calculations retain
+their original policy; retention edits require a new review.
+
+The app uses configured codes/resources and the selected AiiDA scheduler.
+It does not infer a universal process limit from a computer's name.
 
 A large total correlation correction need not imply a large change in a gap:
 the gap changes by the final-state correction minus the initial-state correction.

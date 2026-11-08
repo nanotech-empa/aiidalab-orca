@@ -1,31 +1,34 @@
 # Wavefunctions, orbital levels and cubes
 
-This local prototype connects the existing SCF/geometry result to small,
-independent preservation and orbital-property components. It currently targets
-ORCA 6.1, a local direct scheduler, and HF/DFT references. These are ordinary
+The application connects an existing SCF/geometry result to small,
+independent preservation and orbital-property components. It targets
+ORCA 6.1 and compatible configured AiiDA codes on the calculation computer.
+Computer, scheduler and wrapper configuration belongs to setup. These are ordinary
 reference orbitals, not natural or Dyson orbitals.
 
 ## Wavefunction policy
 
-The submission panel enables **Preserve wavefunction files** when a local Python
-code is configured. The default threshold is **100 MiB for the complete bundle**:
-`aiida.gbw`, `aiida.densities`, and `aiida.densitiesinfo`. Smaller bundles are
-retrieved into AiiDA; larger ones use native AiiDA `stash_mode=copy`. The user can
-change the threshold and stash directory, initially `~/orca-stash` on localhost.
-The application records file sizes and SHA-256 checksums in a manifest.
+New geometry/SCF submissions expose **Full native files**: leave originals on
+the calculation computer, or stash them at an explicit directory. This applies
+to the native log, property output and complete electronic bundle:
+`aiida.gbw`, `aiida.densities`, and `aiida.densitiesinfo`. New full bundles are
+never retrieved into AiiDA. The application records sizes and SHA-256 checksums.
+Only bounded native summaries, compact electronic observables, the final orbital
+table and optimization trajectory are retrieved. The configured `orca-tools`
+code must support the staged compact collector; users do not select Python.
 
 Preservation is an independent `empa_orca.electronic_storage` CalcJob, linked to
 the actual producing calculation's `RemoteData`. Both geometry and SCF WorkChains
-accept optional `storage_policy` and `storage_code` inputs. Python callers can use
-`aiida_empa_orca.artifacts.storage_builder(remote, python_code, policy)`; it sets
-native stash options before AiiDA stores the node. The runtime rechecks the size
-decision and fails if files changed before copying.
+record `native_output_policy` and use the configured `storage_code` for collection.
+The historical `storage_policy` input remains for API/provenance compatibility;
+new stashes use a zero retrieval threshold. Legacy retrieved bundles remain
+readable and checksum-verified, without migrating or rewriting existing nodes.
 
 Stashing creates a separate copy. It does **not** delete the original files or
 clean the calculation directory. Choose a stash filesystem with an appropriate
 retention policy; a stash on the same disposable scratch filesystem does not
-protect against that filesystem being cleaned. This local milestone does not
-configure remote execution on tigu or copy data between computers.
+protect against that filesystem being cleaned. The app does not register
+computers/codes or copy data between calculation computers.
 
 Reuse searches provenance and checks the files, independently of AiiDA caching.
 Repository copies are checksum-verified. Stashed files are checked for presence

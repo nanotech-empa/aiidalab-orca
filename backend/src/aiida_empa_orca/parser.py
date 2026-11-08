@@ -1,12 +1,15 @@
 """Use upstream parsing, with an explicit optimization convergence contract."""
 
 import re
+import json
 
 import ase.io
 import numpy as np
-from aiida.orm import Dict, TrajectoryData
+from aiida.orm import Dict, TrajectoryData, StructureData
+from aiida.engine import ExitCode
 from aiida_orca.parsers import OrcaBaseParser
 from aiida_orca.parsers.cclib.utils import convertor
+from .native_output import read_manifest
 
 
 def optimization_converged(text):
@@ -33,7 +36,36 @@ def reference_summary(text):
     return result
 
 
-class SinglePointParser(OrcaBaseParser):
+class CompactOrcaParser(OrcaBaseParser):
+    """Read native cclib results collected remotely; retain historical parsing."""
+
+    def parse(self, **kwargs):
+        if 'compact_code' not in self.node.inputs:
+            return super().parse(**kwargs)
+        try:
+            protocol = self.node.process_class._COMPACT_PROTOCOL
+            repository = self.retrieved.base.repository
+            record = read_manifest(self.node, repository, protocol)
+            data = json.loads(repository.get_object_content('scf_results.json'))
+            if data.get('compact_output', {}).get('schema') != 'orca_scf_results_v1':
+                raise ValueError('Missing native compact SCF result schema')
+            if data.get('optdone'):
+                with repository.open('aiida.xyz') as handle:
+                    atoms = ase.io.read(handle, format='xyz', index=0)
+                self.out('relaxed_structure', StructureData(ase=atoms))
+            if 'atomnos' in data:
+                from aiida_orca.parsers.cclib.utils import PeriodicTable
+                table = PeriodicTable()
+                data['elements'] = [table.element[number] for number in data['atomnos']]
+            self.out('output_parameters', Dict(dict=data))
+            self.out('native_output_manifest', Dict(dict=record))
+            return ExitCode(0) if data.get('metadata', {}).get('success') else self.exit_codes.ERROR_CALCULATION_UNSUCCESSFUL
+        except (ValueError, KeyError, OSError, IndexError, TypeError) as exc:
+            self.logger.error('Compact native output: %s', exc)
+            return self.exit_codes.ERROR_OUTPUT_STDOUT_PARSE
+
+
+class SinglePointParser(CompactOrcaParser):
     def parse(self, **kwargs):
         status = super().parse(**kwargs)
         if status and status.status:
@@ -49,7 +81,7 @@ class SinglePointParser(OrcaBaseParser):
         return status
 
 
-class OptimizationParser(OrcaBaseParser):
+class OptimizationParser(CompactOrcaParser):
     def parse(self, **kwargs):
         status = super().parse(**kwargs)
         if status and status.status:

@@ -90,6 +90,7 @@ def test_sp_preview_matches_calcjob_without_geometry_keywords(aiida_profile, aii
     code = orm.InstalledCode(computer=aiida_localhost, filepath_executable='/bin/true').store()
     builder = SinglePointCalculation.get_builder()
     builder.structure, builder.code = structure, code
+    builder.compact_code = code
     builder.parameters = orm.Dict(dict=reference.single_point_parameters(settings))
     builder.maxcore_mb = orm.Int(768)
     builder.metadata.options.resources = {'num_machines':1, 'num_mpiprocs_per_machine':2}
@@ -100,7 +101,7 @@ def test_sp_preview_matches_calcjob_without_geometry_keywords(aiida_profile, aii
             for filename, expected in preview_input(structure, settings, single_point=True).items():
                 with open(folder.get_abs_path(filename)) as stream:
                     assert stream.read() == expected
-            assert info.retrieve_list == ['aiida.out']
+            assert 'scf_results.json' in info.retrieve_list and 'native_output.json' in info.retrieve_list
         params = builder.parameters.get_dict()
         assert 'SP' in params['input_keywords'] and 'Opt' not in params['input_keywords']
         assert 'geom' not in params['input_blocks']
@@ -166,6 +167,7 @@ def test_stale_cache_regenerates_once_and_forced_run_bypasses_cache(electronic_s
     uuid, folder = electronic_source()
     source = orm.load_node(uuid)
     builder = reference.get_reference_builder(source.inputs.structure, source.inputs.settings.get_dict(), source.inputs.code, force_recompute=True)
+    builder.storage_code = source.inputs.code
     process = instantiate_process(aiida_manager.get_runner(), builder)
     try:
         assert process.setup() is None
@@ -188,7 +190,7 @@ def test_stale_cache_regenerates_once_and_forced_run_bypasses_cache(electronic_s
         process.close()
 
 
-def test_app_scf_keeps_scientific_controls_and_validates_spin(electronic_source, monkeypatch):
+def test_app_scf_keeps_scientific_controls_and_validates_spin(electronic_source, monkeypatch, configured_orca_tools):
     from aiidalab_orca import services
     from aiidalab_orca.app import OrcaApp
     uuid, _ = electronic_source()

@@ -37,6 +37,9 @@ def prepare_compact(info, inputs, folder, protocol):
         json.dump({'protocol': protocol, 'policy': policy}, handle)
     with folder.open('compact_output.py', 'w') as handle:
         handle.write(files('aiida_empa_orca').joinpath('native_logs.py').read_text())
+    if protocol in ('scf-v1', 'optimization-v1'):
+        with folder.open('compact_scf.py', 'w') as handle:
+            handle.write(files('aiida_empa_orca').joinpath('compact_scf.py').read_text())
     for code in info.codes_info:
         code.stdout_name = DIRECTORY + '/' + code.stdout_name
     compact = common.CodeInfo()
@@ -47,6 +50,10 @@ def prepare_compact(info, inputs, folder, protocol):
     info.retrieve_list = [*logs, MANIFEST, 'native_output_tail.txt', 'compact_output.log']
     if len(logs) > 1:
         info.retrieve_list.append('verify_tail.txt')
+    if protocol in ('scf-v1', 'optimization-v1'):
+        info.retrieve_list.append('scf_results.json')
+    if protocol == 'optimization-v1':
+        info.retrieve_list.extend(['aiida.xyz', 'aiida_trj.xyz'])
     return info
 
 
@@ -61,6 +68,11 @@ def read_manifest(node, repository, protocol):
         raise ValueError('Native-output manifest differs from the reviewed protocol/retention')
     for name in PROTOCOLS[protocol]:
         validate_summary(record, repository.get_object_content(name, mode='rb'), name)
+    import hashlib
+    for item in record.get('compact_files', []):
+        content = repository.get_object_content(item['name'], mode='rb')
+        if len(content) != item['size_bytes'] or hashlib.sha256(content).hexdigest() != item['sha256']:
+            raise ValueError('Compact SCF/geometry result differs from its checksum: ' + item['name'])
     if record['policy']['mode'] == 'stash' and 'remote_stash' not in node.outputs:
         raise ValueError('The requested native-output stash is missing')
     return record

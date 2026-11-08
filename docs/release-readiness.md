@@ -81,7 +81,8 @@ and full-resolution cubes. Computer/code setup belongs to `aiidalab-empa-setup`;
 the application must use compatible configured codes without machine-specific
 or scheduler/transport allowlists.
 
-The compact-output candidates address new CASCI/CASSCF logs/GBWs and Dyson CI exports:
+The compact-output candidates address new SCF/geometry and CASCI/CASSCF native files,
+including wavefunctions and Dyson CI exports:
 it retrieves bounded summaries/manifests and requires explicit remote/stash
 retention. The configured `orca-tools` runtime must support `compact_output.py`;
 source implementation is not deployment qualification. Historical full-output
@@ -91,7 +92,14 @@ The CASSCF collector retains both optimization and frozen-readback validation
 summaries, including the native state-average objective and final state families;
 it does not weaken the orbital-gradient or individual-state readback checks.
 
-Native `aiida.out` retrieval in geometry/SCF, common-orbital preparation,
+SCF/geometry reuses aiida-orca's cclib reader on the calculation computer. The
+compact result excludes large AO/MO coefficient/overlap data, records omitted
+fields, and retains the final orbital table verbatim. Summaries/JSON/final XYZ
+are bounded at 2 MiB each; trajectory XYZ is bounded at 8 MiB. An exceeded
+budget fails collection instead of retrieving or silently truncating the full
+file. Geometry convergence, final-frame consistency and SCF checks remain.
+
+Native `aiida.out` retrieval in common-orbital preparation,
 correlation and other calculation classes is not yet uniformly size bounded.
 Before release, extract and validate compact
 results on the calculation computer, preserve large originals through the

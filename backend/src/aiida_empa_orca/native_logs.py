@@ -29,7 +29,15 @@ CASSCF_MARKERS = re.compile(
     r'THE CAS-SCF GRADIENT HAS CONVERGED|DOING ONE FINAL ITERATION FOR PRINTING|'
     r'^BLOCK\s+\d+\s+WEIGHT=|^\s+Multiplicity\s+\.\.\.|ROOT=\d+\s+WEIGHT=|'
     r'^\s+PrintLevel|(?:CI|CAS[- ]?SCF).*?(?:NOT CONVERGED|DID NOT CONVERGE)', re.I)
-PROTOCOLS = {'casci-v1': ('aiida.out',), 'casscf-v1': ('aiida.out', 'verify.out')}
+SCF_MARKERS = re.compile(
+    r'SCF (?:CONVERGED AFTER|NOT CONVERGED)|ORCA TERMINATED NORMALLY|'
+    r'FINAL SINGLE POINT ENERGY|THE OPTIMIZATION HAS CONVERGED|Program Version|'
+    r'Expectation value of <S\*\*2>|Number of Electrons\s+NEL|Total number of electrons|'
+    r'^\s*WARNING:|ERROR|DID NOT CONVERGE', re.I)
+PROTOCOLS = {'casci-v1': ('aiida.out',), 'casscf-v1': ('aiida.out', 'verify.out'),
+             'scf-v1': ('aiida.out',), 'optimization-v1': ('aiida.out',)}
+COMPACT_LIMITS = {'scf_results.json': 2 * 1024**2, 'aiida.xyz': 2 * 1024**2,
+                  'aiida_trj.xyz': 8 * 1024**2}
 
 
 def output_policy(values=None):
@@ -124,7 +132,8 @@ def collect_output(request, root=Path('.')):
         raise ValueError('Unsupported native-output collection protocol')
     policy, root = output_policy(request['policy']), Path(root)
     records, summaries, errors = [], [], []
-    markers = STATE_MARKERS if protocol == 'casci-v1' else CASSCF_MARKERS
+    molecular = protocol in ('scf-v1', 'optimization-v1')
+    markers = SCF_MARKERS if molecular else STATE_MARKERS if protocol == 'casci-v1' else CASSCF_MARKERS
     for name in PROTOCOLS[protocol]:
         tail = 'native_output_tail.txt' if name == 'aiida.out' else 'verify_tail.txt'
         original, summary, error = _collect_log(root, name, markers, tail)
@@ -142,6 +151,19 @@ def collect_output(request, root=Path('.')):
                 raise ValueError('Refusing to overwrite a preserved native property output')
             prop.replace(target)  # Only this CalcJob's output, without copying it.
             records.append(_file_record(target))
+    compact = []
+    if molecular and not errors:
+        try:
+            # orca-tools uses runpy without adding the CalcJob directory to
+            # sys.path. Load the reviewed sibling script by its staged path.
+            import runpy
+            collect = runpy.run_path(str(root / 'compact_scf.py'))['collect']
+            retained, results = collect(root, protocol, SUMMARY_LIMIT)
+            records.extend(_file_record(path) for path in retained)
+            compact = [_file_record(path) for path in results]
+            summaries[0] = _file_record(root / 'aiida.out')
+        except Exception as exc:
+            errors.append('Compact SCF collection failed: ' + str(exc)[:2000])
     error = '; '.join(errors) or None
     record = {'schema': SCHEMA, 'protocol': protocol, 'policy': policy,
               'status': 'error' if error else 'complete', 'error': error,
@@ -150,6 +172,8 @@ def collect_output(request, root=Path('.')):
               'diagnostic_tail_limit': TAIL_LIMIT}
     if len(summaries) > 1:
         record['additional_summaries'] = summaries[1:]
+    if molecular:
+        record['compact_files'] = compact
     (root / MANIFEST).write_text(json.dumps(record, allow_nan=False, indent=2))
     return record
 
@@ -170,10 +194,19 @@ def validate_manifest(record):
     if names[:len(expected)] != expected or len(set(names)) != len(names):
         raise ValueError('Missing or ambiguous full native output')
     for item in [*summaries, *record['files']]:
-        if (item['name'] not in expected + [n.replace('.out', '.property.txt') for n in expected]
+        if (item['name'] not in expected + [n.replace('.out', '.property.txt') for n in expected] + ['aiida.xyz', 'aiida_trj.xyz']
                 or type(item['size_bytes']) is not int or item['size_bytes'] < 0
                 or not re.fullmatch('[0-9a-f]{64}', item['sha256'])):
             raise ValueError('Invalid native-output identity')
+    if record['protocol'] in ('scf-v1', 'optimization-v1'):
+        expected_files = ['scf_results.json'] + (['aiida.xyz', 'aiida_trj.xyz'] if record['protocol'] == 'optimization-v1' else [])
+        compact = record.get('compact_files', [])
+        if [item['name'] for item in compact] != expected_files:
+            raise ValueError('Missing compact SCF/geometry results')
+        for item in compact:
+            if (type(item['size_bytes']) is not int or not 0 < item['size_bytes'] <= COMPACT_LIMITS[item['name']]
+                    or not re.fullmatch('[0-9a-f]{64}', item['sha256'])):
+                raise ValueError('Invalid compact SCF/geometry identity')
     return record
 
 

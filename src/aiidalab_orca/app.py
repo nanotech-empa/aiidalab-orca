@@ -93,7 +93,7 @@ class OrcaApp(ipw.VBox):
         from .storage import WavefunctionStorage
         self.wavefunction_storage = WavefunctionStorage()
         storage_panel = ipw.Accordion(children=[self.wavefunction_storage], selected_index=0)
-        storage_panel.set_title(0, "Wavefunction storage")
+        storage_panel.set_title(0, "Full native files")
         self.resource_controls = ipw.VBox([self.code, self.nprocs, self.memory, self.wallclock, self.force,
                                           self.pdos_enabled, pdos_options, storage_panel])
         self.structure_step = GeometryStep([self.structure, self.next_step], "Select a molecule to begin.")
@@ -293,9 +293,11 @@ class OrcaApp(ipw.VBox):
                 body += '<p>Automatic PDOS is disabled for this submission.</p>'
             from .viewer import settings_details, input_details
             if self.review.get("storage"):
-                policy = self.review["storage"]["policy"]
-                body += (f"<p>Wavefunction preservation: retrieve bundles up to {policy['threshold_mb']:g} MiB; "
-                         f"stash larger bundles under <code>{html.escape(policy['stash_directory'])}</code>.</p>")
+                policy = self.review['storage']['native_output_policy']
+                destination = ('stashed under <code>' + html.escape(policy['stash_directory']) + '</code>'
+                               if policy['mode'] == 'stash' else 'left on the calculation computer')
+                body += (f'<p>New full native files are {destination}. Only bounded results and diagnostics '
+                         'are retrieved. Reused results keep their original retention.</p>')
             body += settings_details(s, single_point=not self.optimize.value)
             body += input_details(self.review["input_files"], "Review generated ORCA input")
             if plan["source_uuid"]:

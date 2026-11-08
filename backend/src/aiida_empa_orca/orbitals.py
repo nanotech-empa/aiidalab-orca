@@ -1,6 +1,7 @@
 """Small orbital/spin-density workflow using existing electronic data and cubehandler."""
 
 import json
+import re
 from importlib.resources import files
 from pathlib import PurePosixPath
 
@@ -74,7 +75,10 @@ class OrbitalCubesCalculation(engine.CalcJob):
         info = common.CalcInfo()
         info.local_copy_list, info.remote_copy_list = [], []
         name = self.inputs.orbital_filename.value if 'orbital_filename' in self.inputs else None
-        if name is not None and name not in ('aiida.qro','aiida.uno','aiida.gbw'):
+        identity = self.inputs.orbital_identity.get_dict() if 'orbital_identity' in self.inputs else {}
+        nto = (isinstance(name, str) and re.fullmatch(r'aiida\.s[1-9]\d*\.nto', name)
+               and identity.get('kind') == 'NTO' and identity.get('excitations_uuid') and identity.get('state_id'))
+        if name is not None and name not in ('aiida.qro','aiida.uno','aiida.gbw') and not nto:
             raise ValueError('Select a recorded spatial-orbital filename')
         names = [name] if name is not None else ELECTRONIC_FILES
         target = lambda filename: 'aiida.gbw' if name is not None else filename

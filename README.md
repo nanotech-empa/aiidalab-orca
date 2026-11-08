@@ -17,6 +17,7 @@ small-system validation and release acceptance are distinguished in the
 | --- | --- | --- |
 | Geometry or HF/DFT energy | Import a structure; keep its geometry or optimize it, with optional constraints | Structure, total energy, optimization history |
 | Orbital character and density | Completed SCF → PDOS/orbital inspection → optional cube calculation | Spin-resolved levels, atomic/angular projections, orbitals and spin density |
+| Optical excitations / UV–Vis | Converged DFT reference → TDA or full TDDFT at fixed geometry → optional NTO previews | Linked absorption spectrum, states and native hole/particle pairs |
 | Many-electron energy levels | Shared spatial orbitals → inspect/confirm CAS → optional CASSCF/SA-CASSCF → CASCI charge/spin sectors | Individually labelled states on a common energy scale |
 | Quantum-assisted energy levels | Confirmed spatial reference and CAS → export Hamiltonian → circuits → sampling → classical subspace solve | Energies and spin diagnostics from the selected Hamiltonian subspace |
 | Dynamical correlation | Fresh HF → RI-MP2; or verified CASSCF → SC/FIC/DLPNO-NEVPT2 or CASPT2 | Reference, correlation correction and total energy; explicit model diagnostics |
@@ -36,6 +37,7 @@ Matching results can be reused without repeating unaffected calculations.
 - [Results navigation](docs/results.md), [PDOS](docs/pdos.md), [orbital/cube storage and rendering](docs/orbitals.md).
 - [Guided CAS path](docs/cas-workflow.md), [QRO/UNO inspection](docs/orbital-inspection.md), [CASSCF/SA-CASSCF](docs/casscf.md), [CASCI](docs/casci.md).
 - [MP2, NEVPT2 and CASPT2 energies](docs/correlation.md), [quantum-assisted energies](docs/quantum-energy.md).
+- [Optical excitations, UV–Vis and NTOs](docs/optical.md).
 - [Dyson spectra](docs/dyson.md), [transition explorer](docs/transition-explorer.md), [constant-height maps](docs/maps.md), [Kondo channels](docs/kondo.md).
 - [IR/Raman](docs/vibrations.md), [whole-entry openBIS export](docs/openbis-export.md).
 

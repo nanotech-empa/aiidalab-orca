@@ -9,10 +9,15 @@ a manual page or another Git branch does not prove an app feature is available.
 ## Establish the goal and current state
 
 Ask whether the user wants geometry/SCF, ordinary orbitals, CASCI, Dyson,
-Kondo, or IR/Raman. In **New calculation**, choose **Calculation goal** first.
+Kondo, IR/Raman, or optical excitations. In **New calculation**, choose **Calculation goal** first.
 Use **Open an existing reference instead** to find completed work in **Search
 calculations → View results**. **Results → Analysis / results** selects one
 workspace; there is no need to prepare CASCI for ordinary orbitals or IR/Raman.
+
+Optical excitations are a separate **Optical excitations · UV–Vis** workspace
+from a converged DFT reference. Consult `orca.optical` for TDA/full-TDDFT,
+spin-family/state indexing, linked spectra and native NTO hole/particle previews.
+This needs no CAS and supplies no current Dyson/Kondo state vectors.
 
 Read the selected workflow UUID, type, date, settings, status and available
 outputs before explaining that result. **Converged** on a stored SCF means

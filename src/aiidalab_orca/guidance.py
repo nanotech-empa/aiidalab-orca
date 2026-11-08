@@ -38,6 +38,12 @@ def workflow_guides():
         'source': 'aiidalab_orca/knowledge/orca.md',
         'text': files('aiidalab_orca').joinpath('knowledge/orca.md').read_text(),
     }, {
+        'id': 'orca.optical',
+        'title': 'ORCA optical excitations, UV–Vis and NTO inspection',
+        'topics': ['orca', 'tddft', 'tda', 'uvvis', 'uv-vis', 'optical', 'absorption', 'nto'],
+        'source': 'aiidalab_orca/knowledge/optical.md',
+        'text': files('aiidalab_orca').joinpath('knowledge/optical.md').read_text(),
+    }, {
         'id': 'orca.casci-kondo',
         'title': 'ORCA CASCI, Dyson and Kondo validation',
         'topics': ['orca', 'casci', 'casscf', 'dyson', 'kondo', 'qro', 'uno'],

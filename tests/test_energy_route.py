@@ -228,6 +228,8 @@ def test_sector_choice_filters_saved_stages_and_is_reviewed_without_export(monke
         assert "6 active electrons" in widget.review.value
         assert "minimum multiplicity 1" in widget.review.value
         assert widget.submit_button.disabled is False
+        widget.full_files.mode.value = 'stash'
+        assert widget._plan is None and widget.submit_button.disabled
     finally:
         widget.close()
 

@@ -120,8 +120,17 @@ numeric Hessian sections used by the parser in a 16 MiB bounded file, with the
 full original preserved remotely/stashed. The same tensor/geometry checks still
 validate spectra, animation data and scratch-independent reuse.
 
-Other calculation classes are not yet uniformly size bounded.
-Before release, extract and validate compact
+Native Hamiltonian exports now follow the same remote/stash policy. A bounded
+summary retains the one-CSF, NoIter, orbital-subspace and diagnostic-energy
+checks. Native/portable FCIDUMP files remain external with checksum descriptors;
+portable conversion changes only the already-qualified spin header and streams
+all integral records verbatim. Workers still verify the file hash and reconstruct
+the native energy within the original tolerance. Cross-Computer transfers use
+temporary staging excluded from AiiDA's input repository. Historical binary
+Hamiltonians and the separate QPU/DMRG research workflows remain unchanged.
+
+Other calculation classes are not yet uniformly size bounded. Before release,
+extract and validate compact
 results on the calculation computer, preserve large originals through the
 reviewed remote/stash policy, and update consumers that currently parse the
 retrieved full log. Existing streaming fixes address memory use but do not close

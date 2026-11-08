@@ -70,10 +70,14 @@ OPTICAL_MARKERS = re.compile(
 VIBRATION_MARKERS = re.compile(
     SCF_MARKERS.pattern + r'|RAMAN SPECTRUM|'
     r'^\s*\d+:\s+[-\d.]+\s+[-\d.Ee+]+\s+[-\d.Ee+]+(?:\s*\(|\s*$|\s+[-\d.Ee+]+\s*\()', re.I)
+ENERGY_MARKERS = re.compile(
+    CASSCF_MARKERS.pattern + '|' + COMMON_MARKERS.pattern +
+    r'|Program Version|#\(CSFs\)|Occupation numbers from the input are taken because of NoIter', re.I)
 PROTOCOLS = {'casci-v1': ('aiida.out',), 'casscf-v1': ('aiida.out', 'verify.out'),
              'scf-v1': ('aiida.out',), 'optimization-v1': ('aiida.out',),
              'common-orbitals-v1': ('aiida.out',), 'correlation-v1': ('aiida.out',),
-             'optical-v1': ('aiida.out',), 'vibrations-v1': ('aiida.out',)}
+             'optical-v1': ('aiida.out',), 'vibrations-v1': ('aiida.out',),
+             'energy-export-v1': ('aiida.out',)}
 COMPACT_LIMITS = {'scf_results.json': 2 * 1024**2, 'aiida.xyz': 2 * 1024**2,
                   'aiida_trj.xyz': 8 * 1024**2, 'aiida.hess': 16 * 1024**2}
 HESSIAN_SECTIONS = {'hessian', 'normal_modes', 'vibrational_frequencies', 'atoms',
@@ -203,7 +207,8 @@ def collect_output(request, root=Path('.')):
     policy, root = output_policy(request['policy']), Path(root)
     records, summaries, errors = [], [], []
     molecular = protocol in ('scf-v1', 'optimization-v1')
-    markers = (OPTICAL_MARKERS if protocol == 'optical-v1'
+    markers = (ENERGY_MARKERS if protocol == 'energy-export-v1'
+               else OPTICAL_MARKERS if protocol == 'optical-v1'
                else VIBRATION_MARKERS if protocol == 'vibrations-v1'
                else CORRELATION_MARKERS if protocol == 'correlation-v1'
                else SCF_MARKERS if molecular else COMMON_MARKERS if protocol == 'common-orbitals-v1'
@@ -234,7 +239,16 @@ def collect_output(request, root=Path('.')):
             compact.append(result)
         except (OSError, ValueError, UnicodeError) as exc:
             errors.append(str(exc))
-    if protocol in ('correlation-v1', 'optical-v1', 'vibrations-v1'):
+    sector = None
+    if protocol == 'energy-export-v1':
+        try:
+            import runpy
+            collect = runpy.run_path(str(root / 'compact_energy.py'))['collect']
+            original, portable, sector = collect(root, **request['energy_export'])
+            records.extend([_file_record(original), _file_record(portable)])
+        except (OSError, ValueError, KeyError) as exc:
+            errors.append('FCIDUMP collection failed: ' + str(exc)[:2000])
+    if protocol in ('correlation-v1', 'optical-v1', 'vibrations-v1', 'energy-export-v1'):
         # Preserve this job's generated files without copying inputs or touching
         # the parent wavefunction. Optical NTOs remain resolvable from this bundle.
         for path in sorted(root.iterdir()):
@@ -272,6 +286,8 @@ def collect_output(request, root=Path('.')):
         record['compact_files'] = compact
     if protocol == 'vibrations-v1':
         record['compact_files'] = compact
+    if protocol == 'energy-export-v1':
+        record['portable_sector'] = sector
     (root / MANIFEST).write_text(json.dumps(record, allow_nan=False, indent=2))
     return record
 
@@ -293,7 +309,8 @@ def validate_manifest(record):
         raise ValueError('Missing or ambiguous full native output')
     for item in [*summaries, *record['files']]:
         allowed = (item['name'] in expected + [n.replace('.out', '.property.txt') for n in expected]
-                   + ['aiida.xyz', 'aiida_trj.xyz'] or record['protocol'] in ('correlation-v1', 'optical-v1', 'vibrations-v1')
+                   + ['aiida.xyz', 'aiida_trj.xyz'] or record['protocol'] == 'energy-export-v1' and item['name'] == 'hamiltonian.fcidump'
+                   or record['protocol'] in ('correlation-v1', 'optical-v1', 'vibrations-v1', 'energy-export-v1')
                    and re.fullmatch(r'aiida[._][A-Za-z0-9_.-]+', item['name']))
         if (not allowed
                 or type(item['size_bytes']) is not int or item['size_bytes'] < 0

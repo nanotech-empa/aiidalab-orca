@@ -28,6 +28,28 @@ results are not silently substituted for the ORCA state bundles used there.
 
 ## Hamiltonian and spin conventions
 
+Review **Full files** at export: leave native files on the calculation computer,
+or stash them in an explicitly chosen directory there. New exports store a
+checksum/size descriptor in the `hamiltonian` output instead of a binary
+`SinglefileData`. Native and portable FCIDUMPs, full logs and electronic files
+remain outside the AiiDA repository; only bounded validation text, a diagnostic
+tail and manifests are retrieved. Existing stored `SinglefileData` Hamiltonians
+remain valid inputs without migration.
+
+Worker stages consume the exact portable file. On the same AiiDA Computer it
+is copied directly; across Computers it is temporarily relayed through the
+AiiDAlab host and checksum-verified. AiiDA's `provenance_exclude_list` uploads
+that temporary input while excluding it from the CalcJob input repository.
+Review shows its size and the source computer. Missing/altered files or
+insufficient staging space stop the stage; they never trigger a new electronic
+calculation or a different Hamiltonian. Stashed files remain usable if the
+original calculation directory disappears.
+
+New stages require the external Hamiltonian to remain available. Prefer stash
+or durable remote storage before real-hardware work, including later retrieval
+of an existing provider job. Restore unavailable inputs rather than submitting
+another QPU job. No hardware is run by the retention validation.
+
 Export retains the geometry and spatial orbitals. The native ORCA input uses
 `NoIter`, unchanged internal/active/external orbital spaces and one explicit
 configuration through the documented [`refs` sub-block](https://www.faccts.de/docs/orca/6.1/manual/contents/modelchemistries/CASSCF.html#arbitrary-references).

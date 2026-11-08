@@ -54,6 +54,7 @@ def test_native_calcjob_uses_the_verified_code_and_source(
     )
     builder = EnergyHamiltonianCalculation.get_builder()
     builder.orbital_reference, builder.code = ref, code
+    builder.compact_code = code
     builder.structure = orm.load_node(ref.get_dict()["structure_uuid"])
     builder.active_space = orm.Dict(dict={"electrons": 3, "orbitals": [6, 7]})
     builder.settings = orm.Dict(dict={"nroots": 1, "multiplicity": 2})
@@ -79,8 +80,9 @@ def test_native_calcjob_uses_the_verified_code_and_source(
             ]
             assert (
                 "aiida.gbw" not in info.retrieve_list
-                and "aiida.fcidump" in info.retrieve_list
+                and "aiida.fcidump" not in info.retrieve_list
             )
+            assert info.codes_info[0].stdout_name == 'native_output/aiida.out'
     finally:
         process.close()
 

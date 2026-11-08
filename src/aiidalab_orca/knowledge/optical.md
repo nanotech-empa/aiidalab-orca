@@ -28,10 +28,18 @@ also does not certify SCF stability. The final single-point scalar can be an
 excited-state total; the separate SCF energy defines the excitation reference.
 Use durable stored result tables rather than reparsing an arbitrary final scalar.
 
-Spectrum/table clicks only select a state. Retain dark states. Broadening is
+Spectrum/table clicks only select a state. Retain dark states. The table separates
+native NTO analysis from ready cube preview pairs. A ready pair requires both
+members stored under the same optical calculation; status inspection must not
+open a remote transport. Refresh NTO previews to see later jobs. Running,
+failed or missing-file states are distinct from a generated preview. Broadening is
 a display choice in eV, with no automatic intensity normalization. The wavelength
 view retains a per-eV ordinate, not a transformed spectral density per nm.
 Native oscillator strengths are not an absolute extinction coefficient.
+States CSV preserves the unbroadened state table; Spectrum CSV/SVG describe
+the currently displayed curve with its units, broadening, method and source
+identifiers. Full JSON retains the native tables. Invalid plot limits remove
+plot downloads rather than leaving a stale exported image.
 
 Inspect transition-specific NTO hole/particle pairs and native weights. They
 are not KS MO occupations. Full-TDDFT NTO weights can exceed one and must not
@@ -44,7 +52,12 @@ existing cubehandler pipeline. Generate both members of each selected pair.
 Reduced previews, full-cube retention and native electronic-file preservation
 are distinct policies. Preserve spin in filenames so alpha/beta NTOs cannot
 overwrite each other. Use the existing isolated-molecule viewer and saved-view
-rendering. Missing/unreachable sources are not permission to rerun science.
+rendering. Inspect pair plus Hole/Particle controls use the existing single
+viewer. Switching members within a stored run/state preserves view settings,
+including the actual isovalue. Never rescale the new cube to preserve apparent
+brightness; an out-of-range isovalue correctly gives an empty surface. Saved
+views/rendering target the currently selected member. Missing/unreachable
+sources are not permission to rerun science.
 Triplet energies are available; triplet NTO generation is explicitly unqualified
 and blocked. Do not relabel singlet NTO files as triplet ones.
 

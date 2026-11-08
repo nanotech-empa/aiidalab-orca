@@ -209,7 +209,10 @@ def test_reopening_saved_ntos_selects_a_member_and_switching_state_clears_it(mon
     monkeypatch.setattr(ui.service, 'result', lambda _: table)
     monkeypatch.setattr(ui.service, 'cube_defaults', lambda _: {'storage_policy': {'stash_directory': '/tmp/nto', 'threshold_mb': 100},
         'codes': {'plot': [('plot', 'plot-id')], 'cubehandler': [('cubehandler', 'cube-id')]}})
-    monkeypatch.setattr(ui.service, 'cube_runs', lambda _: ['saved-cubes'])
+    monkeypatch.setattr(ui.service, 'preview_inventory', lambda _: [{
+        'uuid': 'saved-cubes', 'date': '2026-11-08T09:40', 'state_id': 'singlet:3', 'pairs': [1],
+        'finished': True, 'success': True, 'ready_pairs': [1],
+        'members': {'1': {'hole': 'nto_a_0020.cube', 'particle': 'nto_a_0021.cube'}}}])
     shown = []
     monkeypatch.setattr(ui.NtoPreviews, '_show_cube', lambda self, *_: shown.append(self.cube.value) if self.cube.value else None)
     viewer = ui.NtoPreviews('optical-id')
@@ -218,7 +221,165 @@ def test_reopening_saved_ntos_selects_a_member_and_switching_state_clears_it(mon
         assert viewer.previous.value == 'saved-cubes'
         assert viewer.cube.value == 'nto_a_0020.cube'
         assert shown[-1] == 'nto_a_0020.cube'
+        viewer.member.value = 'particle'
+        assert viewer.cube.value == 'nto_a_0021.cube'
+        assert shown[-1] == 'nto_a_0021.cube'
         viewer.choose('singlet:2')
         assert viewer.previous.value is None and viewer.cube.value is None
     finally:
         viewer.close()
+
+
+def test_state_csv_retains_dark_states_precision_and_unrenormalized_weights():
+    import csv, io
+    from aiidalab_orca import optical_data as display
+    data = result('pyridine-full', method='TDDFT') | {'uuid': 'optical-producer', 'excitations_uuid': 'table-source'}
+    rows = list(csv.DictReader(io.StringIO(display.states_csv(data, {'singlet:1': {'ready': [1]}}))))
+    assert len(rows) == 5
+    assert rows[0]['optical_calculation_uuid'] == 'optical-producer'
+    assert rows[0]['excitations_uuid'] == 'table-source'
+    assert rows[0]['response_method'] == 'TDDFT' and rows[0]['functional'] == 'PBE'
+    assert float(rows[0]['native_nto_weight_sum']) > 1
+    assert rows[0]['cube_preview_pairs'] == '[1]'
+    assert any(float(r['oscillator_strength']) == 0 for r in rows)
+    assert [float(r['energy_ev']) for r in rows] == [r['energy_ev'] for r in data['states']]
+
+
+def test_downloaded_svg_and_spectrum_csv_describe_the_visible_plot():
+    import base64, csv, io, json, re
+    import xml.etree.ElementTree as ET
+    from aiidalab_orca.optical import OpticalSpectrum
+    data = result() | {'uuid': 'optical-producer'}
+    viewer = OpticalSpectrum(data, lambda _: None)
+    def downloads():
+        return {name: base64.b64decode(payload).decode() for name, payload in
+                re.findall(r'download="([^"]+)" href="data:[^;]+;base64,([^"]+)"', viewer.download.value)}
+    try:
+        viewer.width.value = .27
+        viewer.unit.value = 'nm'
+        files = downloads()
+        svg = ET.fromstring(files['optical-spectrum.svg'])
+        meta = json.loads(svg.find('{http://www.w3.org/2000/svg}metadata').text)
+        assert meta['axis_unit'] == 'nm' and meta['fwhm_ev'] == .27
+        assert meta['optical_calculation_uuid'] == 'optical-producer'
+        rows = list(csv.DictReader(io.StringIO(files['optical-spectrum.csv'])))
+        assert len(rows) == 900
+        assert float(rows[0]['display_coordinate']) == viewer.lower.value
+        assert float(rows[-1]['display_coordinate']) == viewer.upper.value
+        assert float(rows[0]['energy_ev']) == pytest.approx(optical.HC_EV_NM/viewer.lower.value)
+        assert rows[0]['axis_unit'] == 'nm' and rows[0]['fwhm_ev'] == '0.27'
+        assert 'per eV' in rows[0]['broadening']
+        viewer.lower.value = viewer.upper.value + 1
+        assert 'optical-spectrum.svg' not in downloads()  # No stale export for an invalid plot.
+        assert 'optical-states.csv' in downloads()
+    finally:
+        viewer.close()
+
+
+def test_preview_availability_distinguishes_analysis_files_and_job_status():
+    from aiidalab_orca import optical_data as display
+    data = result('pyridine-triplets', triplets=True)
+    records = [
+        {'state_id': 'singlet:1', 'pairs': [1, 2], 'ready_pairs': [1], 'success': True, 'finished': True},
+        {'state_id': 'singlet:1', 'pairs': [1], 'ready_pairs': [], 'success': False, 'finished': True},
+        {'state_id': 'singlet:2', 'pairs': [1], 'ready_pairs': [], 'success': False, 'finished': False},
+        {'state_id': 'singlet:3', 'pairs': [1], 'ready_pairs': [], 'success': False, 'finished': True},
+    ]
+    status = display.availability(data, records)
+    assert status['singlet:1'] == {'ready': [1], 'missing': [2], 'running': [], 'failed': []}
+    viewer = __import__('aiidalab_orca.optical', fromlist=['OpticalSpectrum']).OpticalSpectrum(data, lambda _: None, status)
+    try:
+        assert 'Ready: 1; Files unavailable: 2' in viewer.chart.value
+        assert 'Running: 1' in viewer.chart.value and 'Failed: 1' in viewer.chart.value
+        assert 'Not qualified' in viewer.chart.value
+        viewer.set_availability({})
+        assert 'Ready: 1' not in viewer.chart.value and 'Not generated' in viewer.chart.value
+    finally:
+        viewer.close()
+
+
+def test_preview_inventory_requires_both_members_and_never_checks_remote_files(aiida_profile, monkeypatch):
+    import io
+    from aiida import orm
+    from aiida.common.links import LinkType
+    from aiidalab_orca import optical_services as service
+    monkeypatch.setattr(orm.Computer, 'get_transport', lambda *_: pytest.fail('Stored status must not open a transport'))
+    producer = orm.CalcJobNode(process_type=optical.PROCESS_TYPE).store()
+    data = orm.Dict(dict=result())
+    data.base.links.add_incoming(producer, LinkType.CREATE, 'excitations'); data.store()
+    producer.set_process_state('finished'); producer.set_exit_status(0); producer.seal()
+    def previews(files):
+        run = orm.WorkChainNode(process_type=optical.NTO_PROCESS)
+        run.base.links.add_incoming(data, LinkType.INPUT_WORK, 'excitations')
+        selection = orm.Dict(dict={'state_id': 'singlet:3', 'pairs': [1]}).store()
+        run.base.links.add_incoming(selection, LinkType.INPUT_WORK, 'selection'); run.store()
+        child = orm.CalcJobNode(); child.base.links.add_incoming(run, LinkType.CALL_CALC, 'cubes'); child.store()
+        folder = orm.FolderData()
+        for name in files:
+            folder.base.repository.put_object_from_filelike(io.BytesIO(b'Stored reduced cube preview data\n'*4), 'previews/'+name)
+        manifest = orm.Dict(dict={'cubes': [
+            {'filename': 'hole.cube', 'spin': 0, 'index': 20}, {'filename': 'particle.cube', 'spin': 0, 'index': 21}]})
+        for key, node in [('manifest', manifest), ('retrieved', folder)]:
+            node.base.links.add_incoming(child, LinkType.CREATE, key); node.store()
+            node.base.links.add_incoming(run, LinkType.RETURN, key)
+        child.set_process_state('finished'); child.set_exit_status(0); child.seal()
+        run.set_process_state('finished'); run.set_exit_status(0); run.seal()
+        return str(run.uuid)
+    incomplete = previews(['hole.cube'])
+    complete = previews(['hole.cube', 'particle.cube'])
+    rows = {r['uuid']: r for r in service.preview_inventory(str(producer.uuid))}
+    assert rows[incomplete]['ready_pairs'] == []
+    assert rows[complete]['ready_pairs'] == [1]
+    assert rows[complete]['members'] == {'1': {'hole': 'hole.cube', 'particle': 'particle.cube'}}
+
+
+def test_hole_particle_switch_preserves_camera_isovalue_and_raw_cube_values(monkeypatch, tmp_path):
+    import numpy as np
+    from ase import Atoms
+    from ase.io.cube import write_cube
+    from aiidalab_orca import optical as ui, orbitals as orbital_ui, rendering
+    table = result()
+    def cube(scale):
+        path = tmp_path / (str(scale)+'.cube')
+        values = np.linspace(-scale, scale, 27).reshape(3, 3, 3)
+        with path.open('w') as handle:
+            write_cube(handle, Atoms('H', positions=[[1, 1, 1]], cell=[4, 4, 4]), data=values)
+        return path.read_text()
+    contents = {'hole.cube': cube(.4), 'particle.cube': cube(.02)}
+    class RenderPanel(ipw.VBox):
+        def __init__(self, uuid, filename):
+            self.filename = filename
+            super().__init__()
+        def submit(self, *_):
+            pytest.fail('Inspecting a pair must not submit a render')
+        def bind_viewer(self, *_):
+            pass
+    monkeypatch.setattr(rendering, 'RenderPanel', RenderPanel)
+    monkeypatch.setattr(ui.service, 'result', lambda _: table)
+    monkeypatch.setattr(ui.service, 'cube_defaults', lambda _: {'storage_policy': {'stash_directory': '/tmp/nto', 'threshold_mb': 100},
+        'codes': {'plot': [('plot', 'plot-id')], 'cubehandler': [('cubehandler', 'cube-id')]}})
+    monkeypatch.setattr(ui.service, 'preview_inventory', lambda _: [{
+        'uuid': 'saved-cubes', 'date': '2026-11-08T09:40', 'state_id': 'singlet:3', 'pairs': [1],
+        'finished': True, 'success': True, 'ready_pairs': [1],
+        'members': {'1': {'hole': 'hole.cube', 'particle': 'particle.cube'}}}])
+    monkeypatch.setattr(orbital_ui.service, 'preview_content', lambda _, filename: contents[filename])
+    viewer = ui.NtoPreviews('optical-id')
+    try:
+        viewer.choose('singlet:3')
+        camera = [1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., -10., 1.]
+        viewer._cube_view.viewer3d.viewer._camera_orientation = camera
+        old_iso = [list(values) for values in viewer._cube_view.viewer3d.isovalues.return_isovalues_and_colors()]
+        viewer.member.value = 'particle'
+        assert viewer.cube.value == 'particle.cube' and viewer.render_panel.filename == 'particle.cube'
+        assert viewer._cube_view.viewer3d.viewer._camera_orientation == camera
+        assert [list(values) for values in viewer._cube_view.viewer3d.isovalues.return_isovalues_and_colors()] == old_iso
+        assert viewer._cube_view.viewer3d.cube.data.max() == pytest.approx(.02)
+        assert 'max: 2.0e-02' in viewer._cube_view.viewer3d.isovalues.info.value
+        # The previous isovalue exceeds the particle grid maximum. It stays unchanged;
+        # a physically empty isosurface is preferable to silently brightening the cube.
+        assert max(old_iso[0]) > viewer._cube_view.viewer3d.cube.data.max()
+    finally:
+        from aiidalab_orca.app import close_widget_tree
+        close_widget_tree(viewer)
+        close_widget_tree(viewer)
+        assert viewer._disposed

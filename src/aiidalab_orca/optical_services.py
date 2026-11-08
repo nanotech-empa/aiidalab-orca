@@ -85,7 +85,7 @@ def result(uuid):
     node = orm.load_node(uuid)
     if node.process_type != optical.PROCESS_TYPE or not node.is_finished_ok:
         raise ValueError('Choose a successfully validated optical calculation')
-    return node.outputs.excitations.get_dict() | {'uuid': str(uuid)}
+    return node.outputs.excitations.get_dict() | {'uuid': str(uuid), 'excitations_uuid': str(node.outputs.excitations.uuid)}
 
 
 def cube_defaults(optical_uuid):
@@ -171,3 +171,34 @@ def submit_cubes(plan):
     if checked['signature'] != plan['signature']:
         raise ValueError('The NTO request changed; review it again')
     return checked['reuse_uuid'] or str(engine.submit(cube_builder(plan)).uuid)
+
+
+def preview_inventory(optical_uuid):
+    """Inspect only stored pair previews, never full remote/stashed cubes."""
+    from .optical_data import pair_members
+    data = result(optical_uuid)
+    states = {r['id']: r for r in data['states']}
+    records = []
+    for uid in cube_runs(optical_uuid):
+        node = orm.load_node(uid)
+        selection = node.inputs.selection.get_dict()
+        record = {'uuid': str(uid), 'date': node.ctime.isoformat(), 'state_id': selection['state_id'],
+                  'pairs': selection['pairs'], 'finished': node.is_terminated, 'success': node.is_finished_ok,
+                  'ready_pairs': [], 'members': {}}
+        state = states.get(record['state_id'])
+        if node.is_finished_ok and state and state['nto']:
+            cubes = node.outputs.manifest.get_dict()['cubes']
+            for number in record['pairs']:
+                members = pair_members(state, number, cubes)
+                try:
+                    for filename in members.values():
+                        with node.outputs.retrieved.base.repository.open('previews/'+filename, mode='rb') as handle:
+                            if len(handle.read(32)) < 32:
+                                raise ValueError('Empty stored cube preview')
+                except (OSError, ValueError):
+                    members = {}
+                if members:
+                    record['ready_pairs'].append(number)
+                    record['members'][str(number)] = members
+        records.append(record)
+    return records

@@ -46,6 +46,19 @@ function with an ordinate per eV; it does not claim a density per nm or an
 absolute molar extinction coefficient. No automatic intensity normalization is
 applied. Downloaded data retain the native numerical tables and provenance.
 
+**NTO analysis** and **Cube preview pairs** are separate state-table columns.
+Analysis availability means the native pair/weight table was computed, not that
+cube previews exist. Ready pairs are counted only when both members are stored
+for this optical calculation. Running, failed and unavailable-file states are
+shown separately. **Refresh NTO previews** refreshes these local records without
+checking remote full files or starting work.
+
+Download **States CSV** for the unbroadened state table, **Spectrum CSV** for the
+currently displayed broadened curve, or **Spectrum SVG** for an editable figure.
+CSV/SVG exports retain method, source UUIDs, units and relevant display settings.
+The spectrum ordinate remains per eV in either horizontal-axis representation.
+The full JSON download retains native response contributions and NTO weights.
+
 ORCA's `FINAL SINGLE POINT ENERGY` can be the selected excited-state total.
 The parser records the separately printed ground-state SCF energy and the
 labelled excitations instead of treating that final scalar as the ground state.
@@ -62,7 +75,14 @@ information and are not interchangeable with these NTO weights.
 Select a state with NTO analysis, choose pair numbers and **Review NTO previews**.
 Both members of every pair are generated together by submitted CalcJobs using
 native ORCA orbitals and the existing cubehandler reduction. The shared viewer
-provides isosurfaces, slicing, saved views and separate rendering. Full-cube
+provides isosurfaces, slicing, saved views and separate rendering. Choose an
+**Inspect pair** entry, then switch **Hole / Particle** in that same viewer.
+Within one saved preview calculation/state, switching preserves the camera,
+isovalues, lighting and slicing settings. Cube amplitudes are not rescaled. An
+isovalue above the new field's range correctly shows no surface; lower it
+explicitly when needed. Blue/gold surfaces mark amplitude signs, not hole and
+particle identities. Saved views and rendering still refer to the selected
+member. Full-cube
 retention is explicit: leave, stash or delete after preview validation.
 Selected native NTO electronic files use the stated size-aware preservation
 limit/directory; only reduced cube previews are retrieved. Full files remain

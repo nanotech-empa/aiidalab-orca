@@ -1,7 +1,6 @@
 """Independent optical calculations with linked spectra, states and NTO pairs."""
 
 import asyncio
-import base64
 import html
 import json
 import math
@@ -10,6 +9,7 @@ import ipywidgets as ipw
 import numpy as np
 
 from . import optical_services as service
+from . import optical_data as display
 from .casci_services import progress
 from .interactive_svg import InteractiveSvg
 from .orbitals import CubeDisplayMixin
@@ -26,8 +26,9 @@ def state_label(row):
 
 
 class OpticalSpectrum(ipw.VBox):
-    def __init__(self, data, choose):
+    def __init__(self, data, choose, previews=None):
         self.data, self.choose = data, choose
+        self._availability = previews or {}
         self._disposed = False
         self.unit = ipw.ToggleButtons(options=[('Energy (eV)', 'eV'), ('Wavelength (nm)', 'nm')])
         self.width = ipw.BoundedFloatText(value=.15, min=.001, max=5, step=.01,
@@ -39,8 +40,7 @@ class OpticalSpectrum(ipw.VBox):
             options=[(state_label(row), row['id']) for row in data['states']], layout=ipw.Layout(**WIDE))
         self.chart = InteractiveSvg(on_action=self._action)
         self.description = ipw.HTML()
-        encoded = base64.b64encode(json.dumps(data, indent=2).encode()).decode()
-        self.download = ipw.HTML(f'<a download="optical-excitations.json" href="data:application/json;base64,{encoded}">Download states, NTO weights and provenance</a>')
+        self.download = ipw.HTML()
         self._ready = False
         self.unit.observe(self._reset, names='value')
         self.reset.on_click(self._reset)
@@ -63,6 +63,18 @@ class OpticalSpectrum(ipw.VBox):
         self.lower.value, self.upper.value = max(.01, round(min(values)-margin, 2)), round(max(values)+margin, 2)
         self._ready = True
         self._draw()
+
+    def set_availability(self, values):
+        self._availability = values
+        self._draw()
+
+    def _downloads(self, svg=None, spectrum=None):
+        links = [display.download_link('optical-states.csv', 'States CSV', display.states_csv(self.data, self._availability), 'text/csv'),
+                 display.download_link('optical-excitations.json', 'Full data JSON', json.dumps(self.data, indent=2), 'application/json')]
+        if svg is not None:
+            links += [display.download_link('optical-spectrum.csv', 'Spectrum CSV', spectrum, 'text/csv'),
+                      display.download_link('optical-spectrum.svg', 'Spectrum SVG', svg, 'image/svg+xml')]
+        self.download.value = '<p>Downloads: ' + ' · '.join(links) + '</p>'
 
     def _action(self, action):
         ids = action.get('ids', [])
@@ -88,6 +100,7 @@ class OpticalSpectrum(ipw.VBox):
         lo, hi = self.lower.value, self.upper.value
         if not math.isfinite(lo+hi) or hi <= lo or lo <= 0:
             self.chart.value = '<p>Choose positive, increasing plot limits.</p>'
+            self._downloads()
             return
         from aiida_empa_orca.optical import HC_EV_NM
         rows = self.data['states']
@@ -98,7 +111,11 @@ class OpticalSpectrum(ipw.VBox):
         ymax = max(float(curve.max()), max(r['oscillator_strength']/(sigma*np.sqrt(2*np.pi)) for r in rows), .001)*1.1
         sx = lambda value: 90 + 825*(value-lo)/(hi-lo)
         sy = lambda value: 280 - 225*value/ymax
-        svg = ['<svg viewBox="0 0 950 350" role="img" aria-label="Vertical absorption spectrum">',
+        view = {'axis_unit': self.unit.value, 'minimum': lo, 'maximum': hi, 'fwhm_ev': self.width.value,
+                'broadening': 'Gaussian in energy; ordinate per eV; no intensity normalization'}
+        svg = ['<svg xmlns="http://www.w3.org/2000/svg" width="950" height="350" viewBox="0 0 950 350" font-family="Arial, sans-serif" role="img" aria-label="Vertical absorption spectrum">',
+               '<title>' + html.escape(self.data['method'] + ' · vertical optical excitations') + '</title>',
+               '<metadata>' + html.escape(json.dumps(display.metadata(self.data) | view)) + '</metadata>',
                '<rect x="0" y="0" width="950" height="350" fill="#f8fafc" rx="8"/>']
         for i in range(5):
             value = ymax*i/4
@@ -108,7 +125,7 @@ class OpticalSpectrum(ipw.VBox):
             svg.append(f'<text x="{sx(value)}" y="310" text-anchor="middle" font-size="12">{value:.2f}</text>')
         path = ' '.join(('M' if i == 0 else 'L') + f'{sx(v):.2f},{sy(c):.2f}' for i, (v, c) in enumerate(zip(x, curve)))
         svg.append(f'<path d="{path}" stroke="#247b91" fill="none" stroke-width="2"/>')
-        table = ['<table style="width:100%;border-collapse:collapse"><tr><th>State</th><th>Energy (eV)</th><th>λ (nm)</th><th>Oscillator strength</th></tr>']
+        table = ['<table style="width:100%;border-collapse:collapse"><tr><th>State</th><th>Energy (eV)</th><th>λ (nm)</th><th>Oscillator strength</th><th>NTO analysis</th><th>Cube preview pairs</th></tr>']
         for row in rows:
             value = row['energy_ev'] if self.unit.value == 'eV' else row['wavelength_nm']
             attributes = 'data-ids="' + html.escape(json.dumps([row['id']]), quote=True) + '" tabindex="0" role="button"'
@@ -123,11 +140,14 @@ class OpticalSpectrum(ipw.VBox):
                     f'<rect x="{position-6}" y="{min(sy(height),280)-6}" width="12" height="{max(20,abs(280-sy(height))+22)}" fill="transparent"/></g>')
             table.append(f'<tr {attributes} style="cursor:pointer;background:{"#e5effa" if selected else "transparent"}">'
                 f'<td style="padding:7px">{html.escape(row["id"])}</td><td>{row["energy_ev"]:.4f}</td>'
-                f'<td>{row["wavelength_nm"]:.1f}</td><td>{row["oscillator_strength"]:.7g}</td></tr>')
+                f'<td>{row["wavelength_nm"]:.1f}</td><td>{row["oscillator_strength"]:.7g}</td>'
+                f'<td>{"Available" if row["nto"] else "Not qualified" if row["family"] == "triplet" else "Not requested"}</td>'
+                f'<td>{html.escape(display.preview_label(self._availability.get(row["id"], {}))) if row["nto"] else "—"}</td></tr>')
         svg.append(f'<text x="490" y="340" text-anchor="middle" font-size="14">{"Excitation energy (eV)" if self.unit.value == "eV" else "Wavelength (nm)"}</text>'
                    '<text x="17" y="175" transform="rotate(-90 17 175)" text-anchor="middle" font-size="13">Broadened oscillator strength / eV</text></svg>')
         table.append('</table><p>Gaussian display broadening is defined in energy, also in the wavelength view; the ordinate stays per eV. No intensity normalization or absolute extinction coefficient is applied.</p>')
         self.chart.value = ''.join(svg+table)
+        self._downloads(''.join(svg), display.spectrum_csv(self.data, x, energies, curve, view))
 
     def close(self):
         if self._disposed:
@@ -147,6 +167,10 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
         self._disposed = False
         initial = service.cube_defaults(optical_uuid)
         self.state_id = None
+        self.on_availability = None
+        self._inventory = []
+        self._updating_members = False
+        self._view_context = None
         self.pairs = ipw.SelectMultiple(description='NTO pairs', style=STYLE, layout=ipw.Layout(width='95%', height='110px'))
         self.note, self.message = ipw.HTML(), ipw.HTML()
         self.grid = ipw.BoundedIntText(value=80, min=40, max=256, description='Grid points/axis', style=STYLE)
@@ -166,13 +190,23 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
         self.submit.on_click(self._submit)
         self.previous = ipw.Dropdown(description='Saved NTO previews', style=STYLE, layout=ipw.Layout(**WIDE))
         self.previous.observe(self._open_previous, names='value')
+        self.refresh = ipw.Button(description='Refresh NTO previews', icon='refresh', layout=ipw.Layout(width='auto'))
+        self.refresh.on_click(lambda _: self._refresh())
+        self.availability_note = ipw.HTML()
+        self.display_pair = ipw.Dropdown(description='Inspect pair', style=STYLE, layout=ipw.Layout(**WIDE))
+        self.member = ipw.ToggleButtons(options=[('Hole', 'hole'), ('Particle', 'particle')])
+        self.display_pair.observe(self._choose_member, names='value')
+        self.member.observe(self._choose_member, names='value')
         self.cube = ipw.Dropdown(description='NTO to display', style=STYLE, layout=ipw.Layout(**WIDE))
         self.cube.observe(self._show_cube, names='value')
+        self.cube.layout.display = 'none'  # Kept for the shared saved-view/render interface.
+        self.member_controls = ipw.VBox([self.display_pair, self.member, ipw.HTML('<p>Hole/particle switching keeps the camera, isovalues and slice settings. Blue/gold indicate amplitude signs, not hole versus particle.</p>')])
         self.download, self.cube_box = ipw.HTML(), ipw.VBox()
         self.compute = ComputePanel('Compute NTO hole/particle previews…', [self.pairs, self.retention, self.stash, advanced,
             ipw.HBox([self.review, self.submit], layout=ipw.Layout(flex_flow='row wrap'))])
-        super().__init__([ipw.HTML('<h4>Natural transition orbitals</h4>'), self.note, self.previous,
-                          self.compute, self.message, self.cube, self.download, self.cube_box])
+        super().__init__([ipw.HTML('<h4>Natural transition orbitals</h4>'), self.note,
+                          ipw.HBox([self.previous, self.refresh], layout=ipw.Layout(flex_flow='row wrap')), self.availability_note,
+                          self.compute, self.message, self.member_controls, self.cube, self.download, self.cube_box])
         for control in (self.pairs, self.grid, self.retention, self.stash, self.threshold, *self.codes.values()):
             control.observe(self._invalidate, names='value')
         self._refresh()
@@ -233,17 +267,23 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
                 return
             await asyncio.sleep(3)
 
+    def availability(self):
+        return display.availability(self.data, self._inventory)
+
     def _refresh(self):
-        from aiida import orm
-        rows = []
-        for uid in service.cube_runs(self.optical_uuid):
-            n = orm.load_node(uid)
-            if n.is_finished_ok and (not self.state_id or n.inputs.selection.get_dict()['state_id'] == self.state_id):
-                rows.append((f'{n.ctime:%Y-%m-%d %H:%M} · {n.inputs.selection.get_dict()["state_id"]}', str(uid)))
+        self._inventory = service.preview_inventory(self.optical_uuid)
+        rows = [(r['date'][:16] + ' · ' + r['state_id'] + ' · pairs ' + ', '.join(map(str, r['ready_pairs'])), r['uuid'])
+                for r in self._inventory if r['ready_pairs'] and r['state_id'] == self.state_id]
         old = self.previous.value
-        self.previous.options = [('Select saved previews', None)] + rows
+        self.previous.options = [('Select saved previews' if rows else 'No saved pair previews for this state', None)] + rows
         valid = {uid for label, uid in rows}
         self.previous.value = self._job_uuid if self._job_uuid in valid else old if old in valid else rows[0][1] if rows else None
+        values = self.availability()
+        state = next((r for r in self.data['states'] if r['id'] == self.state_id), None)
+        summary = display.preview_label(values.get(self.state_id, {}))
+        self.availability_note.value = ('<p><b>Cube preview pairs:</b> ' + html.escape(summary) +
+            ('. Use <b>Compute NTO hole/particle previews…</b> to generate the pairs you need.' if not rows and state and state['nto'] else '.') + '</p>')
+        self.member_controls.layout.display = '' if rows else 'none'
         if not rows:
             self.cube.options = []
             self.download.value = ''
@@ -253,25 +293,78 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
             if self.render_panel:
                 self.render_panel.close()
                 self.render_panel = None
+            self._view_context = None
             self.cube_box.children = []
+        if self.on_availability:
+            self.on_availability(values)
 
     def _open_previous(self, _=None):
         if not self.previous.value:
             return
-        from aiida import orm
-        node = orm.load_node(self.previous.value)
-        self.process_uuid = str(node.uuid)
-        identity = node.inputs.selection.get_dict()
-        state = next(r for r in self.data['states'] if r['id'] == identity['state_id'])
-        labels = {}
-        for i in identity['pairs']:
-            pair = state['nto']['pairs'][i-1]
-            for role, key in [('hole', 'hole'), ('particle', 'particle')]:
-                spin = 0 if pair[key+'_spin'] == 'a' else 1
-                labels[(spin, pair[key])] = f'{state["id"]} · pair {i} · {role} · NTO {pair[key]}'
-        self.cube.options = [(labels.get((c['spin'], c['index']), c['filename']), c['filename']) for c in node.outputs.manifest.get_dict()['cubes']]
-        self.cube.value = self.cube.options[0][1] if self.cube.options else None
-        self._show_cube()
+        record = next(r for r in self._inventory if r['uuid'] == self.previous.value)
+        self.process_uuid = record['uuid']
+        state = next(r for r in self.data['states'] if r['id'] == record['state_id'])
+        old_pair = self.display_pair.value
+        self._updating_members = True
+        try:
+            self.cube.options = [(f'{state["id"]} · pair {i} · {role}', name)
+                for i in record['ready_pairs'] for role, name in record['members'][str(i)].items()]
+            self.display_pair.options = [(f'Pair {i} · {state["nto"]["pairs"][i-1]["hole_spin"]} · native weight {state["nto"]["pairs"][i-1]["weight"]:.6f}', i)
+                                         for i in record['ready_pairs']]
+            self.display_pair.value = old_pair if old_pair in record['ready_pairs'] else record['ready_pairs'][0]
+        finally:
+            self._updating_members = False
+        self._choose_member()
+
+    def _choose_member(self, _=None):
+        if self._updating_members or not self.previous.value or not self.display_pair.value:
+            return
+        record = next(r for r in self._inventory if r['uuid'] == self.previous.value)
+        filename = record['members'][str(self.display_pair.value)][self.member.value]
+        if self.cube.value != filename:
+            self.cube.value = filename
+        elif self._cube_view is None:
+            self._show_cube()
+
+    def _show_cube(self, _=None):
+        if self._updating_members or not self.cube.value:
+            return
+        # A view is presentation state only; native cube values are never rescaled.
+        snapshot = None
+        context = (self.process_uuid, self.state_id)
+        if self._cube_view is not None and self._view_context == context:
+            try:
+                snapshot = self._cube_view.view_settings()
+            except ValueError:  # No camera has reached the browser yet.
+                pass
+        if self._cube_view is not None and self._view_context == context:
+            from .property_services import preview_content
+            content = preview_content(self.process_uuid, self.cube.value)
+            self._cube_view.set_content(content)
+            self.render_panel.filename = self.cube.value
+            self.download.value = display.download_link(self.cube.value, 'Download reduced cube', content, 'text/plain')
+        else:
+            CubeDisplayMixin._show_cube(self)
+        self._view_context = context
+        if snapshot:
+            iso = self._cube_view.viewer3d.isovalues
+            values = [value for value, _ in snapshot['render']['iso']]
+            # An isovalue outside the new data range correctly shows no surface.
+            # Widen only the input-control limits so it is not silently clamped.
+            if values:
+                data_range_label = iso.info.value
+                iso.set_range(vmin=min(iso.iso_min, *values), vmax=max(iso.iso_max, *values))
+                iso.info.value = data_range_label
+            self._cube_view.apply_view_settings(snapshot)
+        record = next(r for r in self._inventory if r['uuid'] == self.process_uuid)
+        self._updating_members = True
+        try:
+            for number, members in record['members'].items():
+                for role, name in members.items():
+                    if name == self.cube.value:
+                        self.display_pair.value, self.member.value = int(number), role
+        finally:
+            self._updating_members = False
 
     def close(self):
         if self._disposed:
@@ -279,7 +372,9 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
         self._disposed = True
         if self._poll_task:
             self._poll_task.cancel()
-        if self._cube_view:
+        self.on_availability = None
+        # The app's recursive disposer may already have closed this child.
+        if self._cube_view and not getattr(self._cube_view, '_orca_tree_closed', False):
             self._cube_view.close()
         if self.render_panel:
             self.render_panel.close()
@@ -396,7 +491,8 @@ class OpticalExcitations(ipw.VBox):
             self.message.value = ''
             data = service.result(self.saved.value)
             ntos = NtoPreviews(self.saved.value)
-            spectrum = OpticalSpectrum(data, ntos.choose)
+            spectrum = OpticalSpectrum(data, ntos.choose, ntos.availability())
+            ntos.on_availability = spectrum.set_availability
             self.output.children = [spectrum, ntos]
         except (ValueError, KeyError, OSError, RuntimeError) as exc:
             self.message.value = '<p class="orca-notice">' + html.escape(str(exc)) + '</p>'

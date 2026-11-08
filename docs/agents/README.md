@@ -44,7 +44,7 @@ route is covered by `orca.quantum-energy`; separate QPU/DMRG research extensions
 must not be disturbed by navigation.
 
 The [correlation-energy guide](../correlation.md), available as
-`orca.correlation`, describes fresh-HF RI-MP2 and verified-CASSCF SC-NEVPT2.
+`orca.correlation`, describes fresh-HF RI-MP2 and verified-CASSCF SC/FIC/DLPNO-NEVPT2.
 Their energy-only outputs cannot replace Dyson/Kondo wavefunctions.
 
 The optional [CASSCF route](../casscf.md) creates a new shared orbital reference

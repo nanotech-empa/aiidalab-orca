@@ -19,7 +19,7 @@ def nevpt_text():
     ref = reference()
     native = native_output(ref['casscf_settings'], frozen=True).replace('aiida.gbw', 'reference.gbw')
     native = native.replace('ORCA TERMINATED NORMALLY', '')
-    text = ('Program Version 6.1.1\n Number of Electrons NEL .... 15\n' + native +
+    text = ('Program Version 6.1.1\n Number of Electrons NEL .... 15\nPT2 = SC-NEVPT2\n' + native +
             '< NEVPT2  >\n Last frozen orbital ... 1\n Orbitals ... canonical for each state\n'
             'NEVPT2 Results\n')
     expected = []
@@ -138,6 +138,80 @@ def test_core_policy_is_checked_against_the_native_count():
                                  {'method': 'RI-MP2', 'frozen_core': False}, 10)
 
 
+def dlpno_text():
+    text, expected = nevpt_text()
+    text = '| 3> ! def2-SVP def2-SVP/C MOREAD NoIter NormalPNO\n' + text.replace(
+        'PT2 = SC-NEVPT2', 'PT2 = DLPNO-NEVPT2')
+    block = '''DLPNO-NEVPT2 SETTINGS
+TCutPNO: 1.000e-08
+TCutDO: 1.000e-02
+TCutMKN: 1.000e-03
+Energy convergence tolerance ... 1.000e-07
+Residual convergence tolerance ... 5.000e-07
+LMP2-Iter= 0: ELMP2= -0.2 DE= -3.5e-03 RMAX= 3.4e-03
+LMP2-Iter= 1: ELMP2= -0.2 DE= 6.9e-10 RMAX= 5.3e-08 => CONVERGED
+DLPNO-NEVPT2 Results
+'''
+    return text.replace('NEVPT2 Results\n', block * 3 + 'NEVPT2 Results\n'), expected
+
+
+@pytest.mark.parametrize('method', correlation.NEVPT_METHODS)
+def test_contractions_have_explicit_native_identity_and_keep_energy_only_results(method):
+    text, expected = dlpno_text() if method == 'DLPNO-NEVPT2' else nevpt_text()
+    text = text.replace('PT2 = SC-NEVPT2', 'PT2 = ' + method)
+    ref = reference()
+    values = {'method': method}
+    data = correlation.parse_result(text, ref['settings'], values, 15, ref, expected)
+    assert data['method'] == method and not data['dyson_compatible']
+    assert data['model']['local_approximation'] == (method == 'DLPNO-NEVPT2')
+    native = correlation.correlation_input(ref['settings'], values, ref)
+    assert ('CanonStep canonical' in native) == (method == 'SC-NEVPT2')
+    assert ('NormalPNO' in native) == (method == 'DLPNO-NEVPT2')
+    with pytest.raises(ValueError, match='native perturbation method'):
+        correlation.parse_result(text.replace('PT2 = ' + method, 'PT2 = unsupported'),
+                                 ref['settings'], values, 15, ref, expected)
+
+
+@pytest.mark.parametrize('before,after', [
+    ('=> CONVERGED', ''),
+    ('RMAX= 5.3e-08', 'RMAX= 5.3e-04'),
+    ('DE= 6.9e-10', 'DE= 6.9e-05'),
+    ('NormalPNO', 'TightPNO'),
+    ('TCutPNO: 1.000e-08', 'TCutPNO: 0'),
+    ('Residual convergence tolerance ... 5.000e-07', 'Residual convergence tolerance ... 0'),
+    ('DLPNO-NEVPT2 Results', 'Missing class summary'),
+])
+def test_dlpno_checks_every_amplitude_solve_and_preserves_preset_evidence(before, after):
+    text, expected = dlpno_text()
+    ref = reference()
+    with pytest.raises(ValueError):
+        correlation.parse_result(text.replace(before, after, 1), ref['settings'],
+                                 {'method': 'DLPNO-NEVPT2'}, 15, ref, expected)
+
+
+@pytest.mark.parametrize('warning', [
+    'WARNING: Koopmans matrices have at least one negative eigenvalue (-2.026741e-01)',
+    'WARNING: Denominator is negative for DEpsilon ITUV i=2 mu=1 : -344.1 < 0',
+])
+def test_native_normal_termination_does_not_hide_intruder_state_warnings(warning):
+    text, expected = nevpt_text()
+    ref = reference()
+    with pytest.raises(ValueError, match='intruder-state'):
+        correlation.parse_result(text.replace('NEVPT2 Results', warning + '\nNEVPT2 Results'),
+            ref['settings'], {'method': 'SC-NEVPT2'}, 15, ref, expected)
+
+
+def test_pno_presets_do_not_leak_into_other_methods():
+    ref = reference()
+    for method in ('RI-MP2', 'SC-NEVPT2', 'FIC-NEVPT2'):
+        with pytest.raises(ValueError, match='Unknown'):
+            correlation.settings({'method': method, 'pno_preset': 'TightPNO'},
+                                 ref['settings'], ref['casscf_settings'])
+    with pytest.raises(ValueError, match='NormalPNO or TightPNO'):
+        correlation.settings({'method': 'DLPNO-NEVPT2', 'pno_preset': 'LoosePNO'},
+                             ref['settings'], ref['casscf_settings'])
+
+
 def test_form_gates_nevpt2_and_requires_review_without_implicit_jobs(monkeypatch):
     from aiidalab_orca import correlation as gui
     calls = []
@@ -160,6 +234,13 @@ def test_form_gates_nevpt2_and_requires_review_without_implicit_jobs(monkeypatch
         assert panel.form.layout.display == 'none' and panel.submit.disabled
         panel.submit.click()
         assert not calls
+        panel.nevpt.value = 'DLPNO-NEVPT2'
+        assert panel.pno.layout.display == '' and panel.submit.disabled
+        panel.pno.value = 'TightPNO'
+        assert panel._values()['pno_preset'] == 'TightPNO'
+        panel.nevpt.value = 'FIC-NEVPT2'
+        assert panel.pno.layout.display == 'none'
+        assert 'pno_preset' not in panel._values()
         panel.prepare.click()
         assert calls == ['prepare']
     finally:

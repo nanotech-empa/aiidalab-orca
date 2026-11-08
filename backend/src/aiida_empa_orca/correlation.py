@@ -12,7 +12,8 @@ from .input import render_input
 from .reference import single_point_parameters
 
 PROCESS_TYPE = 'aiida.calculations:empa_orca.correlation'
-METHODS = ('RI-MP2', 'SC-NEVPT2')
+NEVPT_METHODS = ('SC-NEVPT2', 'FIC-NEVPT2', 'DLPNO-NEVPT2')
+METHODS = ('RI-MP2', *NEVPT_METHODS)
 NUMBER = r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[EeDd][-+]?\d+)?'
 
 
@@ -22,11 +23,15 @@ def settings(values, electronic, optimized=None):
                     electronic['basis'] + '/C' if electronic['basis'] in
                     ('def2-SVP', 'def2-TZVP', 'def2-TZVPP') else 'AutoAux'),
                 **{key: electronic[key] for key in ('nprocs', 'memory_mb', 'wallclock_seconds')}}
+    if isinstance(values, dict) and values.get('method') == 'DLPNO-NEVPT2':
+        defaults['pno_preset'] = 'NormalPNO'
     if not isinstance(values, dict) or set(values) - set(defaults):
         raise ValueError('Unknown correlation setting')
     result = defaults | values
     if result['method'] not in METHODS or type(result['frozen_core']) is not bool:
-        raise ValueError('Choose RI-MP2 or SC-NEVPT2 and an explicit frozen-core policy')
+        raise ValueError('Choose a supported correlation method and an explicit frozen-core policy')
+    if result.get('pno_preset', 'NormalPNO') not in ('NormalPNO', 'TightPNO'):
+        raise ValueError('Choose NormalPNO or TightPNO explicitly')
     for key in ('nprocs', 'memory_mb', 'wallclock_seconds'):
         if type(result[key]) is not int or result[key] < 1:
             raise ValueError(key + ' must be a positive integer')
@@ -34,23 +39,27 @@ def settings(values, electronic, optimized=None):
         raise ValueError('Provide at least 256 MiB per process')
     from .protocols import _token
     result['auxiliary_basis'] = _token(result['auxiliary_basis'], 'Correlation auxiliary basis')
-    if result['method'] == 'SC-NEVPT2' and (not optimized or
+    if result['method'] in NEVPT_METHODS and (not optimized or
             result['auxiliary_basis'] != optimized['auxiliary_basis']):
-        raise ValueError('SC-NEVPT2 requires the same integral model as its verified CASSCF reference')
+        raise ValueError('NEVPT2 requires the same integral model as its verified CASSCF reference')
     return result
 
 
 def correlation_input(electronic, values, reference=None):
     optimized = reference['casscf_settings'] if reference else None
     s = settings(values, electronic, optimized)
-    if s['method'] == 'SC-NEVPT2':
+    if s['method'] in NEVPT_METHODS:
         if reference.get('preparation') != casscf.PREPARATION:
             raise ValueError('Select a verified CASSCF reference')
         objective = optimized | {key: s[key] for key in ('nprocs', 'memory_mb', 'wallclock_seconds')}
         text = casscf.casscf_input(reference, reference['optimized_active_space'], objective, readback=True)
         text = text.replace('%moinp "aiida.gbw"', '%moinp "reference.gbw"')
-        text = text.replace(' maxiter 1\n', ' maxiter 1\n PTMethod SC_NEVPT2\n'
-                            ' PTSettings\n  CanonStep canonical\n end\n')
+        pt = ' PTMethod ' + s['method'].replace('-', '_') + '\n'
+        if s['method'] == 'SC-NEVPT2':
+            pt += ' PTSettings\n  CanonStep canonical\n end\n'
+        text = text.replace(' maxiter 1\n', ' maxiter 1\n' + pt)
+        if s['method'] == 'DLPNO-NEVPT2':
+            text = re.sub(r'^(! .+)$', lambda m: m[1] + ' ' + s['pno_preset'], text, flags=re.M)
     else:
         source = single_point_parameters(electronic)
         params = {'charge': electronic['charge'], 'multiplicity': electronic['multiplicity'],
@@ -86,6 +95,40 @@ def electron_count(text):
     if not counts or len(set(counts)) != 1:
         raise ValueError('Missing or inconsistent electron count')
     return int(counts[0])
+
+
+def dlpno_checks(text, preset):
+    """Check every native iterative solve, including each eigenchannel."""
+    if not re.search(r'^.*\|\s*\d+>\s*! .+\b' + preset + r'\b', text, re.M):
+        raise ValueError('The requested PNO preset was not recorded in the native input')
+    blocks = re.split(r'DLPNO-NEVPT2 SETTINGS', text)[1:]
+    if not blocks:
+        raise ValueError('No native DLPNO settings')
+    thresholds, cycles = [], 0
+    for block in blocks:
+        values = {key: float(value) for key, value in re.findall(r'^(TCut\w+):\s*(' + NUMBER + ')', block, re.M)}
+        if not {'TCutPNO', 'TCutDO', 'TCutMKN'} <= values.keys() or any(
+                not math.isfinite(v) or v <= 0 for v in values.values()):
+            raise ValueError('Missing or invalid native PNO thresholds')
+        thresholds.append(values)
+        etol = one_number(r'Energy convergence tolerance\s+\.{2,}\s*(' + NUMBER + ')', block, 'DLPNO energy tolerance')
+        rtol = one_number(r'Residual convergence tolerance\s+\.{2,}\s*(' + NUMBER + ')', block, 'DLPNO residual tolerance')
+        if etol <= 0 or rtol <= 0:
+            raise ValueError('Invalid native DLPNO convergence tolerances')
+        iterations = re.findall(r'LMP2-Iter=\s*(\d+):[^\n]*?DE=\s*(' + NUMBER + r')\s+RMAX=\s*(' + NUMBER + r')([^\n]*)', block)
+        for i, (iteration, de, residual, suffix) in enumerate(iterations):
+            final = i == len(iterations) - 1 or int(iterations[i + 1][0]) == 0
+            if final:
+                if ('CONVERGED' not in suffix or abs(float(de)) > etol or
+                        not 0 <= float(residual) <= rtol):
+                    raise ValueError('An individual DLPNO amplitude solve did not converge')
+                cycles += 1
+    # A state with no iterative amplitudes is possible when all classes are
+    # empty/exact. Native class summaries must still account for the result.
+    if text.count('DLPNO-NEVPT2 Results') != len(blocks):
+        raise ValueError('Incomplete native DLPNO class summaries')
+    return {'pno_preset': preset, 'native_pno_thresholds': thresholds,
+            'dlpno_states_checked': len(blocks), 'amplitude_solves_checked': cycles}
 
 
 def parse_result(text, electronic, values, expected_electrons, reference=None, reference_states=None):
@@ -143,6 +186,9 @@ def parse_result(text, electronic, values, expected_electrons, reference=None, r
         # Keep the actual reference section and actual termination footer. PT2
         # prints its own repeated block headers, which are not a second CASCI.
         before = text[:marker]
+        methods = re.findall(r'\bPT2\s*=\s*((?:SC|FIC|DLPNO)-NEVPT2)\b', before)
+        if methods != [s['method']]:
+            raise ValueError('The native perturbation method differs from the reviewed method')
         excerpt = before + text[text.rfind('ORCA TERMINATED NORMALLY'):]
         objective = reference['casscf_settings']
         space = reference['optimized_active_space']
@@ -160,8 +206,14 @@ def parse_result(text, electronic, values, expected_electrons, reference=None, r
         if {(r['multiplicity'], r['root']) for r in native} != set(expected) or error > 1e-7:
             raise ValueError('The frozen reference state energies changed; do not apply a correction')
         pt = text[marker:]
+        if re.search(r'Denominator is negative|Koopmans matrices have at least one negative eigenvalue', pt, re.I):
+            raise ValueError('Native intruder-state/negative-denominator warning; inspect the reference and approximations')
         if not re.search(r'Orbitals\s+\.\.\.\s+canonical for each state', pt):
             raise ValueError('The reviewed per-state canonicalization was not confirmed')
+        if s['method'] == 'DLPNO-NEVPT2':
+            checks.update(dlpno_checks(text, s['pno_preset']))
+        elif 'DLPNO-NEVPT2 SETTINGS' in pt:
+            raise ValueError('Unexpected local approximation in a canonical NEVPT2 request')
         summary = pt[pt.find('NEVPT2 Results'):]
         pattern = (r'MULT\s+(\d+),\s*ROOT\s+(\d+).*?Total Energy Correction\s*:\s*dE\s*=\s*(' + NUMBER +
                    r').*?Reference\s+Energy\s*:\s*E0\s*=\s*(' + NUMBER +
@@ -179,6 +231,8 @@ def parse_result(text, electronic, values, expected_electrons, reference=None, r
                                                   if (row['multiplicity'], row['root']) == key)})
         if {(r['multiplicity'], r['root']) for r in rows} != set(expected):
             raise ValueError('Incomplete NEVPT2 correction table')
+        if s['method'] == 'DLPNO-NEVPT2' and checks['dlpno_states_checked'] != len(rows):
+            raise ValueError('Native PNO/solver evidence is incomplete for the requested states')
         counts = re.findall(r'Last\s+frozen\s+orbital\s+\.{2,}\s+(-?\d+)', pt)
         starts = re.findall(r'Orbital Range Operator\s+\d+:\s*(\d+)\s*-\s*\d+\s+to', pt)
         if counts and len(set(counts)) == 1:
@@ -202,11 +256,17 @@ def parse_result(text, electronic, values, expected_electrons, reference=None, r
     if error > 1e-8:
         raise ValueError('Reference plus correlation correction does not equal the total')
     checks['energy_sum_max_error_hartree'] = error
+    model = {'basis': electronic['basis'], 'auxiliary_basis': s['auxiliary_basis'],
+             'integral_transform': 'RI', 'frozen_core': s['frozen_core'], 'frozen_core_electrons': frozen}
+    if s['method'] in NEVPT_METHODS:
+        model['contraction'] = 'strongly_contracted' if s['method'] == 'SC-NEVPT2' else 'fully_internally_contracted'
+        model['local_approximation'] = s['method'] == 'DLPNO-NEVPT2'
+    if s['method'] == 'DLPNO-NEVPT2':
+        model['pno_preset'] = s['pno_preset']
     return {'schema_version': 1, 'method': s['method'], 'geometry_mode': 'fixed', 'energy_unit': 'hartree',
             'reference_method': 'HF' if s['method'] == 'RI-MP2' else 'CASSCF',
             'states': sorted(rows, key=lambda r: (r['multiplicity'], r['root'])),
-            'model': {'basis': electronic['basis'], 'auxiliary_basis': s['auxiliary_basis'],
-                      'integral_transform': 'RI', 'frozen_core': s['frozen_core'], 'frozen_core_electrons': frozen},
+            'model': model,
             'checks': checks, 'provides_transition_amplitudes': False, 'dyson_compatible': False}
 
 
@@ -224,7 +284,7 @@ class CorrelationCalculation(engine.CalcJob):
         spec.input('metadata.options.parser_name', default='empa_orca.correlation')
         spec.input('metadata.options.withmpi', default=False)
         spec.output('correlation_energies', valid_type=orm.Dict)
-        spec.exit_code(310, 'ERROR_CORRELATION', message='Correlation/reference validation failed; inspect the native output.')
+        spec.exit_code(310, 'ERROR_CORRELATION', message='Correlation/reference validation failed: {reason}')
 
     def prepare_for_submission(self, folder):
         electronic = self.inputs.electronic_settings.get_dict()
@@ -286,4 +346,4 @@ class CorrelationParser(Parser):
             self.out('correlation_energies', orm.Dict(dict=data))
         except (KeyError, ValueError, OSError) as exc:
             self.logger.error(str(exc))
-            return self.exit_codes.ERROR_CORRELATION
+            return self.exit_codes.ERROR_CORRELATION.format(reason=str(exc))

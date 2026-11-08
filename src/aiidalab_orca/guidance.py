@@ -45,8 +45,8 @@ def workflow_guides():
         'text': files('aiidalab_orca').joinpath('knowledge/casci-kondo.md').read_text(),
     }, {
         'id': 'orca.correlation',
-        'title': 'ORCA RI-MP2 and SC-NEVPT2 energy routes',
-        'topics': ['orca', 'mp2', 'nevpt2', 'correlation', 'frozen core', 'casscf'],
+        'title': 'ORCA RI-MP2 and SC/FIC/DLPNO-NEVPT2 energy routes',
+        'topics': ['orca', 'mp2', 'nevpt2', 'fic', 'dlpno', 'correlation', 'frozen core', 'casscf'],
         'source': 'aiidalab_orca/knowledge/correlation.md',
         'text': files('aiidalab_orca').joinpath('knowledge/correlation.md').read_text(),
     }, {

@@ -37,9 +37,15 @@ class CorrelationResults(ipw.VBox):
                 f'pure-spin target = {check["hf_target_spin_squared"]:.6f}. '
                 'Assess the reference spin contamination when interpreting MP2 energies.</p>')
         diagnostics += '</p>'
+        model_note = ''
+        if data['model'].get('pno_preset'):
+            model_note = '<p><b>DLPNO approximation:</b> ' + html.escape(data['model']['pno_preset']) + \
+                '; the parent method is FIC-NEVPT2.</p>'
+            diagnostics += '<p>Native PNO thresholds: ' + html.escape(json.dumps(check['native_pno_thresholds'])) + \
+                f'. Checked amplitude solves: {check["amplitude_solves_checked"]}.</p>'
         encoded = base64.b64encode(json.dumps(data, indent=2).encode()).decode()
         download = f'<a download="correlation-energies.json" href="data:application/json;base64,{encoded}">Download energies and provenance</a>'
-        super().__init__([ipw.HTML(f'<h4>{html.escape(method)} · validated energy results</h4>' + table + spin_note),
+        super().__init__([ipw.HTML(f'<h4>{html.escape(method)} · validated energy results</h4>' + model_note + table + spin_note),
             self.energy_kind, self.plot, ipw.HTML('<details><summary>Model and automatic checks</summary><p>'
                 f'Frozen core: {data["model"]["frozen_core_electrons"]} electrons. '
                 f'Basis: {html.escape(data["model"]["basis"])}; auxiliary: {html.escape(data["model"]["auxiliary_basis"])}.'
@@ -92,8 +98,15 @@ class CorrelationEnergies(ipw.VBox):
         self.plan, self.process_uuid, self._poll_task = None, None, None
         self._disposed = False
         style = {'description_width': 'initial'}
-        self.method = ipw.ToggleButtons(options=[('HF → RI-MP2', 'RI-MP2'), ('CASSCF → SC-NEVPT2', 'SC-NEVPT2')],
+        self.method = ipw.ToggleButtons(options=[('HF → RI-MP2', 'RI-MP2'), ('CASSCF → NEVPT2', 'SC-NEVPT2')],
             style={'button_width': 'auto'})
+        self.nevpt = ipw.Dropdown(description='NEVPT2 method', options=[
+            ('SC-NEVPT2 · strongly contracted', 'SC-NEVPT2'),
+            ('FIC-NEVPT2 · fully internally contracted', 'FIC-NEVPT2'),
+            ('DLPNO-NEVPT2 · local approximation to FIC', 'DLPNO-NEVPT2')], style=style,
+            layout=ipw.Layout(width='95%', display='none'))
+        self.pno = ipw.Dropdown(description='PNO accuracy', options=['NormalPNO', 'TightPNO'], style=style,
+            layout=ipw.Layout(display='none'))
         self.reference = ipw.Dropdown(description='Verified CASSCF', options=[('Select a reference', None)], style=style,
                                        layout=ipw.Layout(width='95%'))
         self.prepare = ipw.Button(description='Prepare / inspect a CASSCF reference', icon='arrow-right',
@@ -127,9 +140,11 @@ class CorrelationEnergies(ipw.VBox):
             layout=ipw.Layout(flex_flow='row wrap')), self.review_text])
         super().__init__([ipw.HTML('<h3>Correlation energies</h3><p>Choose the route matching your reference. '
             'Each calculation keeps this geometry fixed and stores its reference energy, correlation correction '
-            'and total energy separately.</p>'), self.method, self.reference, self.prepare, self.notice,
+            'and total energy separately.</p>'), self.method, self.nevpt, self.pno, self.reference, self.prepare, self.notice,
             self.form, self.message, self.refresh, self.saved, self.output])
         self.method.observe(self._source_changed, names='value')
+        self.nevpt.observe(self._source_changed, names='value')
+        self.pno.observe(self._invalidate, names='value')
         self.reference.observe(self._source_changed, names='value')
         for control in (self.frozen, self.nprocs, self.memory, self.wall, self.aux, self.force):
             control.observe(self._invalidate, names='value')
@@ -139,24 +154,34 @@ class CorrelationEnergies(ipw.VBox):
     def _source(self):
         return self.entry_uuid if self.method.value == 'RI-MP2' else self.reference.value
 
+    def _method(self):
+        return 'RI-MP2' if self.method.value == 'RI-MP2' else self.nevpt.value
+
     def _source_changed(self, _=None):
         self._invalidate()
-        nevpt = self.method.value == 'SC-NEVPT2'
+        nevpt = self._method() != 'RI-MP2'
+        self.nevpt.layout.display = '' if nevpt else 'none'
+        self.pno.layout.display = '' if self._method() == 'DLPNO-NEVPT2' else 'none'
         self.reference.layout.display = '' if nevpt else 'none'
         self.prepare.layout.display = '' if nevpt else 'none'
         self.aux.disabled = nevpt
         try:
             if not self._source():
                 raise ValueError('First prepare CASSCF, inspect its optimized orbitals, then select that verified reference here.')
-            effective = service.defaults(self._source(), self.method.value)
+            effective = service.defaults(self._source(), self._method())
             self.nprocs.value, self.memory.value = effective['nprocs'], effective['memory_mb']
             self.wall.value, self.aux.value = max(1, effective['wallclock_seconds'] // 60), effective['auxiliary_basis']
             self.form.layout.display = ''
             self.notice.value = ('<p><b>Fixed CASSCF reference.</b> The active space, spin/root families and weights '
-                'are inherited. Standard per-state canonicalization is used for the correction; there is no new '
+                'are inherited. The correction uses per-state canonicalization; there is no new '
                 'orbital optimization. Its auxiliary basis must match the CASSCF integral model.</p>') if nevpt else (
                 '<p><b>Fresh HF reference.</b> Converge RHF for a singlet or UHF for an open shell, then compute RI-MP2. '
                 'The selected geometry, charge and basis are retained. Existing DFT/CAS orbitals are not read as a frozen MP2 reference.</p>')
+            if self._method() == 'FIC-NEVPT2':
+                self.notice.value += '<p>FIC uses a different contraction from SC. Treat their energy differences as method differences.</p>'
+            elif self._method() == 'DLPNO-NEVPT2':
+                self.notice.value += ('<p>DLPNO approximates FIC to reduce cost. Check PNO sensitivity against FIC where feasible; '
+                    'a preset is not a universal error bound. Intrinsic PNO construction is part of this method.</p>')
             self.notice.value += '<p>Small energy/log outputs are retrieved; full electronic files stay on the calculation computer.</p>'
         except (ValueError, KeyError, OSError) as exc:
             self.form.layout.display = 'none'
@@ -170,17 +195,20 @@ class CorrelationEnergies(ipw.VBox):
             self.review_text.value = ''
 
     def _values(self):
-        return {'frozen_core': self.frozen.value, 'nprocs': self.nprocs.value,
+        values = {'frozen_core': self.frozen.value, 'nprocs': self.nprocs.value,
                 'memory_mb': self.memory.value, 'wallclock_seconds': self.wall.value * 60,
                 'auxiliary_basis': self.aux.value.strip()}
+        if self._method() == 'DLPNO-NEVPT2':
+            values['pno_preset'] = self.pno.value
+        return values
 
     def _review(self, _=None):
         self._invalidate()
         try:
-            self.plan = service.review(self._source(), self.method.value, self._values(), self.force.value)
+            self.plan = service.review(self._source(), self._method(), self._values(), self.force.value)
             p = self.plan
             reference = p['reference_summary']
-            if p['method'] == 'SC-NEVPT2':
+            if p['method'] != 'RI-MP2':
                 space = reference['active_space']
                 source = f'CAS({space["electrons"]},{len(space["orbitals"])}) · ' + '; '.join(
                     f'multiplicity {r["multiplicity"]}, root {r["root"]}, weight {r["averaging_weight"]:.4g}'
@@ -192,6 +220,8 @@ class CorrelationEnergies(ipw.VBox):
                 f'{p["settings"]["wallclock_seconds"] // 60} minutes.</p>'
                 f'<p>{html.escape(source)}. Frozen core: {"chemical core" if p["settings"]["frozen_core"] else "none"}.</p>'
                 '<details><summary>Review native input</summary><pre>' + html.escape(p['input']) + '</pre></details>')
+            if p['method'] == 'DLPNO-NEVPT2':
+                self.review_text.value += '<p>Local FIC approximation: ' + html.escape(p['settings']['pno_preset']) + '.</p>'
             self.message.value = ''
             self.submit.disabled = False
         except (ValueError, KeyError, OSError, RuntimeError) as exc:
@@ -222,7 +252,7 @@ class CorrelationEnergies(ipw.VBox):
 
     def _history(self):
         previous = self.saved.value
-        rows = service.history(self._source(), self.method.value) if self._source() else []
+        rows = service.history(self._source(), self._method()) if self._source() else []
         self.saved.options = [('Select a calculation', None), *rows]
         self.saved.value = previous if previous in [uid for _, uid in rows] else rows[0][1] if rows else None
         self._selected()

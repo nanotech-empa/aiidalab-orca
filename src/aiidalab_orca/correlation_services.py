@@ -27,7 +27,7 @@ def context(source_uuid, method):
     if method == 'RI-MP2':
         n = source_node(source_uuid)
         return n.inputs.settings.get_dict(), None
-    if (method != 'SC-NEVPT2' or n.process_type != 'aiida.workflows:empa_orca.casscf'
+    if (method not in correlation.NEVPT_METHODS or n.process_type != 'aiida.workflows:empa_orca.casscf'
             or not n.is_finished_ok):
         raise ValueError('Select a verified CASSCF calculation before NEVPT2')
     ref = n.outputs.orbital_reference.get_dict()
@@ -70,7 +70,7 @@ def review(source_uuid, method, values, force=False):
         if old_key == key and (not old.is_terminated or old.is_finished_ok):
             reuse = str(uid)
             break
-    if method == 'SC-NEVPT2' and reuse is None:
+    if reference and reuse is None:
         resolve_electronic(n.outputs.remote_folder, names=['aiida.gbw'])
     if n.inputs.code.computer.label == 'tigu' and effective['nprocs'] > 12:
         raise ValueError('Use at most 12 processes per tigu submission')

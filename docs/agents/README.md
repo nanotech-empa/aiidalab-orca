@@ -47,6 +47,10 @@ The standard quantum-assisted energy
 route is covered by `orca.quantum-energy`; separate QPU/DMRG research extensions
 must not be disturbed by navigation.
 
+For the DMRG convergence research route, read [checkpoint and restart rules](../dmrg.md)
+before resuming a job. New MPS checkpoints stay remote; historical paused jobs
+retain their old retrieval plans and require a new continuation to adopt this policy.
+
 The [correlation-energy guide](../correlation.md), available as
 `orca.correlation`, describes fresh-HF RI-MP2 and verified-CASSCF NEVPT2/CASPT2,
 including explicit CASPT2 shifts and reference-weight/residual diagnostics.

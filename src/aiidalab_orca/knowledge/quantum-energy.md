@@ -218,3 +218,12 @@ Use the relevant official page for a scientific detail beyond these operating
 instructions. Do not claim a fresh literature/web search unless the current
 agent has actually retrieved the source. This guide supplies guidance, not
 calculation authorization or additional tool capabilities.
+
+
+For native DMRG convergence, consult the app's `docs/dmrg.md` before resuming.
+New MPS checkpoints stay on the calculation computer and restart through
+same-computer copies with SHA256 checks; only compact arrays, manifests and
+bounded output are retrieved. Existing paused jobs retain their immutable
+retrieval plans: adopting the remote policy requires a new linked continuation.
+Never clean a remote MPS directory that is still needed. Complete sweeps at
+fixed M before increasing M; interrupted checkpoints are not validated states.

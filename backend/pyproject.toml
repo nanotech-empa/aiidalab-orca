@@ -24,6 +24,7 @@ orca-dyson = "aiida_empa_orca.dyson_tools:main"
 orca-tools = "aiida_empa_orca.tools:main"
 
 [project.entry-points."aiida.calculations"]
+"empa_orca.dmrg" = "aiida_empa_orca.dmrg:DmrgCalculation"
 "empa_orca.optical" = "aiida_empa_orca.optical:OpticalCalculation"
 "empa_orca.correlation" = "aiida_empa_orca.correlation:CorrelationCalculation"
 "empa_orca.casscf" = "aiida_empa_orca.casscf:CasscfCalculation"
@@ -50,6 +51,7 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.calculation:SinglePointCalculation"
 
 [project.entry-points."aiida.parsers"]
+"empa_orca.dmrg" = "aiida_empa_orca.dmrg:DmrgParser"
 "empa_orca.optical" = "aiida_empa_orca.optical:OpticalParser"
 "empa_orca.correlation" = "aiida_empa_orca.correlation:CorrelationParser"
 "empa_orca.casscf" = "aiida_empa_orca.casscf:CasscfParser"
@@ -75,6 +77,9 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.parser:SinglePointParser"
 
 [project.entry-points."aiida.workflows"]
+"empa_orca.dmrg_sweeps" = "aiida_empa_orca.dmrg_workchain:DmrgSweepConvergenceWorkChain"
+"empa_orca.dmrg_convergence" = "aiida_empa_orca.dmrg_workchain:DmrgConvergenceWorkChain"
+"empa_orca.dmrg_timeout_recovery" = "aiida_empa_orca.dmrg_recovery:DmrgTimeoutRecoveryWorkChain"
 "empa_orca.nto_cubes" = "aiida_empa_orca.optical:NtoCubesWorkChain"
 "empa_orca.casscf" = "aiida_empa_orca.casscf:CasscfWorkChain"
 "empa_orca.energy_export" = "aiida_empa_orca.energy:EnergyExportWorkChain"

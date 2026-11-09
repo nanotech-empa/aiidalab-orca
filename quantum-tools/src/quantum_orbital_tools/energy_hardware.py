@@ -8,6 +8,7 @@ are accepted as molecular data.
 import hashlib
 import json
 import os
+import stat
 from pathlib import Path
 import uuid
 
@@ -19,9 +20,19 @@ def connect():
     from qiskit_ibm_runtime import QiskitRuntimeService
 
     name = os.environ.get("QUANTUM_ENERGY_ACCOUNT")
+    if name:
+        return QiskitRuntimeService(name=name)
+    # The app configures only its own host. Remote workers use their own files.
+    config = Path.home() / '.config' / 'aiidalab-orca' / 'qpu.json'
+    account_file = Path.home() / '.qiskit' / 'qiskit-ibm.json'
+    for path in (config, account_file):
+        if (path.is_symlink() or not path.is_file() or path.stat().st_uid != os.getuid()
+                or stat.S_IMODE(path.stat().st_mode) != 0o600):
+            raise ValueError('Configure QPU credentials on the hardware worker')
+    name = json.loads(config.read_text()).get('ibm_account')
     if not name:
-        raise ValueError("Configure QUANTUM_ENERGY_ACCOUNT on the hardware worker")
-    return QiskitRuntimeService(name=name)
+        raise ValueError('Select a saved QPU account on the hardware worker')
+    return QiskitRuntimeService(name=name, filename=str(account_file))
 
 
 def instance_reference(service):

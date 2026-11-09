@@ -216,15 +216,22 @@ orbital-reordering control is not implemented by preview selection.
    Inspect sector electron counts (4 and 2) and valid/skipped combinations.
    This review alone must submit nothing.
 4. For one actual batch test select charges `-1 +1`, multiplicity **1**, three
-   states. Set **one process, 1 GiB per job** before review. Submit the two-job
-   batch and wait for both children before any other calculation.
+   states. Keep **2 processes, 2 GiB and 10 minutes per sector**, **Leave full
+   files** and `maxsizeoutput` **5 MiB**. Review must specify sequential execution.
+   Submit the two-sector batch once; record its batch UUID and verify the second
+   sector remains queued until the first terminates. Wait for both before another
+   calculation. The AiiDA queue continues if the browser closes. Reopening and
+   reviewing while it is active must follow the existing batch and block another
+   submission.
 5. Request multiplicity **3** for each of charges **-1** and **+1**, one request
    at a time, three states each, using local limits. Reuse matching results if offered.
 6. Open the many-electron diagram, select a different **Energy zero**, change
    the plotted range, and inspect one root from each charge/spin column.
 
 **PASS:** state/sector counts and reductions are explicit, each calculation
-retains its input, and all plotted energies share the selected zero. These are
+retains its input, sectors and their CalcJobs do not overlap (including after a
+failed sector), repeated Submit cannot duplicate the batch, and all plotted
+energies share the selected zero. These are
 many-electron energies, not KS orbital energies. No Hamiltonian export is needed.
 
 ## L08 — Dyson coefficients, linked spectra and maps

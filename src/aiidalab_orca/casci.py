@@ -21,6 +21,7 @@ class CasciStates(ipw.VBox):
         self._poll_task = None
         self._batch_task = None
         self._batch_jobs = []
+        self._batch_uuid = None
         self._execution_context = None
         self._diagram = None
         self._inspection = None
@@ -377,6 +378,8 @@ class CasciStates(ipw.VBox):
             self._error(exc)
 
     def _review_casci(self, _=None):
+        if self._running:
+            return
         self._invalidate()
         try:
             if not self.reference.value:
@@ -390,6 +393,8 @@ class CasciStates(ipw.VBox):
                 charges,multiplicities,values,self.force.value,native_output_policy=self.full_files.values())
             self.batch_review.value = casci_batch.review_html(self.plan,self._execution_context)
             self.submit.disabled = self._running or not self.plan['ready']
+            if self.plan.get('active_batch_uuid'):
+                self._watch_batch(self.plan['active_batch_uuid'])
         except Exception as exc:
             self._error(exc)
 
@@ -401,71 +406,67 @@ class CasciStates(ipw.VBox):
             self._launch(service.submit_common)
 
     def _submit_casci(self, _=None):
-        if not self.plan or self.plan.get('kind') != 'casci-batch' or self.submit.disabled:
+        if self._running or not self.plan or self.plan.get('kind') != 'casci-batch' or self.submit.disabled:
             return
         plan,self.plan = self.plan,None
         self.submit.disabled,self.common_submit.disabled,self._running = True,True,True
-        self._batch_jobs = []
-        stopped = False
-        for row in plan['rows']:
-            if row['status'] not in ('compute','reuse','running'):
-                continue
-            record = {'charge':row['charge'],'multiplicity':row['multiplicity'],
-                      'uuid':None,'state':'not submitted','finished':True,'success':False,'message':''}
-            self._batch_jobs.append(record)
-            if stopped:
-                continue
-            try:
-                if row['status'] == 'compute':
-                    uuid = service.submit_casci(row['plan'])
-                    record.update(uuid=str(uuid),state='submitted',finished=False)
-                else:
-                    record.update(uuid=row['uuid'],state='reused' if row['status']=='reuse' else 'already running',
-                                  finished=row['status']=='reuse',success=row['status']=='reuse')
-            except Exception as exc:
-                record.update(state='submission failed',message=str(exc))
-                stopped = True
+        try:
+            self._watch_batch(service.submit_casci_batch(plan))
+        except Exception as exc:
+            self._running = False
+            self._error(exc)
+
+    def _watch_batch(self, uuid):
+        self._batch_uuid = str(uuid)
+        self._running = True
+        self.submit.disabled,self.common_submit.disabled = True,True
+        try:
+            info = service.casci_batch_progress(self._batch_uuid)
+        except Exception as exc:
+            info = {'finished':False, 'sectors':[]}
+            self.message.value = '<p>Status unavailable; serial batch continues in AiiDA: '+html.escape(str(exc))+'</p>'
+        self._batch_jobs = info['sectors']
         self._batch_status()
-        if any(not row['finished'] for row in self._batch_jobs):
-            try:
-                if self._batch_task:
-                    self._batch_task.cancel()
-                self._batch_task = asyncio.get_running_loop().create_task(self._poll_batch())
-            except RuntimeError:
-                self._running = False
-        else:
+        if self._batch_task:
+            self._batch_task.cancel()
+        if info['finished']:
             self._running = False
             self._refresh()
+        else:
+            try:
+                self._batch_task = asyncio.get_running_loop().create_task(self._poll_batch())
+            except RuntimeError:
+                # The queue belongs to the daemon and continues without this view.
+                pass
 
     def _batch_status(self):
         rows = data_table(['Charge','Multiplicity','Status','Calculation UUID','Details'],[
             [f'{row["charge"]:+d}',row['multiplicity'],row['state'],row['uuid'] or '—',row['message']]
             for row in self._batch_jobs],numeric_columns=(0,1),label='Batch calculation status')
-        self.batch_status.value = ('<h4>Reviewed batch</h4><p>Submitted calculations continue in AiiDA '
-            'if this page is closed. A submission error stops the remaining requests; completed submissions are retained.</p>'
-            +rows)
+        self.batch_status.value = ('<h4>Reviewed serial batch</h4><p>Batch <code>'+
+            html.escape(self._batch_uuid or '')+'</code>. Sectors run one at a time in AiiDA, including '
+            'after this page closes. Failed sectors retain their diagnostics; the next sector waits for '
+            'termination. A submission error stops the remaining queue without automatic retries.</p>'+rows)
 
     async def _poll_batch(self):
         try:
-            while True:
-                changed = False
-                for row in self._batch_jobs:
-                    if row['finished']:
-                        continue
-                    try:
-                        data = service.progress(row['uuid'])
-                        row.update(state=data['state'],finished=data['finished'],success=data['success'],
-                                   message=data['message'])
-                        changed = changed or data['finished']
-                    except Exception as exc:
-                        row['message'] = 'Status unavailable: '+str(exc)
-                self._batch_status()
-                if changed:
-                    self._refresh_runs()
-                    self._refresh_diagram()
-                if all(row['finished'] for row in self._batch_jobs):
-                    self._running = False
-                    return
+            while self._batch_uuid:
+                try:
+                    info = service.casci_batch_progress(self._batch_uuid)
+                    changed = info['sectors'] != self._batch_jobs
+                    self._batch_jobs = info['sectors']
+                    self._batch_status()
+                    if changed:
+                        self._refresh_runs()
+                        self._refresh_diagram()
+                    if info['finished']:
+                        self._running = False
+                        self._refresh_runs()
+                        self._refresh_diagram()
+                        return
+                except Exception as exc:
+                    # Keep submission locked while the daemon's queue may be active.
+                    self.message.value = '<p>Status unavailable; serial batch continues in AiiDA: '+html.escape(str(exc))+'</p>'
                 await asyncio.sleep(3)
         except asyncio.CancelledError:
             pass

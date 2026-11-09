@@ -83,7 +83,9 @@ resources and other execution errors block the batch rather than masquerading
 as forbidden spin combinations.
 
 The summary includes each generated ORCA input, job count and per-job resources.
-Jobs may run concurrently. Submission starts only after the reviewed action is
+The reviewed sectors run sequentially in a persistent AiiDA batch, one at a time.
+Each waits for the previous workflow and its CalcJobs to terminate, including
+failed sectors; the queue continues after closing the browser. Submission starts only after the reviewed action is
 clicked. If one submission fails, the remaining requests stop; accepted UUIDs
 remain visible and those calculations continue. Closing the page stops its
 status polling, not the AiiDA calculations. Browsing saved charges/calculations

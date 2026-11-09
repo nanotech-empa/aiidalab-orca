@@ -51,6 +51,7 @@ def prepare_batch(reference_uuid, electrons, norb, charges, multiplicities, valu
                   *, native_output_policy=None):
     from . import casci_services as service
     reference = service.reference_data(reference_uuid)
+    active_batch = service.active_casci_batch(reference_uuid)
     space, rows = sector_requests(reference,electrons,norb,charges,multiplicities,values['nroots'])
     running = [row for row in service.runs(reference_uuid)
                if row['state'] in ('created','running','waiting')]
@@ -60,6 +61,10 @@ def prepare_batch(reference_uuid, electrons, norb, charges, multiplicities, valu
         settings = dict(values,charge=row['charge'],multiplicity=row['multiplicity'],nroots=row['nroots'])
         try:
             checked = casci.casci_settings(settings,reference,space)
+            row['settings'] = checked
+            if active_batch:
+                row.update(status='blocked',reason='Wait for the active serial batch '+active_batch)
+                continue
             current = None
             if not force:
                 for run in running:
@@ -77,7 +82,7 @@ def prepare_batch(reference_uuid, electrons, norb, charges, multiplicities, valu
                 row['uuid'] = plan['reuse_uuid']
         except (ValueError,KeyError,OSError,RuntimeError) as exc:
             row.update(status='blocked',reason=str(exc))
-    return {'kind':'casci-batch','reference_uuid':reference_uuid,'active_space':space,'rows':rows,
+    return {'kind':'casci-batch','active_batch_uuid':active_batch,'reference_uuid':reference_uuid,'active_space':space,'rows':rows,
             'resources':{name:values[name] for name in ('nprocs','memory_mb','wallclock_seconds')},
             'native_output_policy': native_output_policy,
             'ready':any(row['status'] in ('compute','reuse','running') for row in rows) and
@@ -108,13 +113,17 @@ def review_html(plan, execution=None):
     if policy:
         retention = ('Stash full logs and wavefunctions at ' + html.escape(policy['stash_directory'])
                      if policy['mode'] == 'stash' else 'Leave full logs and wavefunctions on the calculation computer')
+        maximum = policy.get('maxsizeoutput', 5 * 1024**2) / 1024**2
         retention = ('<p><b>Full files for new calculations:</b> '+retention+
-                     '. Only compact results are retrieved. Reused/running results keep their recorded retention.</p>')
+                     f'. Native text output up to {maximum:g} MiB is retrieved unchanged; larger output uses a validation extract. '
+                     'Reused/running results keep their recorded retention.</p>')
     return (f'<p><b>{count} new calculations; {reuse} reused; {running} already running; '
             f'{skipped} incompatible combinations skipped.</b></p>'
             +target+
             f'<p>Per new calculation: {resources["nprocs"]} processes, {memory_label(resources["memory_mb"])} total memory, '
-            f'{resources["wallclock_seconds"]//60} minutes wall time. New calculations may run concurrently. '
+            f'{resources["wallclock_seconds"]//60} minutes wall time. Sectors run sequentially, one at a time, in a persistent AiiDA batch. '
+            'Each sector waits for the previous workflow and its CalcJobs to terminate, including failures. '
+            'A submission error stops the remaining queue without automatic retries. '
             'All use the same fixed geometry and spatial-orbital reference. '
             'Review any reduction in the number of states before submitting.</p>'
             +retention+table+previews)

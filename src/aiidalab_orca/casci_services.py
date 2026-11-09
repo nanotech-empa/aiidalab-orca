@@ -193,3 +193,59 @@ def runs(reference_uuid):
                        'date':run.ctime.isoformat(), 'space':run.inputs.active_space.get_dict(),
                        'settings':run.inputs.settings.get_dict()})
     return result
+
+
+def active_casci_batch(reference_uuid):
+    from aiida_empa_orca.casci_batch import PROCESS_TYPE
+    ref = orm.load_node(reference_uuid).outputs.orbital_reference
+    rows = orm.QueryBuilder().append(orm.Dict, filters={'uuid':str(ref.uuid)}, tag='ref').append(
+        orm.WorkChainNode, with_incoming='ref', edge_filters={'label':'orbital_reference'}, tag='batch',
+        filters={'process_type':PROCESS_TYPE, 'attributes.process_state':{'!in':['finished','excepted','killed']}},
+        project='uuid').order_by({'batch':{'ctime':'desc'}}).all(flat=True)
+    return str(rows[0]) if rows else None
+
+
+def casci_batch_builder(plan):
+    from aiida_empa_orca.casci_batch import CasciBatchWorkChain
+    if not plan['ready']:
+        raise ValueError('Review a valid batch before submission')
+    if active_casci_batch(plan['reference_uuid']):
+        raise ValueError('A serial batch is already active for these orbitals; review to follow it')
+    node = orm.load_node(plan['reference_uuid'])
+    b = CasciBatchWorkChain.get_builder()
+    b.orbital_reference, b.source_remote = node.outputs.orbital_reference, node.outputs.remote_folder
+    b.active_space = orm.Dict(dict=plan['active_space'])
+    b.code, b.storage_code, b.storage_policy = node.inputs.code, node.inputs.storage_code, node.inputs.storage_policy
+    b.native_output_policy = orm.Dict(dict=output_policy(plan.get('native_output_policy')))
+    rows = [row for row in plan['rows'] if row['status'] in ('compute','reuse','running')]
+    b.requests = orm.List(list=[{'settings':row['settings'], 'action':row['status'], 'uuid':row.get('uuid')}
+                               for row in rows])
+    b.force_recompute = orm.Bool(any(row.get('plan',{}).get('force_recompute',False) for row in rows))
+    b.metadata.label = f"Sequential CASCI batch · {len(rows)} charge/spin sectors"
+    return b
+
+
+def submit_casci_batch(plan):
+    return str(submit(casci_batch_builder(plan)).uuid)
+
+
+def casci_batch_progress(uuid):
+    from aiida.common import LinkType
+    node = orm.load_node(uuid)
+    if 'report' in node.outputs:
+        rows = node.outputs.report.get_dict()['sectors']
+    else:
+        calls = {x.link_label:str(x.node.uuid) for x in node.base.links.get_outgoing(link_type=LinkType.CALL_WORK).all()}
+        rows = []
+        for index, request in enumerate(node.inputs.requests.get_list()):
+            child = calls.get(f'sector_{index:04d}') or request.get('uuid')
+            row = {'charge':request['settings']['charge'], 'multiplicity':request['settings']['multiplicity'],
+                   'uuid':child, 'state':'queued', 'finished':False, 'success':False, 'message':''}
+            if child:
+                info = progress(child)
+                row.update({key:info[key] for key in ('state','finished','success','message')})
+            elif node.is_terminated:
+                row.update(state='not submitted',finished=True,message=node.exit_message or 'Batch terminated')
+            rows.append(row)
+    return {'uuid':str(uuid), 'state':node.process_state.value, 'finished':node.is_terminated,
+            'success':node.is_finished_ok, 'message':node.exit_message or '', 'sectors':rows}

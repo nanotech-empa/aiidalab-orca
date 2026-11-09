@@ -229,10 +229,11 @@ class PdosPanel(ipw.VBox):
                 total_color = palette[spin] if len(m['channels']) > 1 else '#a6afb9'
                 curves.append(('Total · '+channel, total_color, '5 4', gaussian_dos(energies[mask], np.ones(mask.sum()), grid, self.width.value)))
                 if self.mode.value == 'angular':
-                    for angular, color in zip(m['angular'], ['#7c7c89', '#2563b7', '#b17b1b', '#43836a', '#a45da5', '#866141', '#479e9e']):
+                    patterns = ['1 3', '', '8 3 1 3', '10 4', '8 3 1 3 1 3', '12 3 3 3', '12 3 3 3 3 3']
+                    for angular, dash in zip(m['angular'], patterns):
                         if selected[:, m['angular'].index(angular)].max() < 1e-12:
                             continue
-                        curves.append((angular+' · '+channel, color, '5 3' if spin else '',
+                        curves.append((angular+' · '+channel, palette[spin], dash,
                             gaussian_dos(energies[mask], selected[mask, m['angular'].index(angular)], grid, self.width.value)))
                 else:
                     weight = perp if self.mode.value == 'pi' else selected.sum(axis=1)
@@ -258,10 +259,13 @@ class PdosPanel(ipw.VBox):
             points = ' '.join(f'{xx(e):.2f},{yy(v):.2f}' for e, v in zip(grid, values))
             svg.append(f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="2" stroke-dasharray="{dash}"><title>{html.escape(label)}</title></polyline>')
         legend = []
-        for i, (label, color, dash, _) in enumerate(curves):
-            line_style = 'dashed' if dash else 'solid'
+        for label, color, dash, _ in curves:
+            # The SVG bridge makes all SVGs fluid; bound each sample with a fixed-size wrapper.
             legend.append(f'<span style="display:inline-flex;align-items:center;gap:5px;margin-right:14px">'
-                f'<span style="width:18px;border-top:2px {line_style} {color}"></span>{html.escape(label)}</span>')
+                '<span style="width:44px;height:12px;flex:0 0 44px">'
+                f'<svg xmlns="http://www.w3.org/2000/svg" width="44" height="12" viewBox="0 0 44 12" aria-hidden="true">'
+                f'<line x1="1" y1="6" x2="43" y2="6" stroke="{color}" stroke-width="2" '
+                f'stroke-dasharray="{dash}"/></svg></span>{html.escape(label)}</span>')
         xticks = np.unique(np.linspace(lo, hi, min(7, int(hi-lo) + 1)).round()) if natural else np.linspace(lo, hi, 6)
         for e in xticks:
             text = str(int(e)) if natural else f'{e:.2f}'
@@ -278,7 +282,9 @@ class PdosPanel(ipw.VBox):
                 f'stroke="{palette[int(a["spin"][i])]}" stroke-width="3"/>'
                 f'<rect x="{xx(energies[i])-4:.2f}" y="{y-2}" width="8" height="16" fill="transparent"/></g>')
         svg.append('<text x="70" y="363" font-size="11" fill="#667085">Click an orbital mark to inspect its character; choose multiple candidates in the list below.</text></svg>')
-        self.plot.value = '<div style="line-height:1.7">'+''.join(legend)+'</div>'+''.join(svg)
+        key = ('<p>Colour identifies spin; line pattern identifies orbital character.</p>'
+               if self.mode.value == 'angular' and not natural else '')
+        self.plot.value = key+'<div style="line-height:1.7">'+''.join(legend)+'</div>'+''.join(svg)
         self._selected_weights, self._perp = selected, perp
         previous = set(self.levels.value)
         self.levels.options = [(f"{m['channels'][int(a['spin'][i])]} MO {int(a['indices'][i])} · "

@@ -55,7 +55,9 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self.grid = ipw.BoundedIntText(value=80,min=40,max=256,description='Grid points/axis',style=style)
         self.retention = ipw.Dropdown(options=[('Stash full-resolution cubes','stash'),('Leave full cubes in calculation directory','leave'),
                     ('Delete full cubes after preview validation','delete')],value='stash',description='Full cubes',style=style,layout=wide)
-        self.stash = ipw.Text(value=property_services.default_stash_directory(),description='Cube stash directory',style=style,layout=wide)
+        # This field changes visibility; sharing its Layout would hide the menus too.
+        self.stash = ipw.Text(value=property_services.default_stash_directory(),description='Cube stash directory',
+                              style=style,layout=ipw.Layout(width='95%'))
         self.retention.observe(self._retention_changed,names='value')
         self.plot_code = ipw.Dropdown(options=choices['plot'],description='ORCA plot',style=style,layout=wide)
         self.cubehandler_code = ipw.Dropdown(options=choices['cubehandler'],description='Cubehandler',style=style,layout=wide)

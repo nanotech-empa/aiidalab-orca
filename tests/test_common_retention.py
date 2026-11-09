@@ -140,7 +140,8 @@ def test_preparation_retention_edits_require_a_new_review(monkeypatch):
     from test_result_navigation import reference_data
     monkeypatch.setattr(casci_services, 'reference_runs', lambda _:[])
     monkeypatch.setattr(casci_services, 'prepare_common', lambda uid, force, **kw:{
-        'action':'prepare','kind':'QRO','unavailable':[],'pdos':{'ready':True},**kw})
+        'action':'prepare','kind':'QRO','unavailable':[],
+        'pdos':{'ready':True,'memory_gib':2,'wallclock_seconds':600},**kw})
     panel = CasciStates(reference_data())
     try:
         panel.prepare.click()

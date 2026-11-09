@@ -120,7 +120,10 @@ GUI version before promising these entry points are present.
 
 The common-orbital selector chooses a prepared reference. To see orbital
 shapes, use **View orbitals and choose active space** beneath the preparation
-controls. In inspection, click **Read orbital information**, select orbitals,
+controls. Set **Prepared-orbital PDOS resources** before reviewing preparation;
+QRO and UNO character jobs run one at a time. In inspection, set **Catalog
+resources and export code**, then click **Review orbital information → Read
+orbital information**, select orbitals,
 then **Review orbital visualization → Generate orbital previews**. After
 completion, **Orbital to display** selects the 3D preview. Preview settings and
 file storage are optional advanced controls; no CASCI calculation is needed

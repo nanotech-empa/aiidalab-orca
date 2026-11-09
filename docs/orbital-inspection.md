@@ -5,10 +5,14 @@ orbital reference in **Analysis / results → 1. Prepare orbital reference**,
 then choose **2. Inspect / confirm active space**. The independent
 **Orbitals & density → QRO / UNO inspection** view remains available too.
 
-1. **Read orbital information** submits a small AiiDA workflow. It preserves
-   available orbital files and exports metadata using the registered
+1. Open **Catalog resources and export code** to set memory and wall time
+   (initially 2 GiB and 10 minutes). **Review orbital information** shows the
+   budget before **Read orbital information** submits a small AiiDA workflow.
+   It preserves available orbital files according to their storage policy and exports metadata using the registered
    `orca_2json` code. Existing durable metadata are reused. **Read metadata
-   again** in the advanced controls requests a new export.
+   again** in the same controls requests a new export. QRO and UNO exports and
+   compaction run serially in one CalcJob. Any required preservation precedes
+   export with the same budget.
 2. Choose **QRO** or **UNO**. The list, occupation plot and expandable table
    show the zero-based indices of that particular set. The JSON download
    records the original occupations, source file digest and reference UUID.
@@ -24,7 +28,10 @@ then choose **2. Inspect / confirm active space**. The independent
    Click **Review orbital visualization**, then
    **Generate orbital previews**. These actions are visible beside the orbital
    list; **Preview settings and file storage…** holds the optional grid/code
-   and retention controls. Once the job finishes, choose **Orbital to display**
+   and retention controls, including **Preview resources** (initially 2 GiB and
+   10 minutes). The review shows the selected limits. Editing a budget requires
+   a new review; wait for the current catalog/preview before another submission.
+   Once the job finishes, choose **Orbital to display**
    to show its shape in the 3D viewer.
    The configured `orca_plot` and cubehandler run through a CalcJob on the
    reference computer. The EMPA cube viewer provides isosurfaces, slices,
@@ -67,8 +74,8 @@ separate scientific extensions.
 ## Provenance, preservation and missing files
 
 New unrestricted common-orbital preparations preserve both `aiida.qro` and
-`aiida.uno` under the inherited SCF wavefunction policy: retrieve a small
-bundle, or use native AiiDA stashing above the threshold. Inspection of an
+`aiida.uno` under the selected Leave/Stash policy, keeping full electronic files
+outside the AiiDA repository. Inspection of an
 older preparation can separately preserve an existing UNO file without
 changing its common-orbital reference or existing CASCI states.
 
@@ -100,7 +107,7 @@ The new independent components are:
 Register **orca_2json** on the same computer as ORCA and `orca_plot`, with
 `default_calc_job_plugin='empa_orca.orbital_catalog'`. Point it at the utility
 from the matching ORCA installation. The inspection panel selects this code
-under **Inspection grid and codes**. The existing ORCA tools application code
+under **Catalog resources and export code**. The existing ORCA tools application code
 is resolved automatically; there is no Python executable selector or PythonJob.
 The remote ORCA tools installation must include this backend revision and its
 `compact_orbitals.py` script. Scheduler account/queue settings are inherited

@@ -44,7 +44,7 @@ def execution_details(uuid):
             **{key:settings[key] for key in ('nprocs','memory_mb','wallclock_seconds')}}
 
 
-def prepare_common(source_uuid, force=False, *, native_output_policy=None):
+def prepare_common(source_uuid, force=False, *, native_output_policy=None, pdos_memory_gib=8, pdos_wallclock_seconds=1800):
     retention = output_policy(native_output_policy)
     source = source_node(source_uuid)
     unavailable = []
@@ -64,7 +64,8 @@ def prepare_common(source_uuid, force=False, *, native_output_policy=None):
             'native_output_policy':retention,
             'kind':'QRO' if common_orbitals.orbital_filename(s).endswith('qro') else 'restricted',
             'force_recompute':bool(force), 'unavailable':unavailable,
-            'pdos':default_plan(source.inputs.code.computer.uuid)}
+            'pdos':default_plan(source.inputs.code.computer.uuid, memory_gib=pdos_memory_gib,
+                                wallclock_seconds=pdos_wallclock_seconds)}
 
 
 def common_builder(source_uuid, force=False, character_plan=None, *, native_output_policy=None):

@@ -170,12 +170,23 @@ to full cubes still needed by a map or another calculation.
 preparation/inspection and a small set of previews.
 
 1. Choose **CAS energy levels → 1. Prepare orbital reference** for L01.
-   Review and prepare the common orbitals. Record the prepared-reference UUID.
+   Keep the inherited preparation limits at 2 processes, 2 GiB and 10 minutes,
+   **Leave full files** and `maxsizeoutput` 5 MiB. Under **Prepared-orbital PDOS
+   resources**, set 2 GiB and 10 minutes. Review and prepare the common orbitals.
+   Check that the review specifies QRO, then UNO: one serial PDOS CalcJob at a
+   time, each with those limits. Wait for the whole preparation, including both
+   PDOS jobs, to finish. Record the prepared-reference UUID.
 2. Open **View orbitals and choose active space** / **2. Inspect / confirm active
-   space**. Read the orbital information through the visible review/submit action.
+   space**. In **Catalog resources and export code**, set 2 GiB and 10 minutes.
+   Click **Review orbital information**, verify one serial catalog CalcJob with
+   those limits, then **Read orbital information** once. Wait for completion.
 3. Inspect QRO and UNO tables separately. Generate previews for **two different
    frontier orbitals**, then switch between them: the selector must not always
-   display only the first stored orbital. Keep 80-point full grids external.
+   display only the first stored orbital. In **Preview settings and file
+   storage… → Preview resources**, set 2 GiB and 10 minutes; keep grid 80 and
+   **Leave full cubes**. Check the budget in **Review orbital visualization**
+   before **Generate orbital previews**. Wait for each workflow to finish before
+   requesting the other set. Keep full grids external.
 4. Inspect occupation labels and 3D character. UNO occupations are spin-summed
    natural occupations, not separate alpha/beta populations. Viewing UNOs does
    not by itself make them the chosen CAS reference.
@@ -185,7 +196,9 @@ preparation/inspection and a small set of previews.
 6. Confirm the active space explicitly; then open **3. Choose energy solver**.
 
 **PASS:** references, indices and occupations remain identifiable; confirmation
-is required before computation. CAS(3,3) is this test model, not a universal
+is required before computation. Reviews expose the selected helper limits;
+editing a budget invalidates its review and QRO/UNO PDOS jobs run sequentially.
+CAS(3,3) is this test model, not a universal
 recommended active space. If inspection does not support these orbital
 characters, stop rather than silently picking another space. A missing general
 orbital-reordering control is not implemented by preview selection.

@@ -9,7 +9,7 @@ from aiida.parsers import Parser
 
 from .artifacts import resolve_electronic, storage_builder
 from .orbitals import OrbitalCubesCalculation, attach_source, cube_parameters, validate_cube_outputs
-from .rendering import calcjob_options
+from .rendering import calcjob_options, helper_resources
 from .native_logs import output_policy
 
 CATALOG_PROCESS = 'aiida.workflows:empa_orca.orbital_catalog'
@@ -169,6 +169,8 @@ class OrbitalCatalogWorkChain(engine.WorkChain):
         for key,typ in {'orbital_reference':orm.Dict,'source_remote':orm.RemoteData,'export_code':orm.AbstractCode,
                         'storage_code':orm.AbstractCode,'storage_policy':orm.Dict}.items():
             spec.input(key,valid_type=typ)
+        spec.input('catalog_resources', valid_type=orm.Dict,
+                   default=lambda: orm.Dict(dict={'memory_mb': 2048, 'wallclock_seconds': 1800}))
         spec.input('force_recompute',valid_type=orm.Bool,default=lambda:orm.Bool(False))
         spec.input('retention_policy',valid_type=orm.Dict,default=lambda:orm.Dict(dict={'mode':'remote'}))
         spec.output('catalog',valid_type=orm.Dict)
@@ -180,6 +182,7 @@ class OrbitalCatalogWorkChain(engine.WorkChain):
     def setup(self):
         self.ctx.reuse_uuid, self.ctx.locations = None, {}
         try:
+            self.helper_options()
             ref = validate_reference(self.inputs.orbital_reference,self.inputs.source_remote)
             output_policy(self.inputs.retention_policy.get_dict())
             if any(self.inputs[key].computer.uuid != self.inputs.source_remote.computer.uuid
@@ -207,20 +210,26 @@ class OrbitalCatalogWorkChain(engine.WorkChain):
     def needs_execution(self):
         return self.ctx.reuse_uuid is None
 
+    def helper_options(self):
+        budget = helper_resources(self.inputs.catalog_resources.get_dict() if 'catalog_resources' in self.inputs else None)
+        return calcjob_options(self.inputs.source_remote, seconds=budget['wallclock_seconds'], memory_mb=budget['memory_mb'])
+
     def preserve(self):
-        pending = {}
         policy = output_policy(self.inputs.retention_policy.get_dict())
-        if policy['mode'] == 'remote':
+        names = [variants(self.inputs.orbital_reference.get_dict())[kind] for kind, location in self.ctx.locations.items()
+                 if location['kind'] == 'remote']
+        if policy['mode'] == 'remote' or not names:
             return engine.ToContext()
-        for kind,location in self.ctx.locations.items():
-            if location['kind'] == 'remote':
-                name = variants(self.inputs.orbital_reference.get_dict())[kind]
-                b = storage_builder(self.inputs.source_remote,self.inputs.storage_code,
-                                    {'threshold_mb':0,'stash_directory':policy['stash_directory']},names=[name])
-                pending['storage_'+kind] = self.submit(b)
-        return engine.ToContext(**pending)
+        b = storage_builder(self.inputs.source_remote, self.inputs.storage_code,
+                            {'threshold_mb': 0, 'stash_directory': policy['stash_directory']}, names=names)
+        for key, value in self.helper_options().items():
+            b.metadata.options[key] = value
+        # Preserve all available sets in one serial job, not concurrent per-set jobs.
+        return engine.ToContext(storage=self.submit(b))
 
     def export(self):
+        if 'storage' in self.ctx and not self.ctx.storage.is_finished_ok:
+            return self.exit_codes.ERROR_STORAGE
         for kind in self.ctx.locations:
             key = 'storage_'+kind
             if key in self.ctx and not self.ctx[key].is_finished_ok:
@@ -235,7 +244,7 @@ class OrbitalCatalogWorkChain(engine.WorkChain):
             locations[kind] = location
             b.sources[kind.lower()] = orm.load_node(location['uuid'])
         b.locations = orm.Dict(dict=locations)
-        b.metadata.options = calcjob_options(self.inputs.source_remote,seconds=1800)
+        b.metadata.options = self.helper_options()
         b.metadata.disable_cache = True
         return engine.ToContext(extraction=self.submit(b))
 
@@ -256,6 +265,8 @@ class CommonOrbitalCubesWorkChain(engine.WorkChain):
                         'orbital_kind':orm.Str,'parameters':orm.Dict,'storage_policy':orm.Dict,
                         'storage_code':orm.AbstractCode,'plot_code':orm.AbstractCode,'cubehandler_code':orm.AbstractCode}.items():
             spec.input(key,valid_type=typ)
+        spec.input('preview_resources', valid_type=orm.Dict,
+                   default=lambda: orm.Dict(dict={'memory_mb': 2048, 'wallclock_seconds': 3600}))
         spec.input('orbital_retention_policy',valid_type=orm.Dict,default=lambda:orm.Dict(dict={'mode':'remote'}))
         for key,typ in {'manifest':orm.Dict,'retrieved':orm.FolderData,'remote_folder':orm.RemoteData,
                         'remote_stash':orm.RemoteStashFolderData}.items():
@@ -267,6 +278,7 @@ class CommonOrbitalCubesWorkChain(engine.WorkChain):
     def setup(self):
         self.ctx.reuse_uuid = None
         try:
+            self.helper_options()
             validate_reference(self.inputs.orbital_reference,self.inputs.source_remote)
             data = self.inputs.catalog.get_dict()
             producer = self.inputs.catalog.creator
@@ -308,12 +320,20 @@ class CommonOrbitalCubesWorkChain(engine.WorkChain):
     def needs_execution(self):
         return self.ctx.reuse_uuid is None
 
+    def helper_options(self):
+        budget = helper_resources(self.inputs.preview_resources.get_dict() if 'preview_resources' in self.inputs else None,
+                                  default_seconds=3600)
+        return calcjob_options(self.inputs.source_remote, seconds=budget['wallclock_seconds'], memory_mb=budget['memory_mb'])
+
     def preserve(self):
         policy = output_policy(self.inputs.orbital_retention_policy.get_dict())
         if self.ctx.location['kind'] == 'remote' and policy['mode'] == 'stash':
             name = self.inputs.catalog.get_dict()['sets'][self.inputs.orbital_kind.value]['filename']
-            return engine.ToContext(storage=self.submit(storage_builder(self.inputs.source_remote,self.inputs.storage_code,
-                                       {'threshold_mb':0,'stash_directory':policy['stash_directory']},names=[name])))
+            b = storage_builder(self.inputs.source_remote, self.inputs.storage_code,
+                                {'threshold_mb': 0, 'stash_directory': policy['stash_directory']}, names=[name])
+            for key, value in self.helper_options().items():
+                b.metadata.options[key] = value
+            return engine.ToContext(storage=self.submit(b))
 
     def generate(self):
         if 'storage' in self.ctx and not self.ctx.storage.is_finished_ok:
@@ -334,7 +354,7 @@ class CommonOrbitalCubesWorkChain(engine.WorkChain):
             'orbital_reference_uuid':str(self.inputs.orbital_reference.uuid),
             'occupation_kind':selected['occupation_kind'], 'levels':selected['levels']})
         attach_source(b,location)
-        b.metadata.options = calcjob_options(self.inputs.source_remote,seconds=3600)
+        b.metadata.options = self.helper_options()
         if self.ctx.parameters['retention'] == 'stash':
             from .artifacts import stash_options
             b.metadata.options.stash = stash_options(self.ctx.parameters['stash_directory'],'full_cubes')

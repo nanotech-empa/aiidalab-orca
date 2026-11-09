@@ -39,6 +39,15 @@ class CasciStates(ipw.VBox):
                                         layout=ipw.Layout(width='auto'))
         self.common_submit.on_click(self._submit_common)
         self.common_force = ipw.Checkbox(value=False,description='Prepare a new common-orbital reference',layout=ipw.Layout(width='auto'))
+        self.common_pdos_memory = ipw.BoundedIntText(value=2, min=1, max=64,
+            description='PDOS memory (GiB)', style={'description_width': 'initial'})
+        self.common_pdos_wallclock = ipw.BoundedIntText(value=10, min=1, max=10080,
+            description='PDOS wall time (minutes)', style={'description_width': 'initial'})
+        self.common_pdos_resources = ipw.Accordion(children=[ipw.VBox([
+            self.common_pdos_memory, self.common_pdos_wallclock,
+            ipw.HTML('<p>Prepared orbital sets are analysed one at a time: QRO, then UNO. '
+                     'Any separate orbital-file preservation uses the same helper budget.</p>')])], selected_index=None)
+        self.common_pdos_resources.set_title(0, 'Prepared-orbital PDOS resources')
         common_options = ipw.Accordion(children=[ipw.VBox([self.common_force,ipw.HTML(
             '<p>Regenerate from the saved SCF wavefunction without SCF iterations. Existing CASCI states remain linked to their original reference.</p>')])],selected_index=None)
         common_options.set_title(0,'Common-orbital regeneration')
@@ -109,7 +118,7 @@ class CasciStates(ipw.VBox):
         self.common_preparation = ipw.VBox([
             ipw.HTML('<h4>Common spatial-orbital reference</h4><p>One shared set of spatial orbitals is used for all CASCI states and charge/spin sectors. '
                 'Preparing it reads the saved wavefunction without running a new SCF calculation.</p>'),
-            self.execution_info,self.common_full_files,self.prepare,self.common_submit,self.preparation_actions,common_options])
+            self.execution_info,self.common_full_files,self.common_pdos_resources,self.prepare,self.common_submit,self.preparation_actions,common_options])
         self.active_controls = ipw.HBox([self.electrons,self.norb],layout=ipw.Layout(flex_flow='row wrap'))
         self.sector_preparation = ipw.VBox([
             ipw.HTML('<h4>Add charge / spin sectors</h4>'),
@@ -145,7 +154,8 @@ class CasciStates(ipw.VBox):
             self.reference_controls, self.space_info, self.active_controls,
             self.analysis,self.states_view,self.dyson_box])
         for control in (self.electrons,self.norb,self.charge,self.mult,self.roots,self.aux,self.threshold,
-                        self.nprocs,self.memory,self.walltime,self.force,self.common_force):
+                        self.nprocs,self.memory,self.walltime,self.force,self.common_force,
+                        self.common_pdos_memory,self.common_pdos_wallclock):
             control.observe(self._invalidate,names='value')
         self.full_files.observe(self._invalidate, names='revision')
         self.common_full_files.observe(self._invalidate, names='revision')
@@ -341,7 +351,9 @@ class CasciStates(ipw.VBox):
         self._execution_text()
         try:
             self.plan = service.prepare_common(self.source_uuid,self.common_force.value,
-                                               native_output_policy=self.common_full_files.values())
+                                               native_output_policy=self.common_full_files.values(),
+                                               pdos_memory_gib=self.common_pdos_memory.value,
+                                               pdos_wallclock_seconds=self.common_pdos_wallclock.value * 60)
             text = ('Reuse preserved common orbitals.' if self.plan['action']=='reuse' else
                     'Read the saved SCF orbitals without SCF iterations; prepare '+self.plan['kind']+' spatial orbitals.')
             if self.plan['action'] != 'reuse':
@@ -349,7 +361,11 @@ class CasciStates(ipw.VBox):
                 destination = ('stashed at '+policy['stash_directory'] if policy['mode']=='stash'
                                else 'left on the calculation computer')
                 text += ' Full native logs and orbital files are '+destination+'; only compact results are retrieved.'
-                text += ' Orbital-character postprocessing is included for each newly prepared orbital set.'
+                pdos = self.plan['pdos']
+                order = 'QRO, then UNO' if self.plan['kind'] == 'QRO' else 'restricted orbitals'
+                text += (f" Orbital-character postprocessing: {order}; one serial CalcJob at a time, "
+                         f"{pdos['memory_gib']} GiB, up to {pdos['wallclock_seconds'] / 60:g} minutes per job. "
+                         'Any separate orbital-file preservation uses the same helper budget.')
                 if not self.plan.get('pdos', {}).get('ready'):
                     text += ' Its exporter or analysis worker is not configured; PDOS will be reported as unavailable.'
             if self.plan['unavailable']:

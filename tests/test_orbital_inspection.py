@@ -130,7 +130,7 @@ def test_common_preparation_preserves_uno_alongside_qro(common_reference,aiida_m
     process = instantiate_process(aiida_manager.get_runner(),b)
     def storage(remote,code,policy,*,names):
         captured.extend(names)
-        return SimpleNamespace()
+        return SimpleNamespace(metadata=SimpleNamespace(options={}))
     captured=[]
     monkeypatch.setattr(common_orbitals,'storage_builder',storage)
     process.ctx.preparation = creator
@@ -271,9 +271,9 @@ def test_invalid_typed_selection_cannot_review_submit_or_apply_previous_indices(
     monkeypatch.setattr(service,'codes',lambda _:{'export':[],'plot':[],'cubehandler':[]})
     monkeypatch.setattr(service,'cube_runs',lambda *_:[])
     reviewed,submitted,applied=[],[],[]
-    def review(*args):
+    def review(*args, **kwargs):
         reviewed.append(args[3]['orbitals'])
-        return {'action':'new'}
+        return {'action':'new', 'resources':kwargs['resources']}
     monkeypatch.setattr(service,'review_cubes',review)
     monkeypatch.setattr(service,'submit_cubes',lambda plan:submitted.append(plan))
     widget=OrbitalInspection('common',active_indices=[4,5],apply_window=applied.append)

@@ -101,6 +101,8 @@ class OrbitalCharacterMixin:
     def run_orbital_character(self):
         self.ctx.pdos_report = {'sets': {}}
         self.ctx.pdos_job_uuids = {}
+        self.ctx.pdos_queue = []
+        self.ctx.pdos_current_kind = None
         if not self.inputs.character_enabled.value:
             self.ctx.pdos_report['state'] = 'disabled'
             return
@@ -130,22 +132,43 @@ class OrbitalCharacterMixin:
             info = {'source_uuid': str(self.node.uuid), 'remote_uuid': str(remote.uuid),
                     'structure_uuid': structure_uuid, 'sets': sets,
                     'charge': settings['charge'], 'multiplicity': settings['multiplicity']}
-            for kind in sets:
-                try:
-                    b = character_builder(info, kind, plan['export_uuid'], plan['helper_uuid'], plan['memory_gib'],
-                                          wallclock_seconds=plan['wallclock_seconds'])
-                    b.metadata.call_link_label = 'orbital_character_' + kind.lower()
-                    job = self.submit(b)
-                    self.ctx.pdos_job_uuids[kind] = str(job.uuid)
-                    # Engine-owned awaitable, not an ORM object in application state.
-                    self.to_context(**{'pdos_wait_' + kind.lower(): job})
-                    self.report(f'Computing {kind} orbital character: {job.uuid}')
-                except (ValueError, OSError, KeyError, RuntimeError) as exc:
-                    self.ctx.pdos_report['sets'][kind] = {'state': 'unavailable', 'message': str(exc)}
-                    self.report(f'{kind} PDOS unavailable; electronic results are retained: {exc}')
+            self.ctx.pdos_info = info
+            self.ctx.pdos_plan = plan
+            self.ctx.pdos_queue = list(sets)
+            self.run_next_orbital_character()
         except (ValueError, OSError, KeyError, RuntimeError, AttributeError) as exc:
             self.ctx.pdos_report.update(state='unavailable', message=str(exc))
             self.report(f'PDOS unavailable; electronic results are retained: {exc}')
+
+    def has_pending_orbital_character(self):
+        return bool(self.ctx.get('pdos_current_kind') or self.ctx.get('pdos_queue'))
+
+    def inspect_serial_orbital_character(self):
+        kind = self.ctx.get('pdos_current_kind')
+        if kind and orm.load_node(self.ctx.pdos_job_uuids[kind]).is_terminated:
+            self.ctx.pop('pdos_wait_' + kind.lower(), None)
+            self.ctx.pdos_current_kind = None
+
+    def run_next_orbital_character(self):
+        if self.ctx.get('pdos_current_kind'):
+            return
+        while self.ctx.pdos_queue:
+            kind = self.ctx.pdos_queue.pop(0)
+            plan = self.ctx.pdos_plan
+            try:
+                b = character_builder(self.ctx.pdos_info, kind, plan['export_uuid'], plan['helper_uuid'],
+                                      plan['memory_gib'], wallclock_seconds=plan['wallclock_seconds'])
+                b.metadata.call_link_label = 'orbital_character_' + kind.lower()
+                job = self.submit(b)
+                self.ctx.pdos_job_uuids[kind] = str(job.uuid)
+                self.ctx.pdos_current_kind = kind
+                # Framework-owned awaitable; all application queue state is plain data.
+                self.to_context(**{'pdos_wait_' + kind.lower(): job})
+                self.report(f'Computing {kind} orbital character: {job.uuid}')
+                return
+            except (ValueError, OSError, KeyError, RuntimeError) as exc:
+                self.ctx.pdos_report['sets'][kind] = {'state': 'unavailable', 'message': str(exc)}
+                self.report(f'{kind} PDOS unavailable; electronic results are retained: {exc}')
 
     def inspect_orbital_character(self):
         report = self.ctx.pdos_report

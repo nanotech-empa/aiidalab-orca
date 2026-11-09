@@ -83,6 +83,15 @@ generate a preview if absent. Cubes are additional calculations, not new SCF
 optimizations. Full numerical cubes and reduced interactive previews have
 different roles and retention policies.
 
+The Kohn–Sham property panel displays the wavefunction's inherited remote/stash
+choice. It has no editable retrieval threshold. Full-cube stash/leave/delete is
+a separate choice and never deletes the source wavefunction. Historical files
+already in AiiDA remain usable; new electronic files from an older reference
+without a recorded native policy remain remote. If every electronic copy is
+missing, review the proposed SCF at the saved final geometry. Recovery uses the
+configured ORCA tools helper and the inherited policy. An inaccessible storage
+system requires retrying access, not assuming the files were deleted.
+
 For CASCI/Dyson/Kondo follow **1. Prepare orbital reference → 2. Inspect / confirm
 active space → 3. Choose energy solver → ORCA CASCI states and multiplicities**.
 Restricted references retain

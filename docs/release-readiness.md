@@ -47,6 +47,15 @@ retry and recovery paths. Both ORCA wheels built without installing dependencies
 their packaged workflow guides and calculation/parser entry points were checked.
 These counts identify this development checkpoint, not a permanent CI target.
 
+The Kohn–Sham retention follow-up on 9 November passed 552 ORCA tests (five
+optional skips), both wheel builds and the packaged guide/entry-point checks.
+Serial local NO pilots covered remote wavefunctions, missing-file SCF recovery
+and full-cube leave/delete; allyl covered an already stashed wavefunction and
+full-cube stash. Recovery reproduced the control energy exactly at the stored
+precision. The control's original files were restored with identical checksums.
+The new jobs' input/retrieved repositories contained no full electronic bundles
+or full cubes. This is local runtime coverage, not remote-machine qualification.
+
 ## Contracts that must remain explicit
 
 1. CASSCF state-average weights optimize orbitals. They are not thermal
@@ -106,6 +115,12 @@ remote/stash policy instead of implicitly retrieving orbital files under an old
 size threshold. Combined catalog metadata is bounded at 2 MiB; coefficient
 arrays and original orbital files do not enter that metadata.
 
+Kohn–Sham cube generation also inherits the producing calculation's remote/stash
+choice, with no editable wavefunction retrieval threshold. Missing-reference
+recovery forwards the configured ORCA tools helper and that choice into a new
+SCF at the saved geometry. A temporarily inaccessible storage system does not
+authorize regeneration. Historical repository copies remain readable.
+
 Correlation summaries preserve all existing native checks, including every
 CASPT2 residual/denominator table and DLPNO amplitude solve. Full generated
 electronic files are bundled with the native logs for the reviewed remote/stash
@@ -129,9 +144,11 @@ the native energy within the original tolerance. Cross-Computer transfers use
 temporary staging excluded from AiiDA's input repository. Historical binary
 Hamiltonians and the separate QPU/DMRG research workflows remain unchanged.
 
-Other calculation classes are not yet uniformly size bounded. Before release,
-extract and validate compact
-results on the calculation computer, preserve large originals through the
+Other calculation classes are not yet uniformly size bounded. The
+[postprocessing audit](postprocessing-retention.md) lists current retrieval paths,
+existing guards and remaining byte-budget gaps for PDOS, cubes, maps and rendering.
+Before release, extract and validate compact results on the calculation computer,
+preserve large originals through the
 reviewed remote/stash policy, and update consumers that currently parse the
 retrieved full log. Existing streaming fixes address memory use but do not close
 this retention gate. Do not simply omit a file required by a parser or change

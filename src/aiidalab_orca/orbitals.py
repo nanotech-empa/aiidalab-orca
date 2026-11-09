@@ -8,6 +8,7 @@ from aiidalab_widgets_empa.cube import CubeViewer
 
 from . import property_services as service
 from .widget_lifecycle import close_widget_tree
+from .retention import description as retention_description
 
 
 class CubeDisplayMixin:
@@ -68,11 +69,7 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
         self.grid=ipw.BoundedIntText(value=80,min=40,max=256,description='Full grid points/axis',style={'description_width':'160px'},layout=ipw.Layout(width='300px'))
         self.retention=ipw.Dropdown(options=[('Stash full-resolution cubes','stash'),('Leave full cubes in calculation directory','leave'),('Delete full cubes after preview validation','delete')],value='stash',description='Full cubes',style=style,layout=ipw.Layout(width='95%'))
         self.stash=ipw.Text(value=service.default_stash_directory(),description='Cube stash directory',style=style,layout=ipw.Layout(width='95%'))
-        self.threshold=ipw.BoundedFloatText(value=100,min=0,max=10000,description='WFN retrieval (MiB)',style={'description_width':'160px'},layout=ipw.Layout(width='300px'))
-        self.wfn_stash=ipw.Text(description='WFN stash directory',style=style,layout=ipw.Layout(width='95%'))
         self.wfn_info=ipw.HTML()
-        self.wfn_policy=ipw.Accordion(children=[ipw.VBox([self.threshold,self.wfn_stash])],selected_index=None)
-        self.wfn_policy.set_title(0,'Preservation policy for unarchived or regenerated wavefunctions')
         self.check_wfn=ipw.Button(description='Check wavefunction',icon='refresh',layout=ipw.Layout(width='auto'))
         self.check_wfn.on_click(self._check_wavefunction)
         self.codes={key:ipw.Dropdown(options=choices[key],description=label,layout=ipw.Layout(width='95%'))
@@ -98,40 +95,39 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
         from .presentation import ComputePanel
         self.calculation = ComputePanel('Compute orbital cubes / spin density…', [
                           ipw.HTML('<p>Compute orbital amplitudes and, for an unrestricted reference, spin density. Select multiple orbitals with Ctrl/Cmd. Only cubehandler-reduced previews are retrieved.</p>'),
-                          select_visible,self.orbitals,self.spin,self.wfn_info,self.check_wfn,self.wfn_policy,self.retention,self.stash,advanced,
+                          select_visible,self.orbitals,self.spin,self.wfn_info,self.check_wfn,self.retention,self.stash,advanced,
                           self.review_button,self.message,self.submit_button])
         self.empty = ipw.HTML()
         super().__init__([ipw.HBox([self.previous,refresh]),self.progress,self.result_info,self.empty,
                           self.calculation,self.cube,self.download,self.cube_box])
-        for w in (self.orbitals,self.spin,self.grid,self.retention,self.stash,self.threshold,self.wfn_stash,*self.codes.values()):
+        for w in (self.orbitals,self.spin,self.grid,self.retention,self.stash,*self.codes.values()):
             w.observe(self._invalidate,names='value')
         self.retention.observe(self._retention_changed,names='value')
         self._retention_changed()
-        self._check_wavefunction(inherit=True)
+        self._check_wavefunction()
         self._select_visible()
         self._refresh_runs()
 
     def _retention_changed(self,_=None):
         self.stash.layout.display='' if self.retention.value=='stash' else 'none'
 
-    def _check_wavefunction(self,_=None,*,inherit=False):
+    def _check_wavefunction(self,_=None):
         status=service.wavefunction_status(self.source_uuid)
-        if inherit:
-            self.threshold.value=status['policy']['threshold_mb']
-            self.wfn_stash.value=status['policy']['stash_directory']
         state=status['state']
         label={'repository':'Preserved in the AiiDA repository','stash':'Preserved in the stash',
-               'remote':'Available in the calculation directory; not yet archived',
+               'remote':'Available on the calculation computer',
                'missing':'Missing: a new SCF will be required before computing new cubes',
                'unavailable':'Storage could not be checked; retry when accessible'}[state]
         self.wfn_info.value='<p><b>Wavefunction:</b> '+label+'.</p>'
         if status.get('path'):
             self.wfn_info.value+='<p><code>'+html.escape(status['path'])+'</code></p>'
-        self.wfn_policy.layout.display='' if state in ('remote','missing') else 'none'
-        if state in ('remote','missing'):
-            self.wfn_info.value+='<p>'+('Uses the preservation policy recorded with the reference.' if status['inherited'] else 'This older reference has no preservation policy; review the defaults below.')+'</p>'
+        retention = status.get('retention', {'mode': 'remote'})
+        self.wfn_info.value += '<p>Full files: ' + html.escape(retention_description(retention)) + '. '
+        self.wfn_info.value += ('Inherited from the producing calculation.' if status['inherited'] else
+            'This historical reference has no recorded full-file choice; new electronic files remain remote.') + '</p>'
         if status.get('message'):
             self.wfn_info.value+='<p>'+html.escape(status['message'])+'</p>'
+        return status
 
     def _invalidate(self,_=None):
         self.plan=None
@@ -145,11 +141,11 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
     def _review(self,_=None):
         self._invalidate()
         try:
-            self._check_wavefunction()
+            status=self._check_wavefunction()
             self.plan=service.prepare_property(self.source_uuid,
                 {'orbitals':[list(pair) for pair in self.orbitals.value],'spin_density':self.spin.value,
                  'grid_points':self.grid.value,'retention':self.retention.value,'stash_directory':self.stash.value.strip()},
-                {'threshold_mb':self.threshold.value,'stash_directory':self.wfn_stash.value.strip()},
+                status['policy'],
                 {key:w.value for key,w in self.codes.items()})
             action='Reuse available cube results' if self.plan['action']=='reuse' else 'Generate cubes and reduce them with cubehandler'
             text=f'<p><b>{action}</b></p>'

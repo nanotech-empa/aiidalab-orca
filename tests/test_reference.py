@@ -24,7 +24,7 @@ OUTPUT = 'Program Version 6.1.1\nSCF CONVERGED AFTER 12 CYCLES\nFINAL SINGLE POI
 @pytest.fixture
 def electronic_source(aiida_profile_clean, aiida_localhost, tmp_path):
     """Factory with explicit CalcJob provenance and disposable electronic files."""
-    def make(optimization=False, output=OUTPUT):
+    def make(optimization=False, output=OUTPUT, native_policy=None):
         code = orm.InstalledCode(computer=aiida_localhost, filepath_executable='/bin/true').store()
         initial = orm.StructureData(ase=Atoms('NO', positions=[[0,0,0],[0,0,1.3]])).store()
         final = (orm.StructureData(ase=Atoms('NO', positions=[[0,0,0],[0,0,1.16]])).store()
@@ -39,6 +39,9 @@ def electronic_source(aiida_profile_clean, aiida_localhost, tmp_path):
             node.base.links.add_incoming(value, link_type=LinkType.INPUT_WORK, link_label=name)
         node.store()
         calc = orm.CalcJobNode(process_type='aiida.calculations:empa_orca.single_point')
+        if native_policy is not None:
+            policy = orm.Dict(dict=native_policy).store()
+            calc.base.links.add_incoming(policy, link_type=LinkType.INPUT_CALC, link_label='native_output_policy')
         calc.base.links.add_incoming(node, link_type=LinkType.CALL_CALC, link_label='calculation')
         calc.base.repository.put_object_from_filelike(io.StringIO('! test input'), 'aiida.inp')
         calc.store()

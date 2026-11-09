@@ -27,13 +27,20 @@ def available_codes(computer_uuid):
     return found
 
 
-def default_plan(computer_uuid, *, enabled=True, memory_gib=8):
+def analysis_walltime(seconds):
+    if type(seconds) is not int or not 60 <= seconds <= 7 * 24 * 3600:
+        raise ValueError('Choose an analysis wall time between 1 and 10080 minutes')
+    return seconds
+
+
+def default_plan(computer_uuid, *, enabled=True, memory_gib=8, wallclock_seconds=1800):
     if type(memory_gib) is not int or not 1 <= memory_gib <= 64:
         raise ValueError('Choose an analysis memory budget between 1 and 64 GiB')
+    seconds = analysis_walltime(wallclock_seconds)
     found = available_codes(computer_uuid) if enabled else {'export': [], 'character': []}
     export = found['export'][0][1] if found['export'] else None
     helper = found['character'][0][1] if found['character'] else None
-    return {'enabled': bool(enabled), 'memory_gib': memory_gib,
+    return {'enabled': bool(enabled), 'memory_gib': memory_gib, 'wallclock_seconds': seconds,
             'export_uuid': export, 'helper_uuid': helper,
             'ready': bool(export and helper)}
 
@@ -42,18 +49,20 @@ def configure(builder, plan):
     """Keep postprocessing separate from the electronic-structure settings."""
     builder.character_enabled = orm.Bool(plan['enabled'])
     builder.character_memory_gib = orm.Int(plan['memory_gib'])
+    builder.character_wallclock_seconds = orm.Int(analysis_walltime(plan.get('wallclock_seconds', 1800)))
     for option, key in (('character_export_code', 'export_uuid'), ('character_helper_code', 'helper_uuid')):
         if plan.get(key):
             builder[option] = orm.load_code(plan[key])
 
 
-def character_builder(info, kind, export_uuid, helper_uuid, memory_gib=8):
+def character_builder(info, kind, export_uuid, helper_uuid, memory_gib=8, *, wallclock_seconds=1800):
     if kind not in info['sets']:
         raise ValueError('Select an orbital set belonging to this reference')
     if not export_uuid or not helper_uuid:
         raise ValueError('Configure ORCA export and the orbital-character worker on the reference computer')
     if type(memory_gib) is not int or not 1 <= memory_gib <= 64:
         raise ValueError('Choose an analysis memory budget between 1 and 64 GiB')
+    seconds = analysis_walltime(wallclock_seconds)
     remote = orm.load_node(info['remote_uuid'])
     filename = info['sets'][kind]
     location = resolve_electronic(remote, names=[filename])
@@ -66,7 +75,7 @@ def character_builder(info, kind, export_uuid, helper_uuid, memory_gib=8):
     b.identity = orm.Dict(dict={k: info[k] for k in ('source_uuid', 'charge', 'multiplicity')} |
                          {'kind': kind, 'filename': filename})
     b.location = orm.Dict(dict=location)
-    b.metadata.options = calcjob_options(remote, seconds=1800)
+    b.metadata.options = calcjob_options(remote, seconds=seconds)
     b.metadata.options.max_memory_kb = memory_gib * 1024**2
     b.metadata.label = f'{kind} · Löwdin orbital character and PDOS'
     b.metadata.disable_cache = True
@@ -79,6 +88,9 @@ class OrbitalCharacterMixin:
     def character_spec(cls, spec):
         spec.input('character_enabled', valid_type=orm.Bool, default=lambda: orm.Bool(True))
         spec.input('character_memory_gib', valid_type=orm.Int, default=lambda: orm.Int(8))
+        spec.input('character_wallclock_seconds', valid_type=orm.Int, default=lambda: orm.Int(1800),
+                   validator=lambda value, _: None if 60 <= value.value <= 604800 else
+                   'Analysis wall time must be between 60 and 604800 seconds')
         spec.input('character_export_code', valid_type=orm.AbstractCode, required=False)
         spec.input('character_helper_code', valid_type=orm.AbstractCode, required=False)
         spec.output('pdos_status', valid_type=orm.Dict, required=False)
@@ -108,7 +120,10 @@ class OrbitalCharacterMixin:
             else:
                 settings = self.inputs.settings.get_dict()
                 structure_uuid, sets = str(self.outputs['structure'].uuid), {'SCF': 'aiida.gbw'}
-            plan = default_plan(remote.computer.uuid, memory_gib=self.inputs.character_memory_gib.value)
+            # Old stored process checkpoints may predate this optional input.
+            seconds = self.inputs.character_wallclock_seconds.value if 'character_wallclock_seconds' in self.inputs else 1800
+            plan = default_plan(remote.computer.uuid, memory_gib=self.inputs.character_memory_gib.value,
+                                wallclock_seconds=seconds)
             for option, key in (('character_export_code', 'export_uuid'), ('character_helper_code', 'helper_uuid')):
                 if option in self.inputs:
                     plan[key] = str(self.inputs[option].uuid)
@@ -117,7 +132,8 @@ class OrbitalCharacterMixin:
                     'charge': settings['charge'], 'multiplicity': settings['multiplicity']}
             for kind in sets:
                 try:
-                    b = character_builder(info, kind, plan['export_uuid'], plan['helper_uuid'], plan['memory_gib'])
+                    b = character_builder(info, kind, plan['export_uuid'], plan['helper_uuid'], plan['memory_gib'],
+                                          wallclock_seconds=plan['wallclock_seconds'])
                     b.metadata.call_link_label = 'orbital_character_' + kind.lower()
                     job = self.submit(b)
                     self.ctx.pdos_job_uuids[kind] = str(job.uuid)

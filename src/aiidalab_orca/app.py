@@ -59,7 +59,9 @@ class OrcaApp(ipw.VBox):
         self.force = ipw.Checkbox(value=False, description="Recompute even if a compatible result is available", layout=ipw.Layout(width="auto"))
         self.pdos_enabled = ipw.Checkbox(value=True, description="Compute PDOS / orbital character", indent=False)
         self.pdos_memory = ipw.BoundedIntText(value=8, min=1, max=64, description="PDOS memory (GiB)", style=style)
-        pdos_options = ipw.Accordion(children=[ipw.VBox([self.pdos_memory,
+        self.pdos_wallclock = ipw.BoundedIntText(value=30, min=1, max=10080,
+            description="PDOS wall time (minutes)", style={"description_width": "initial"})
+        pdos_options = ipw.Accordion(children=[ipw.VBox([self.pdos_memory, self.pdos_wallclock,
             ipw.HTML('<p>One serial postprocessing job after a new electronic calculation; no extra SCF. '
                      'Compact results are stored in AiiDA. Existing references are not backfilled.</p>')])], selected_index=None)
         pdos_options.set_title(0, 'PDOS resources')
@@ -140,7 +142,7 @@ class OrcaApp(ipw.VBox):
         self.science.observe(self._settings_changed, names="revision")
         self.structure.constraints.observe(self._settings_changed, names="revision")
         for widget in [self.nprocs, self.memory, self.wallclock, self.code, self.force, self.label,
-                       self.pdos_enabled, self.pdos_memory]:
+                       self.pdos_enabled, self.pdos_memory, self.pdos_wallclock]:
             widget.observe(self._invalidate, names="value")
         self.wavefunction_storage.observe(self._invalidate, names="revision")
         self.optimize.observe(self._optimization_changed, names="value")
@@ -271,6 +273,7 @@ class OrcaApp(ipw.VBox):
                 self.code.value, self.optimize.value, self.force.value,
                 atoms=self.structure.atoms, imported=self.structure.imported, storage=self.wavefunction_storage.values(self.code.value),
                 pdos=self.pdos_enabled.value, pdos_memory_gib=self.pdos_memory.value,
+                pdos_wallclock_seconds=self.pdos_wallclock.value * 60,
             )
             self.structure.mark_stored(self.review["structure_uuid"])
             plan = self.review["plan"]
@@ -286,7 +289,7 @@ class OrcaApp(ipw.VBox):
                 body += '<p>Reusing an existing reference: no automatic PDOS backfill.</p>'
             elif character['enabled'] and character['ready']:
                 body += (f"<p>PDOS included: one serial postprocessing CalcJob, {character['memory_gib']} GiB, "
-                         'up to 30 minutes. No extra SCF or cubes.</p>')
+                         f"up to {character['wallclock_seconds'] / 60:g} minutes. No extra SCF or cubes.</p>")
             elif character['enabled']:
                 body += ('<p class="orca-notice">PDOS is enabled, but its native exporter or analysis worker is '
                          'not configured on this computer. The electronic calculation can run; PDOS will be '

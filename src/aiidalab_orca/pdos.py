@@ -35,7 +35,9 @@ class PdosPanel(ipw.VBox):
         self.worker = ipw.Dropdown(options=codes['character'], description='Character worker', style=style)
         self.force = ipw.Checkbox(description='Recompute character', value=False, indent=False)
         self.memory = ipw.BoundedIntText(value=8, min=1, max=64, description='Analysis memory (GiB)', style=style)
-        setup = ipw.Accordion(children=[ipw.VBox([self.export, self.worker, self.memory, self.force])], selected_index=None)
+        self.wallclock = ipw.BoundedIntText(value=30, min=1, max=10080,
+            description='Analysis wall time (minutes)', style=style)
+        setup = ipw.Accordion(children=[ipw.VBox([self.export, self.worker, self.memory, self.wallclock, self.force])], selected_index=None)
         setup.set_title(0, 'Codes and recomputation')
         self.compute = ipw.Button(description='Compute orbital character', icon='calculator', button_style='primary',
                                   layout=ipw.Layout(width='auto'))
@@ -338,7 +340,7 @@ class PdosPanel(ipw.VBox):
                 self._load()
                 return
             uuid = service.submit(self.source_uuid, self.kind.value, self.export.value, self.worker.value,
-                                  self.force.value, self.memory.value)
+                                  self.force.value, self.memory.value, wallclock_seconds=self.wallclock.value * 60)
             self.compute.disabled = True
             self.status.value = '<p>Orbital-character CalcJob submitted: <code>'+uuid+'</code></p>'
             self._task = asyncio.get_running_loop().create_task(self._poll(uuid))

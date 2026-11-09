@@ -56,13 +56,15 @@ def latest(source_uuid, kind):
     return None
 
 
-def builder(source_uuid, kind, export_uuid, helper_uuid, memory_gib=8):
-    return character_builder(context(source_uuid), kind, export_uuid, helper_uuid, memory_gib)
+def builder(source_uuid, kind, export_uuid, helper_uuid, memory_gib=8, *, wallclock_seconds=1800):
+    return character_builder(context(source_uuid), kind, export_uuid, helper_uuid, memory_gib,
+                             wallclock_seconds=wallclock_seconds)
 
 
-def submit(source_uuid, kind, export_uuid, helper_uuid, force=False, memory_gib=8):
+def submit(source_uuid, kind, export_uuid, helper_uuid, force=False, memory_gib=8, *, wallclock_seconds=1800):
     if not force:
         old = latest(source_uuid, kind)
         if old:
             return old['uuid']
-    return str(engine.submit(builder(source_uuid, kind, export_uuid, helper_uuid, memory_gib)).uuid)
+    return str(engine.submit(builder(source_uuid, kind, export_uuid, helper_uuid, memory_gib,
+                                     wallclock_seconds=wallclock_seconds)).uuid)

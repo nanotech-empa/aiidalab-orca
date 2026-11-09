@@ -11,8 +11,14 @@ New SCF/geometry workflows compute orbital character after the converged electro
 reference. New common-orbital preparations do the same for each prepared QRO/UNO
 or restricted set. This is a child CalcJob managed by the workflow and continues
 when the notebook is closed. The SCF submission's **Compute PDOS / orbital
-character** option is checked initially; **PDOS resources** sets its independent
-one-process, 30-minute, 8 GiB default budget. Python is not a user selection.
+character** option is checked initially; **PDOS resources** exposes its independent
+memory and **PDOS wall time (minutes)**. Defaults remain one process, 30 minutes
+and 8 GiB; time is editable from one minute. The main ORCA wall time is separate.
+Review shows the selected PDOS limit and changing it invalidates the review;
+the parent records it as `character_wallclock_seconds` and passes it to the
+analysis CalcJob's `max_wallclock_seconds`. Explicit analysis from **Codes and
+recomputation** also has an **Analysis wall time (minutes)** control. Python is
+not a user selection.
 
 Only new computations trigger this default. Reusing a reference or opening an
 old result never backfills analysis or resubmits SCF. There is no migration of

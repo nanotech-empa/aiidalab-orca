@@ -1,5 +1,10 @@
 # ORCA app: an agent's route from a molecule to results
 
+For new geometry/SCF submissions, **PDOS resources → PDOS wall time (minutes)**
+is independent of the main ORCA wall time. Set and review both budgets; the PDOS
+control accepts one minute or more and defaults to 30. Editing it invalidates
+review. Explicit PDOS recomputation has its own analysis wall-time control.
+
 For a systematic browser acceptance campaign, use the repository's
 [full GUI test guide](../../../docs/testing/README.md) and
 [agent handoff](../../../docs/testing/agent-handoff.md). Localhost is the

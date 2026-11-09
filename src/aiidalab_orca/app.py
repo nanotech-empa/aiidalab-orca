@@ -296,8 +296,9 @@ class OrcaApp(ipw.VBox):
                 policy = self.review['storage']['native_output_policy']
                 destination = ('stashed under <code>' + html.escape(policy['stash_directory']) + '</code>'
                                if policy['mode'] == 'stash' else 'left on the calculation computer')
-                body += (f'<p>New full native files are {destination}. Only bounded results and diagnostics '
-                         'are retrieved. Reused results keep their original retention.</p>')
+                body += (f'<p>Large native artifacts are {destination}. Native output files up to '
+                         f'{policy.get("maxsizeoutput", 5 * 1024**2) / 1024**2:g} MiB are retrieved unchanged; '
+                         'larger files use a separate extract and an explicit notice. Reused results keep their original retention.</p>')
             body += settings_details(s, single_point=not self.optimize.value)
             body += input_details(self.review["input_files"], "Review generated ORCA input")
             if plan["source_uuid"]:

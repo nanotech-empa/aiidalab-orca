@@ -1,12 +1,13 @@
 # Optical-excitation operating guide
 
-Before a new submission, review **Full files**: leave complete native logs,
-electronic files and NTOs on the calculation computer, or stash them in a chosen
-directory there. Only bounded validation text, a diagnostic tail and a checksum
-manifest enter AiiDA. NTO previews inherit that retention; no wavefunction
+Before a new submission, review **Full files** for remote/stash retention of
+large electronic/NTO files. **Output retrieval → maxsizeoutput (MiB)** defaults
+to 5 MiB per native text output: ordinary output is retrieved unchanged; larger
+output uses a distinct validation extract and an explicit notice at the normal
+output filename. NTO previews inherit electronic-file retention; no wavefunction
 retrieval threshold is offered. Full cubes retain their separate leave/stash/
-delete choice. Reused results retain their original storage policy. Historical
-data remain readable; do not migrate or rewrite their nodes.
+delete choice. Reused and historical results retain their original files/policy;
+do not migrate or rewrite their nodes.
 
 Open **Optical excitations · UV–Vis** from a completed DFT geometry/SCF entry.
 This independent route needs no CAS, CASSCF or Hamiltonian export. The chat's

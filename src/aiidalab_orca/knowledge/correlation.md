@@ -23,12 +23,14 @@ Record the explicit frozen-core policy and actual native count, basis, auxiliary
 basis and software version. Preserve scheduler/account context and requested
 resources, respecting the user's limits and the configured scheduler policy.
 Do not infer resource limits from a computer label. Native science runs
-only in CalcJobs. In the compact-output candidate, **Full files** explicitly
-chooses remote retention or stashing. Full logs/properties and generated
-electronic files remain in `native_output/` remotely or in its stash; no full
-electronic file is retrieved. Only a bounded validation summary, diagnostic
-tail and checksum manifest enter AiiDA. Inputs and the parent reference stay
-intact. Verify installed helper support before promising the controls.
+only in CalcJobs. **Full files** chooses remote/stash retention for large
+properties and electronic files. **Output retrieval → maxsizeoutput (MiB)**
+(default 5 MiB per native output) keeps ordinary logs unchanged in `retrieved`.
+Above the threshold, a separate validation extract is stored and the usual
+output filename contains an explicit notice, also reported in parser logs.
+Original full files remain in `native_output/` remotely or in its stash. Inputs,
+parent references, complete compact scientific results and checks stay intact.
+Verify installed helper support before promising the controls.
 
 Require native normal completion, no error/nonconvergence/projection/norm warning,
 correct electron/spin identity, and finite reference/correction/total energies

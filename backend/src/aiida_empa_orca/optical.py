@@ -13,7 +13,7 @@ from .input import render_input
 from .protocols import reference as reference_type
 from .reference import reference_settings, single_point_parameters
 from .choices import PURE_DFT, HYBRID_DFT
-from .native_output import compact_spec, prepare_compact, read_manifest
+from .native_output import output_content, compact_spec, prepare_compact, read_manifest
 
 PROCESS_TYPE = 'aiida.calculations:empa_orca.optical'
 NTO_PROCESS = 'aiida.workflows:empa_orca.nto_cubes'
@@ -260,12 +260,12 @@ class OpticalCalculation(engine.CalcJob):
 class OpticalParser(Parser):
     def parse(self, **kwargs):
         try:
-            manifest = read_manifest(self.node, self.retrieved.base.repository, 'optical-v1')
+            manifest = read_manifest(self.node, self.retrieved.base.repository, 'optical-v1', logger=self.logger)
             electronic = self.node.inputs.electronic_settings.get_dict()
-            source = self.node.inputs.source_retrieved.base.repository.get_object_content('aiida.out')
+            source = output_content(self.node.inputs.source_retrieved.base.repository, 'aiida.out')
             from .parser import reference_summary
             expected = reference_summary(source)['energy_hartree']
-            result = parse_result(self.retrieved.base.repository.get_object_content('aiida.out'), electronic,
+            result = parse_result(output_content(self.retrieved.base.repository, 'aiida.out'), electronic,
                 self.node.inputs.settings.get_dict(), expected_electrons=int(self.node.inputs.structure.get_ase().numbers.sum())-electronic['charge'],
                 expected_energy=expected)
             result.update(structure_uuid=str(self.node.inputs.structure.uuid), source_retrieved_uuid=str(self.node.inputs.source_retrieved.uuid))

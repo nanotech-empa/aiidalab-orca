@@ -14,7 +14,7 @@ from .input import render_input
 from .pdos_workflow import OrbitalCharacterMixin
 from .reference import single_point_parameters
 from .native_logs import DIRECTORY, output_policy
-from .native_output import compact_spec, prepare_compact, read_manifest
+from .native_output import output_content, compact_spec, prepare_compact, read_manifest
 
 PROCESS_TYPE = 'aiida.workflows:empa_orca.casscf'
 PREPARATION = 'casscf_verified_v1'
@@ -233,9 +233,9 @@ class CasscfParser(Parser):
             space = active_space(self.node.inputs.active_space.get_dict(), ref)
             settings = casscf_settings(self.node.inputs.settings.get_dict(), ref, space)
             repository = self.retrieved.base.repository
-            manifest = read_manifest(self.node, repository, 'casscf-v1')
-            data = verified_result(repository.get_object_content('aiida.out'),
-                                   repository.get_object_content('verify.out'), ref, space, settings)
+            manifest = read_manifest(self.node, repository, 'casscf-v1', logger=self.logger)
+            data = verified_result(output_content(repository, 'aiida.out'),
+                                   output_content(repository, 'verify.out'), ref, space, settings)
             from .artifacts import remote_files
             remote_files(self.node.computer, self.node.outputs.remote_folder.get_remote_path(), names=['aiida.gbw'])
             data['structure_uuid'] = str(self.node.inputs.structure.uuid)

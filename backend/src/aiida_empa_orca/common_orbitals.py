@@ -17,7 +17,7 @@ from .pdos_workflow import OrbitalCharacterMixin
 from .protocols import reference as reference_type
 from .reference import reference_settings, reference_signature, single_point_parameters
 from .native_logs import DIRECTORY, output_policy
-from .native_output import compact_spec, prepare_compact, read_manifest
+from .native_output import output_content, compact_spec, prepare_compact, read_manifest
 
 PROCESS_TYPE = 'aiida.workflows:empa_orca.common_orbitals'
 
@@ -126,8 +126,8 @@ class CommonOrbitalsCalculation(engine.CalcJob):
 class CommonOrbitalsParser(Parser):
     def parse(self, **kwargs):
         try:
-            manifest = read_manifest(self.node, self.retrieved.base.repository, 'common-orbitals-v1')
-            text = self.retrieved.base.repository.get_object_content('aiida.out')
+            manifest = read_manifest(self.node, self.retrieved.base.repository, 'common-orbitals-v1', logger=self.logger)
+            text = output_content(self.retrieved.base.repository, 'aiida.out')
             if 'ORCA TERMINATED NORMALLY' not in text:
                 raise ValueError('ORCA did not terminate normally')
             if ('MaxIter==0 has been chosen - skipping the SCF' not in text or

@@ -75,7 +75,9 @@ Native energy reconstruction must pass before use. Keep a suitable correlation
 auxiliary basis and the same RI/core convention when comparing with ORCA.
 
 Review **Full files** before export: leave full files on the calculation
-computer, or stash them there. New Hamiltonian outputs are external-file
+computer, or stash them there. Native text outputs up to **maxsizeoutput**
+(default 5 MiB per file) are retrieved unchanged; larger ones have a separate
+validation extract and an explicit outputcat notice. New Hamiltonian outputs are external-file
 descriptors with checksums, not retrieved integral files. Old repository-backed
 Hamiltonians remain usable. Subsequent worker stages copy the same file locally
 on its Computer or use a checksum-verified temporary relay between Computers;

@@ -88,6 +88,9 @@ def native_log_location(calc):
     if 'native_output_manifest' in calc.outputs:
         from .native_logs import DIRECTORY, validate_manifest
         record = validate_manifest(calc.outputs.native_output_manifest.get_dict())
+        if any(item['name'] == 'aiida.out' and item['kind'] == 'full'
+               for item in record.get('retrieved_outputs', [])):
+            return None  # The complete original is available in retrieved.
         original = next(item for item in record['files'] if item['name'] == 'aiida.out')
         locations = []
         if 'remote_stash' in calc.outputs:

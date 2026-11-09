@@ -19,6 +19,7 @@ from .parser import reference_summary
 from .protocols import editable_settings
 from .reuse import PROCESS_TYPE as GEOMETRY_PROCESS, validate_outputs as validate_geometry
 from .settings import orca_parameters, validate_molecule
+from .native_output import output_content
 
 PROCESS_TYPE = "aiida.workflows:empa_orca.reference"
 # ORCA 6.1 orbital and density bundle; preservation is a separate provenance step.
@@ -84,7 +85,7 @@ def validate_outputs(outputs):
     if not summary.get("converged") or not np.isfinite(summary.get("energy_hartree", float("nan"))):
         raise ValueError("No converged finite SCF energy")
     try:
-        text = outputs["retrieved"].base.repository.get_object_content("aiida.out")
+        text = output_content(outputs["retrieved"].base.repository, "aiida.out")
     except FileNotFoundError:
         raise
     except OSError as exc:

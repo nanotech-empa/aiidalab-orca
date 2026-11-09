@@ -192,7 +192,7 @@ def test_retention_is_reviewed_and_editing_it_invalidates_submission(batch_panel
     panel.full_files.directory.value = '/user/chosen/stash'
     panel.review.click()
     assert prepared and all(p['native_output_policy'] == {
-        'mode': 'stash', 'stash_directory': '/user/chosen/stash'} for p in prepared)
+        'mode': 'stash', 'stash_directory': '/user/chosen/stash', 'maxsizeoutput': 5 * 1024**2} for p in prepared)
     assert '/user/chosen/stash' in panel.batch_review.value
     assert not panel.submit.disabled
     panel.full_files.mode.value = 'remote'

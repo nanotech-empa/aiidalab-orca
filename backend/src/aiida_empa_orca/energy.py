@@ -15,10 +15,10 @@ from aiida_orca.calculations.orca_orca import OrcaCalculation
 
 from . import casci, common_orbitals
 from .energy_files import portable_fcidump
-from .native_output import compact_spec, prepare_compact, read_manifest
 from .native_logs import output_policy
 from .artifacts import stash_options
 from .energy_storage import hamiltonian_identity, stage_hamiltonian
+from .native_output import output_content, compact_spec, prepare_compact, read_manifest
 
 PROTOCOL = "quantum-energy/v1"
 
@@ -131,8 +131,8 @@ class EnergyHamiltonianCalculation(engine.CalcJob):
 class EnergyHamiltonianParser(Parser):
     def parse(self, **kwargs):
         try:
-            manifest = read_manifest(self.node, self.retrieved.base.repository, 'energy-export-v1')
-            text = self.retrieved.base.repository.get_object_content("aiida.out")
+            manifest = read_manifest(self.node, self.retrieved.base.repository, 'energy-export-v1', logger=self.logger)
+            text = output_content(self.retrieved.base.repository, "aiida.out")
             reference = self.node.inputs.orbital_reference.get_dict()
             space = self.node.inputs.active_space.get_dict()
             settings = casci.casci_settings(

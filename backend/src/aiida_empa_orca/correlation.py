@@ -1,4 +1,5 @@
 """Fixed-geometry correlation energies, separate from orbital/state-vector sources."""
+
 import math
 import re
 
@@ -10,7 +11,7 @@ from . import casscf
 from .common_orbitals import copy_orbital, validate_source
 from .input import render_input
 from .reference import single_point_parameters
-from .native_output import compact_spec, prepare_compact, read_manifest
+from .native_output import output_content, compact_spec, prepare_compact, read_manifest
 
 PROCESS_TYPE = 'aiida.calculations:empa_orca.correlation'
 NEVPT_METHODS = ('SC-NEVPT2', 'FIC-NEVPT2', 'DLPNO-NEVPT2')
@@ -413,12 +414,12 @@ class CorrelationCalculation(engine.CalcJob):
 class CorrelationParser(Parser):
     def parse(self, **kwargs):
         try:
-            manifest = read_manifest(self.node, self.retrieved.base.repository, 'correlation-v1')
+            manifest = read_manifest(self.node, self.retrieved.base.repository, 'correlation-v1', logger=self.logger)
             ref = self.node.inputs.orbital_reference.get_dict() if 'orbital_reference' in self.node.inputs else None
             expected = ref['n_electrons'] if ref else electron_count(
-                self.node.inputs.source_retrieved.base.repository.get_object_content('aiida.out'))
+                output_content(self.node.inputs.source_retrieved.base.repository, 'aiida.out'))
             states = self.node.inputs.reference_states.get_dict() if ref else None
-            data = parse_result(self.retrieved.base.repository.get_object_content('aiida.out'),
+            data = parse_result(output_content(self.retrieved.base.repository, 'aiida.out'),
                 self.node.inputs.electronic_settings.get_dict(), self.node.inputs.settings.get_dict(), expected, ref, states)
             data['structure_uuid'] = str(self.node.inputs.structure.uuid)
             if ref:

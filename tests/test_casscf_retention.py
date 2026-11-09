@@ -20,7 +20,7 @@ def collect_pair(root, first, second):
         (directory / name).write_text(text)
     (root / 'aiida.property.txt').write_text('full optimized properties')
     (root / 'verify.property.txt').write_text('full readback properties')
-    return native_logs.collect_output({'protocol': 'casscf-v1', 'policy': {'mode': 'remote'}}, root)
+    return native_logs.collect_output({'protocol': 'casscf-v1', 'policy': {'mode': 'remote', 'maxsizeoutput': 0}}, root)
 
 
 def test_large_casscf_and_readback_logs_preserve_the_exact_verified_result(tmp_path):
@@ -31,10 +31,10 @@ def test_large_casscf_and_readback_logs_preserve_the_exact_verified_result(tmp_p
     second = native_output(settings, frozen=True)
     record = collect_pair(tmp_path, first, second)
     for name in ('aiida.out', 'verify.out'):
-        content = (tmp_path / name).read_bytes()
+        content = (tmp_path / name.replace('.out', '_summary.out')).read_bytes()
         assert len(content) < 2000
         native_logs.validate_summary(record, content, name)
-    compact = [(tmp_path / name).read_text() for name in ('aiida.out', 'verify.out')]
+    compact = [(tmp_path / name.replace('.out', '_summary.out')).read_text() for name in ('aiida.out', 'verify.out')]
     assert casscf.verified_result(*compact, ref, SPACE, settings) == casscf.verified_result(first, second, ref, SPACE, settings)
     assert (tmp_path / native_logs.DIRECTORY / 'aiida.out').read_text() == first
     assert not (tmp_path / 'verify.property.txt').exists()
@@ -58,7 +58,7 @@ def test_compaction_keeps_reasons_to_reject_a_candidate(tmp_path, issue):
         second = native_output(settings, frozen=True, shift=2e-7)
     collect_pair(tmp_path, first, second)
     with pytest.raises(ValueError):
-        casscf.verified_result((tmp_path / 'aiida.out').read_text(), (tmp_path / 'verify.out').read_text(), ref, SPACE, settings)
+        casscf.verified_result((tmp_path / 'aiida_summary.out').read_text(), (tmp_path / 'verify_summary.out').read_text(), ref, SPACE, settings)
 
 
 @pytest.mark.parametrize('mode', ['remote', 'stash'])

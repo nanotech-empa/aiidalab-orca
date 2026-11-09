@@ -25,7 +25,7 @@ def compact(tmp, text):
     original = tmp / 'native_output'
     original.mkdir()
     (original / 'aiida.out').write_text(text)
-    return native_logs.collect_output({'protocol':'correlation-v1','policy':{'mode':'remote'}}, tmp)
+    return native_logs.collect_output({'protocol':'correlation-v1','policy':{'mode':'remote','maxsizeoutput':0}}, tmp)
 
 
 @pytest.mark.parametrize('method', correlation.METHODS)
@@ -34,7 +34,7 @@ def test_large_logs_keep_identical_energies_and_native_diagnostics(tmp_path, met
     text = text.replace('ORCA TERMINATED NORMALLY', 'unrelated native detail\n'*100000+'ORCA TERMINATED NORMALLY')
     record = compact(tmp_path, text)
     native_logs.validate_manifest(record)
-    summary = (tmp_path/'aiida.out').read_text()
+    summary = (tmp_path/'aiida_summary.out').read_text()
     assert len(summary)<12000
     assert correlation.parse_result(summary,*args)==correlation.parse_result(text,*args)
     assert (tmp_path/'native_output'/'aiida.out').read_text()==text
@@ -54,7 +54,7 @@ def test_failure_markers_are_not_lost_in_the_summary(tmp_path, method, before, a
     bad = text.replace(before,after)
     assert bad!=text
     compact(tmp_path,bad)
-    for sample in (bad,(tmp_path/'aiida.out').read_text()):
+    for sample in (bad,(tmp_path/'aiida_summary.out').read_text()):
         with pytest.raises(ValueError):
             correlation.parse_result(sample,*args)
 

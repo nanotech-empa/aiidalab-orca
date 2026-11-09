@@ -8,6 +8,7 @@ from aiida_empa_orca.artifacts import resolve_electronic
 from aiida_empa_orca.reference import reference_settings
 from aiida_empa_orca.native_logs import output_policy
 from .property_services import helper_code, source_node, source_remote, wavefunction_status
+from aiida_empa_orca.native_output import open_output
 
 
 def reference_runs(source_uuid):
@@ -115,7 +116,7 @@ def prepare_casci(reference_uuid, electrons, norb, values, force=False, *, nativ
                 continue
             old_settings = casci.casci_settings(old.inputs.settings.get_dict(), ref, old.inputs.active_space.get_dict())
             if casci.signature(node.outputs.orbital_reference.uuid, old.inputs.active_space.get_dict(), old_settings, old.inputs.code.uuid) == expected:
-                with old.outputs.retrieved.base.repository.open('aiida.out', mode='r') as handle:
+                with open_output(old.outputs.retrieved.base.repository, 'aiida.out', mode='r') as handle:
                     parsed = casci.parse_states(casci.read_state_summary(handle), ref, space, s)
                 if (parsed['states'] == old.outputs.state_energies.get_dict()['states'] and
                         parsed['model'] == old.outputs.state_energies.get_dict().get('model')):
@@ -150,9 +151,10 @@ def submit_casci(plan):
 
 def progress(uuid):
     node = orm.load_node(uuid)
+    from aiida_empa_orca.native_output import retrieval_warnings
     return {'uuid':str(uuid), 'finished':node.is_terminated, 'success':node.is_finished_ok,
             'state':node.process_state.value, 'process_type':node.process_type, 'message':node.exit_message or '',
-            'reports':[entry.message for entry in orm.Log.collection.get_logs_for(node)]}
+            'reports':[entry.message for entry in orm.Log.collection.get_logs_for(node)] + retrieval_warnings(node)}
 
 
 def results(reference_uuid, electrons, norb, auxiliary_basis=None):

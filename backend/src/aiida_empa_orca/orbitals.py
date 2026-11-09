@@ -9,6 +9,7 @@ from aiida import common, engine, orm
 from aiida.parsers import Parser
 
 from .artifacts import ELECTRONIC_FILES, native_retention, resolve_electronic, storage_builder, storage_policy, stash_options
+from .native_output import output_content
 
 PROCESS_TYPE = 'aiida.workflows:empa_orca.orbitals'
 
@@ -205,7 +206,7 @@ class OrbitalsWorkChain(engine.WorkChain):
             if not matching:
                 raise ValueError('The reference settings and geometry do not match the producing workflow')
             from .levels import orbital_levels
-            levels = orbital_levels(self.inputs.source_retrieved.base.repository.get_object_content('aiida.out'))
+            levels = orbital_levels(output_content(self.inputs.source_retrieved.base.repository, 'aiida.out'))
             selected = self.ctx.parameters
             available = {(v['spin'], v['index']) for c in levels['channels'] for v in c}
             if any(tuple(pair) not in available for pair in selected['orbitals']):

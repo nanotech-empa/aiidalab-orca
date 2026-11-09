@@ -9,6 +9,7 @@ from aiida_empa_orca.artifacts import native_retention, resolve_electronic, stor
 from aiida_empa_orca.levels import orbital_levels
 from aiida_empa_orca.orbitals import PROCESS_TYPE, OrbitalsWorkChain, cube_parameters, validate_cube_outputs
 from aiida_empa_orca.reference import PROCESS_TYPE as SCF_PROCESS, GEOMETRY_PROCESS
+from aiida_empa_orca.native_output import output_content
 
 
 def default_stash_directory():
@@ -103,7 +104,7 @@ def prepare_property(source_uuid, parameters, policy, codes):
             raise ValueError(f'Select the {key} code')
         if orm.load_code(codes[key]).computer.uuid!=remote.computer.uuid:
             raise ValueError('All property codes must be on the electronic calculation computer')
-    levels=orbital_levels(node.outputs.retrieved.base.repository.get_object_content('aiida.out'),
+    levels=orbital_levels(output_content(node.outputs.retrieved.base.repository, 'aiida.out'),
                           node.outputs.output_parameters.get_dict().get('nmo'))
     available={(v['spin'],v['index']) for c in levels['channels'] for v in c}
     if any(tuple(pair) not in available for pair in p['orbitals']):

@@ -38,8 +38,8 @@ def test_full_and_compact_logs_obey_the_same_native_parser(electronic_source, tm
     raw.mkdir()
     text = NATIVE + 'irrelevant native output\n' * 100000 + late
     (raw / 'aiida.out').write_text(text)
-    native_logs.collect_output({'protocol':'common-orbitals-v1','policy':{'mode':'remote'}}, tmp_path)
-    compact = (tmp_path / 'aiida.out').read_text()
+    native_logs.collect_output({'protocol':'common-orbitals-v1','policy':{'mode':'remote','maxsizeoutput':0}}, tmp_path)
+    compact = (tmp_path / 'aiida_summary.out').read_text()
     assert len(compact) < 2000
     results = []
     for content in (text, compact):

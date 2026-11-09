@@ -9,7 +9,7 @@ from aiida.orm import Dict, TrajectoryData, StructureData
 from aiida.engine import ExitCode
 from aiida_orca.parsers import OrcaBaseParser
 from aiida_orca.parsers.cclib.utils import convertor
-from .native_output import read_manifest
+from .native_output import output_content, read_manifest
 
 
 def optimization_converged(text):
@@ -45,7 +45,10 @@ class CompactOrcaParser(OrcaBaseParser):
         try:
             protocol = self.node.process_class._COMPACT_PROTOCOL
             repository = self.retrieved.base.repository
-            record = read_manifest(self.node, repository, protocol)
+            record = read_manifest(self.node, repository, protocol, logger=self.logger)
+            if record.get('retrieved_outputs', [{}])[0].get('kind') == 'full':
+                self.out('native_output_manifest', Dict(dict=record))
+                return super().parse(**kwargs)
             data = json.loads(repository.get_object_content('scf_results.json'))
             if data.get('compact_output', {}).get('schema') != 'orca_scf_results_v1':
                 raise ValueError('Missing native compact SCF result schema')
@@ -70,7 +73,7 @@ class SinglePointParser(CompactOrcaParser):
         status = super().parse(**kwargs)
         if status and status.status:
             return status
-        text = self.retrieved.base.repository.get_object_content("aiida.out")
+        text = output_content(self.retrieved.base.repository, "aiida.out")
         try:
             summary = reference_summary(text)
         except ValueError as exc:
@@ -87,7 +90,7 @@ class OptimizationParser(CompactOrcaParser):
         if status and status.status:
             return status
         repository = self.retrieved.base.repository
-        text = repository.get_object_content("aiida.out")
+        text = output_content(repository, "aiida.out")
         if not optimization_converged(text):
             return self.exit_codes.ERROR_NOT_CONVERGED
         try:

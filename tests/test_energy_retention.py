@@ -34,7 +34,7 @@ def compact(root, text=None):
     (root / 'native_output/aiida.out').write_text(text or native_text())
     (root / 'aiida.fcidump').write_bytes(RAW)
     shutil.copyfile(energy_files.__file__, root / 'compact_energy.py')
-    record = native_logs.collect_output({'protocol': 'energy-export-v1', 'policy': {'mode': 'remote'},
+    record = native_logs.collect_output({'protocol': 'energy-export-v1', 'policy': {'mode': 'remote', 'maxsizeoutput': 0},
         'energy_export': {'electrons': 3, 'multiplicity': 2}}, root)
     native_logs.validate_manifest(record)
     return record
@@ -44,12 +44,15 @@ def parsed(folder, manifest=None, text=None, reference=None):
     repo = orm.FolderData()
     for name, content in {'aiida.out': (text or native_text()).encode(), 'aiida.fcidump': RAW}.items():
         if manifest is None or name != 'aiida.fcidump':
-            repo.base.repository.put_object_from_filelike(io.BytesIO(content), name)
+            target = 'aiida_summary.out' if manifest is not None and name == 'aiida.out' else name
+            repo.base.repository.put_object_from_filelike(io.BytesIO(content), target)
+    if manifest is not None:
+        repo.base.repository.put_object_from_file(folder / 'aiida.out', 'aiida.out')
     if manifest is not None:
         repo.base.repository.put_object_from_filelike(io.StringIO(json.dumps(manifest)), 'native_output.json')
     inputs = AttributeDict({'orbital_reference': reference if reference is not None else orm.Dict(dict=reference_data()),
         'active_space': orm.Dict(dict=SPACE), 'settings': orm.Dict(dict={'nroots': 1}),
-        'native_output_policy': orm.Dict(dict={'mode': 'remote'})})
+        'native_output_policy': orm.Dict(dict=manifest['policy'] if manifest else {'mode': 'remote'})})
     if manifest is not None:
         inputs.compact_code = True
     parser = SimpleNamespace(node=SimpleNamespace(inputs=inputs, outputs={}), retrieved=repo,
@@ -72,7 +75,7 @@ def test_streamed_portable_file_matches_existing_header_convention(tmp_path):
 def test_compact_export_keeps_native_metadata_but_not_integral_payload(tmp_path, aiida_profile):
     text = native_text().replace('ORCA TERMINATED NORMALLY', 'large unused native body\n' * 150000 + 'ORCA TERMINATED NORMALLY')
     manifest = compact(tmp_path, text)
-    summary = (tmp_path / 'aiida.out').read_text()
+    summary = (tmp_path / 'aiida_summary.out').read_text()
     reference = orm.Dict(dict=reference_data())
     old_status, old = parsed(tmp_path, text=text, reference=reference)
     new_status, new = parsed(tmp_path, manifest, summary, reference=reference)
@@ -96,7 +99,7 @@ def test_compaction_keeps_native_rejections(tmp_path, aiida_profile, before, aft
     text = native_text().replace(before, after)
     manifest = compact(tmp_path, text)
     assert parsed(tmp_path, text=text)[0] == 310
-    assert parsed(tmp_path, manifest, (tmp_path / 'aiida.out').read_text())[0] == 310
+    assert parsed(tmp_path, manifest, (tmp_path / 'aiida_summary.out').read_text())[0] == 310
 
 
 def descriptor_source(computer, root, raw, native):

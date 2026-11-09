@@ -8,7 +8,7 @@ from aiida import orm
 from aiida.engine import submit
 from aiidalab_widgets_empa.cube_views import render_settings_from_view
 from aiida_empa_orca.artifacts import remote_files
-from aiida_empa_orca.rendering import CubeRenderCalculation, calcjob_options, render_settings, source_cube
+from aiida_empa_orca.rendering import CubeRenderCalculation, calcjob_options, helper_resources, render_settings, source_cube
 
 
 def render_source(property_uuid, filename, quality):
@@ -33,29 +33,72 @@ def render_source(property_uuid, filename, quality):
     return {'kind':'stash' if manifest['retention']=='stash' else 'folder', 'uuid':str(source.uuid)}
 
 
-def submit_render(property_uuid, filename, quality, settings, *, view_name=None):
+def prepare_render(property_uuid, filename, quality, settings, *, resources=None, view_name=None):
+    """Review plain values and source availability without storing nodes or submitting."""
     location = render_source(property_uuid, filename, quality)
     p = render_settings(settings)
+    budget = helper_resources(resources)
     node = orm.load_node(property_uuid)
-    computer_uuid=node.outputs.remote_folder.computer.uuid
-    choices=[]
-    for uuid in orm.QueryBuilder().append(orm.InstalledCode,project=['uuid']).all(flat=True):
-        candidate=orm.load_code(uuid)
-        if candidate.default_calc_job_plugin=='empa_orca.cube_render' and candidate.computer.uuid==computer_uuid:
+    computer_uuid = node.outputs.remote_folder.computer.uuid
+    choices = []
+    for uuid in orm.QueryBuilder().append(orm.InstalledCode, project=['uuid']).all(flat=True):
+        candidate = orm.load_code(uuid)
+        if candidate.default_calc_job_plugin == 'empa_orca.cube_render' and candidate.computer.uuid == computer_uuid:
             choices.append(str(uuid))
-    if len(choices)!=1:
+    if len(choices) != 1:
         raise ValueError('Configure one cubehandler rendering code on the calculation computer in Code setup.')
     code = orm.load_code(choices[0])
+    plan = dict(property_uuid=str(property_uuid), filename=filename, quality=quality, settings=p,
+                resources=budget, location=location, code_uuid=str(code.uuid), code_label=code.full_label,
+                manifest_uuid=str(node.outputs.manifest.uuid), view_name=view_name)
+    return json.loads(json.dumps(plan, allow_nan=False))
+
+
+def render_builder(plan):
+    fresh = prepare_render(plan['property_uuid'], plan['filename'], plan['quality'], plan['settings'],
+                           resources=plan['resources'], view_name=plan['view_name'])
+    if fresh != {key: value for key, value in plan.items() if key != 'saved_view'}:
+        raise ValueError('The render source or code changed; review again')
+    if 'saved_view' in plan and saved_view(plan['property_uuid'], plan['saved_view']['id']) != plan['saved_view']:
+        raise ValueError('The saved visualization changed; review again')
     builder = CubeRenderCalculation.get_builder()
-    builder.code = code
-    builder.source_manifest = node.outputs.manifest
-    builder.filename = orm.Str(filename)
-    builder.settings = orm.Dict(dict=p)
-    builder['source_'+location['kind']] = orm.load_node(location['uuid'])
-    builder.metadata.options = calcjob_options(node.outputs.remote_folder)
-    builder.metadata.label = f'{view_name + " · " if view_name else ""}{filename} · {quality} render'
+    builder.code = orm.load_code(plan['code_uuid'])
+    builder.source_manifest = orm.load_node(plan['manifest_uuid'])
+    builder.filename = orm.Str(plan['filename'])
+    builder.settings = orm.Dict(dict=plan['settings'])
+    builder['source_'+plan['location']['kind']] = orm.load_node(plan['location']['uuid'])
+    remote = orm.load_node(plan['property_uuid']).outputs.remote_folder
+    budget = helper_resources(plan['resources'])
+    builder.metadata.options = calcjob_options(remote, seconds=budget['wallclock_seconds'], memory_mb=budget['memory_mb'])
+    builder.metadata.label = f'{plan["view_name"] + " · " if plan["view_name"] else ""}{plan["filename"]} · {plan["quality"]} render'
     builder.metadata.disable_cache = True
-    return str(submit(builder).uuid)
+    return builder
+
+
+def submit_reviewed_render(plan):
+    return str(submit(render_builder(plan)).uuid)
+
+
+def submit_render(property_uuid, filename, quality, settings, *, view_name=None, resources=None):
+    return submit_reviewed_render(prepare_render(property_uuid, filename, quality, settings,
+                                                view_name=view_name, resources=resources))
+
+
+def prepare_saved_renders(property_uuid, identifiers, *, resources=None):
+    plans, errors = [], []
+    for identifier in dict.fromkeys(identifiers):
+        name = identifier
+        try:
+            record = saved_view(property_uuid, identifier)
+            name = record['name']
+            plan = prepare_render(property_uuid, record['filename'], record['quality'],
+                                  render_settings_from_view(record['visualization']), view_name=name,
+                                  resources=resources)
+            plan['saved_view'] = json.loads(json.dumps(record, allow_nan=False))
+            plans.append(plan)
+        except Exception as exc:
+            errors.append({'name': name, 'message': str(exc)})
+    return {'plans': plans, 'errors': errors}
 
 
 def renders(property_uuid, filename=None):

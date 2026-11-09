@@ -54,7 +54,21 @@ def source_cube(manifest, filename):
     raise ValueError('The selected cube is not in the recorded manifest')
 
 
-def calcjob_options(source, *, seconds=1800):
+def helper_resources(values=None, *, default_seconds=1800):
+    """Plain serial-helper budget; keep it separate from scientific settings."""
+    p = dict(values or {})
+    if set(p) - {'memory_mb', 'wallclock_seconds'}:
+        raise ValueError('Unknown helper resource setting')
+    p.setdefault('memory_mb', 2048)
+    p.setdefault('wallclock_seconds', default_seconds)
+    if type(p['memory_mb']) is not int or not 256 <= p['memory_mb'] <= 1048576:
+        raise ValueError('Helper memory must be between 256 and 1048576 MiB')
+    if type(p['wallclock_seconds']) is not int or not 60 <= p['wallclock_seconds'] <= 604800:
+        raise ValueError('Helper wall time must be between 1 and 10080 minutes')
+    return p
+
+
+def calcjob_options(source, *, seconds=1800, memory_mb=None):
     """Inherit scheduler allocation/account details; helper steps are serial."""
     options = {}
     creator = source.creator
@@ -65,6 +79,9 @@ def calcjob_options(source, *, seconds=1800):
                 options[key] = value
     options.update(resources={'num_machines': 1, 'num_mpiprocs_per_machine': 1},
                    max_wallclock_seconds=seconds, withmpi=False)
+    if memory_mb is not None:
+        budget = helper_resources({'memory_mb': memory_mb, 'wallclock_seconds': seconds})
+        options['max_memory_kb'] = budget['memory_mb'] * 1024
     return options
 
 

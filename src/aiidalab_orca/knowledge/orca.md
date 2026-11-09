@@ -98,6 +98,14 @@ generate a preview if absent. Cubes are additional calculations, not new SCF
 optimizations. Full numerical cubes and reduced interactive previews have
 different roles and retention policies.
 
+**Cube resources** controls memory and wall time for the serial generation /
+reduction job. Rendering has independent **Rendering resources** in its Render
+tab; new GUI requests default to 2 GiB and ten minutes for each stage. Review
+shows the selected budget. For rendering, **Review current view** or **Review
+selected views** only prepares a snapshot; **Submit reviewed render** launches
+the reviewed job(s). Editing the budget invalidates review. The SCF budget is
+not automatically inherited by these helper stages.
+
 The Kohn–Sham property panel displays the wavefunction's inherited remote/stash
 choice. It has no editable retrieval threshold. Full-cube stash/leave/delete is
 a separate choice and never deletes the source wavefunction. Historical files

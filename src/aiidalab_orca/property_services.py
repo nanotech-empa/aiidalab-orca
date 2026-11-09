@@ -91,9 +91,11 @@ def property_runs(source_uuid):
             query.order_by({'run':{'ctime':'desc'}}).limit(50).all()]
 
 
-def prepare_property(source_uuid, parameters, policy, codes):
+def prepare_property(source_uuid, parameters, policy, codes, *, resources=None):
     node=source_node(source_uuid)
     p=cube_parameters(parameters)
+    from aiida_empa_orca.rendering import helper_resources
+    budget = helper_resources(resources, default_seconds=3600)
     policy=storage_policy(dict(policy, threshold_mb=0))
     remote=source_remote(node)
     codes = dict(codes)
@@ -113,7 +115,7 @@ def prepare_property(source_uuid, parameters, policy, codes):
         raise ValueError('The restricted reference does not provide a spin-density channel')
     plan={'source_uuid':source_uuid,'parameters':p,'storage_policy':policy,'codes':dict(codes),
           'native_output_policy': native_retention(remote),
-          'action':'compute','reuse_uuid':None,'regenerate_reference':False,'warnings':[]}
+          'action':'compute','reuse_uuid':None,'regenerate_reference':False,'warnings':[], 'resources': budget}
     for row in property_runs(source_uuid):
         previous=orm.load_node(row['uuid'])
         if (previous.is_finished_ok and previous.inputs.parameters.get_dict()==p and
@@ -150,6 +152,8 @@ def property_builder(plan):
     builder.reference_settings=node.inputs.settings
     builder.orca_code=node.inputs.code
     builder.parameters=orm.Dict(dict=plan['parameters'])
+    from aiida_empa_orca.rendering import helper_resources
+    builder.cube_resources = orm.Dict(dict=helper_resources(plan.get('resources'), default_seconds=3600))
     builder.storage_policy=orm.Dict(dict=plan['storage_policy'])
     for role in ('python','plot','cubehandler'):
         builder[role+'_code']=orm.load_code(plan['codes'][role])

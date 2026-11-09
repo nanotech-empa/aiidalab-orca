@@ -75,7 +75,12 @@ virtual levels. ORCA orbital indices start at zero.
 
 Open **Orbitals and spin density** in a completed result. Select orbitals directly
 or select those in the displayed energy range. Spin density is offered for an
-unrestricted reference. Review the plan, then submit. The independent
+unrestricted reference. **Cube resources** exposes the helper's memory and wall
+time, independently of the source SCF settings. New GUI requests default to
+2 GiB and ten minutes; one serial process generates and reduces all requested
+cubes. Review displays this budget and any edit invalidates it. A separately
+needed wavefunction-preservation step uses the same reviewed helper budget.
+Review the plan, then submit. The independent
 `empa_orca.orbitals` WorkChain:
 
 1. Validates source provenance, settings, orbital selection and current files.
@@ -164,8 +169,14 @@ view**. This saves its cube, render source, camera, isosurfaces, colours, image
 dimensions, opacity and slice settings without submitting a job. Several views,
 including views of different cubes from the same property result, can be stored.
 Select a single entry to restore or update it; select several to render them.
-Restoring a view also selects its cube. **Render selected views** submits one
-CalcJob per saved snapshot, independently of subsequent viewer edits. The full
+Restoring a view also selects its cube. **Review selected views** snapshots the
+selected records without submitting. In **Render → Rendering resources**, choose
+the memory and wall time for each serial rendering job (GUI defaults: 2 GiB,
+ten minutes). Review shows the image source, dimensions, visible slicing plane,
+code, number of jobs and per-job budget. **Submit reviewed render** launches
+one CalcJob per reviewed snapshot. Resource or source edits invalidate review;
+current-view edits also invalidate its review. Updating/removing a saved record
+after review requires reviewing it again before submission. The full
 cube must still exist when rendering is requested; source failures are reported
 per view without substituting reduced cubes.
 
@@ -176,7 +187,9 @@ or images. Each submitted job captures its own immutable settings input and link
 to its source manifest. These controls reuse `SavedCubeViews` from EMPA widgets;
 the app supplies persistence and CalcJob callbacks.
 
-The Render tab submits `empa_orca.cube_render` through AiiDA. Select the retrieved
+The Render tab reviews and submits `empa_orca.cube_render` through AiiDA. Use
+**Review current view**, then **Submit reviewed render**, for an unsaved view.
+Select the retrieved
 preview or the full-resolution cube recorded in scratch/stash, then use the
 current 3D camera, isovalues, colours, image dimensions and opacity. Full cubes
 are checked and staged on their storage computer; only the PNG and log are

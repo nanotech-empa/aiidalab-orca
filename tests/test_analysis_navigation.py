@@ -206,6 +206,6 @@ def test_preparation_then_explicit_active_selection_precedes_state_requests(monk
         assert panel.layout.display == 'none' and result.prerequisites.layout.display == ''
         selection.confirm.click()
         assert 'reference changed' in selection.summary.value
-        assert result.confirmed_space == ('common',6,5)
+        assert result.confirmed_space is None
     finally:
         close_widget_tree(result)

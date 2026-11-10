@@ -64,6 +64,12 @@ The usual reduced-cube pipeline visualizes their shapes. Confirm the optimized
 space again before continuing. The original orbitals, states and provenance
 remain intact.
 
+Changing **Common orbitals** replaces the active-space inspection, including
+its catalog and cube previews, and clears the previous confirmation and solver
+drafts. Returning to a previously selected reference still requires confirmation
+in its current inspection view. A confirmation from a replaced view is rejected;
+it cannot select orbitals for another reference or reuse an old CASSCF review.
+
 For Dyson/Kondo, compute every needed fixed-orbital CASCI charge/spin sector
 using this one new reference. States from different orbital-reference UUIDs
 cannot be combined. Independently optimized charge states would require a

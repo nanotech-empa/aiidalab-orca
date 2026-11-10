@@ -31,6 +31,7 @@ def settings(values, electronic):
     unrestricted = reference_type(electronic) == 'UKS'
     defaults = {'method': 'TDA', 'nroots': 5, 'triplets': False, 'nto': True,
                 'nto_states': [], 'nto_family': 'singlet', 'maxiter': 100,
+                'etol': None, 'rtol': None,
                 **{k: electronic[k] for k in ('nprocs', 'memory_mb', 'wallclock_seconds')}}
     if not isinstance(values, dict) or set(values) - defaults.keys():
         raise ValueError('Unknown optical-excitation setting')
@@ -42,6 +43,12 @@ def settings(values, electronic):
     for key in ('nprocs', 'memory_mb', 'wallclock_seconds', 'maxiter'):
         if type(s[key]) is not int or s[key] < 1:
             raise ValueError('Resources and maximum iterations must be positive integers')
+    for key in ('etol', 'rtol'):
+        value = s[key]
+        if value is None:
+            del s[key]  # Keep historical default settings and reuse identities unchanged.
+        elif type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError('Explicit response ETol and RTol must be finite positive numbers')
     if s['memory_mb'] < 256 * s['nprocs']:
         raise ValueError('Provide at least 256 MiB per process')
     if any(type(s[k]) is not bool for k in ('triplets', 'nto')):
@@ -68,6 +75,7 @@ def optical_input(electronic, values):
     params['input_blocks']['pal']['nprocs'] = s['nprocs']
     td = {'TDA': s['method'] == 'TDA', 'NRoots': s['nroots'], 'MaxIter': s['maxiter'],
           'Triplets': s['triplets'], 'DoNTO': s['nto'], 'TPrint': .0001, 'NTOThresh': .0001}
+    td.update({native: s[key] for key, native in [('etol', 'ETol'), ('rtol', 'RTol')] if key in s})
     if s['nto']:
         if s['nto_states']:
             td['NTOStates'] = ','.join(map(str, s['nto_states']))
@@ -82,6 +90,54 @@ def number(value):
     if not math.isfinite(result):
         raise ValueError('Nonfinite optical result')
     return result
+
+
+def _excited_states(text, s, unrestricted):
+    """Read native rows without certifying solver convergence or NTO availability."""
+    rows, sector, current = {}, None, None
+    for line in text.splitlines():
+        heading = re.match(r'^TD-DFT(?:/TDA)? EXCITED STATES(?:\s*\((\w+)\))?', line)
+        if heading:
+            sector = 'uks' if unrestricted else ('triplet' if heading[1] == 'TRIPLETS' else 'singlet')
+            current = None
+        if line.startswith('NATURAL TRANSITION ORBITALS'):
+            sector, current = None, None
+        row = re.match(r'^STATE\s+(\d+):\s+E=\s*(' + NUMBER + r') au\s+(' + NUMBER + r') eV', line)
+        if row and sector:
+            native_root = int(row[1])
+            key = (sector, native_root)
+            if key in rows:
+                raise ValueError('Duplicated excited-state identity')
+            spin = re.search(r'<S\*\*2>\s*=\s*(' + NUMBER + ')', line)
+            current = {'family': sector, 'native_state_index': native_root,
+                       'excitation_hartree': number(row[2]), 'excitation_ev_rounded': number(row[3]),
+                       'spin_squared': number(spin[1]) if spin else None, 'contributions': [], 'nto': None}
+            rows[key] = current
+        contribution = re.match(r'^\s*(\d+)([ab])\s*->\s*(\d+)([ab])\s*:\s*(' + NUMBER + r')(?:\s+\(c=\s*(' + NUMBER + r')\))?\s*$', line)
+        if contribution and current:
+            current['contributions'].append({'hole': int(contribution[1]), 'hole_spin': contribution[2],
+                'particle': int(contribution[3]), 'particle_spin': contribution[4],
+                'native_weight': number(contribution[5]), 'coefficient': number(contribution[6]) if contribution[6] else None})
+    families = ['uks'] if unrestricted else ['singlet', 'triplet'] if s['triplets'] else ['singlet']
+    if {row['family'] for row in rows.values()} != set(families):
+        raise ValueError('Incomplete or unexpected labelled excited-state family')
+    local = set(range(1, s['nroots'] + 1))
+    global_triplets = {root + s['nroots'] for root in local}
+    states = {}
+    for family in families:
+        indices = {index for sector, index in rows if sector == family}
+        if indices == local:
+            offset = 0
+        elif family == 'triplet' and indices == global_triplets:
+            offset = s['nroots']
+        else:
+            raise ValueError('Incomplete or mixed native root numbering in ' + family + ' family')
+        for index in sorted(indices):
+            row = rows[(family, index)]
+            root = index - offset
+            key = family + ':' + str(root)
+            states[key] = dict(row, id=key, root=root)
+    return states
 
 
 def parse_result(text, electronic, values, *, expected_electrons=None, expected_energy=None):
@@ -124,36 +180,20 @@ def parse_result(text, electronic, values, *, expected_electrons=None, expected_
         if not solve.startswith(str(s['nroots']) + '\n'):
             raise ValueError('Native root request differs from the reviewed number')
         tolerance = re.search(r'Convergence tolerance for the residual\s*\.{2,}\s*(' + NUMBER + ')', solve)
+        energy_tolerance = re.search(r'Convergence tolerance for the energies\s*\.{2,}\s*(' + NUMBER + ')', solve)
+        for key, printed in [('rtol', tolerance), ('etol', energy_tolerance)]:
+            if key in s and (not printed or not math.isclose(number(printed[1]), s[key], rel_tol=5e-4)):
+                raise ValueError('Native response ' + key.upper() + ' differs from the reviewed tolerance')
         end = solve.find('CONVERGENCE OF RESIDUAL NORM REACHED')
         values_r = re.findall(r'Maximum residual norm\s*:\s*(' + NUMBER + ')', solve[:end]) if end >= 0 else []
-        if not tolerance or not values_r or not 0 <= number(values_r[-1]) <= number(tolerance[1]):
+        limit = min(number(tolerance[1]), s.get('rtol', math.inf)) if tolerance else 0
+        if not tolerance or not values_r or not 0 <= number(values_r[-1]) <= limit:
             raise ValueError('A response family did not satisfy its native residual tolerance')
-        residuals.append({'residual': number(values_r[-1]), 'tolerance': number(tolerance[1])})
-    states, sector, current = {}, None, None
-    for line in text.splitlines():
-        heading = re.match(r'^TD-DFT(?:/TDA)? EXCITED STATES(?:\s*\((\w+)\))?', line)
-        if heading:
-            sector = 'uks' if unrestricted else ('triplet' if heading[1] == 'TRIPLETS' else 'singlet')
-            current = None
-        if line.startswith('NATURAL TRANSITION ORBITALS'):
-            sector, current = None, None
-        row = re.match(r'^STATE\s+(\d+):\s+E=\s*(' + NUMBER + r') au\s+(' + NUMBER + r') eV', line)
-        if row and sector:
-            native_root = int(row[1])
-            family_root = native_root - s['nroots'] if sector == 'triplet' else native_root
-            key = sector + ':' + str(family_root)
-            if key in states:
-                raise ValueError('Duplicated excited-state identity')
-            spin = re.search(r'<S\*\*2>\s*=\s*(' + NUMBER + ')', line)
-            current = {'id': key, 'family': sector, 'root': family_root, 'native_state_index': native_root,
-                       'excitation_hartree': number(row[2]), 'excitation_ev_rounded': number(row[3]),
-                       'spin_squared': number(spin[1]) if spin else None, 'contributions': [], 'nto': None}
-            states[key] = current
-        contribution = re.match(r'^\s*(\d+)([ab])\s*->\s*(\d+)([ab])\s*:\s*(' + NUMBER + r')(?:\s+\(c=\s*(' + NUMBER + r')\))?\s*$', line)
-        if contribution and current:
-            current['contributions'].append({'hole': int(contribution[1]), 'hole_spin': contribution[2],
-                'particle': int(contribution[3]), 'particle_spin': contribution[4],
-                'native_weight': number(contribution[5]), 'coefficient': number(contribution[6]) if contribution[6] else None})
+        check = {'residual': number(values_r[-1]), 'tolerance': number(tolerance[1])}
+        if 'etol' in s:
+            check['energy_tolerance'] = number(energy_tolerance[1])
+        residuals.append(check)
+    states = _excited_states(text, s, unrestricted)
     families = ['uks'] if unrestricted else ['singlet', 'triplet'] if s['triplets'] else ['singlet']
     expected = {family + ':' + str(root) for family in families for root in range(1, s['nroots'] + 1)}
     if set(states) != expected:

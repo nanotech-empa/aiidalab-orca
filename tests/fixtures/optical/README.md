@@ -12,3 +12,12 @@ energies. The independent numerical benchmark for this stage remains pyridine.
 Trailing line whitespace is stripped. Only parser-relevant output is retained; full native outputs stay with their
 AiiDA CalcJobs. No engine binary, personal paths or complete program banner is
 included. Ordinary tests do not execute ORCA.
+# Synthetic regression fixture
+
+`synthetic-full-triplets-energy-stop.out` is fabricated parser input, not a
+calculation output. Its energies, reference energy, residuals and electron count
+are invented; it contains no coordinates or calculation identifiers. It models
+family-local numbering and an energy-only stop without a verified residual.
+Unit tests also exercise progressive/mixed numbering and retained NTO identities.
+Real calculation outputs used for local integration are kept outside this Git
+checkout and are not published with this regression.

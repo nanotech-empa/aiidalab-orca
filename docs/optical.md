@@ -62,8 +62,38 @@ The full JSON download retains native response contributions and NTO weights.
 ORCA's `FINAL SINGLE POINT ENERGY` can be the selected excited-state total.
 The parser records the separately printed ground-state SCF energy and the
 labelled excitations instead of treating that final scalar as the ground state.
-Native global state indices and family root indices are preserved separately,
+Native printed state indices and family root indices are preserved separately,
 including the different triplet numbering in the state and spectrum tables.
+Native state listings may number triplets within their family (1–N) or after
+the singlets (N+1–2N). The parser requires a complete, consistent numbering
+scheme, preserves the native index, and records family roots separately.
+This does not change stored historical results or qualify triplet NTOs.
+
+Normal termination and native energy convergence alone do not satisfy the
+app's residual-convergence check. Each requested response family must print
+residual convergence and a residual at or below its native tolerance.
+A synthetic regression fixture models normal termination with a triplet
+energy-only stop, without a final residual-convergence certificate. It remains
+rejected. Parsing its state rows in a unit test does not establish convergence.
+
+For an explicitly reviewed retry, ORCA documents `ETol` as the excited-state
+energy-change tolerance in Hartree and `RTol` as the residual-norm tolerance
+([ORCA 6.1 response controls](https://www.faccts.de/docs/orca/6.1/manual/contents/spectroscopyproperties/tddft.html#general-features)).
+Under **Resources and advanced settings**, select **Set response tolerances
+explicitly** to edit ETol and RTol. The numerical control for the reviewed
+energy-stop retry is `ETol 1e-12`, with `RTol 2.5e-7` unchanged. Tightening the energy criterion reduces early
+energy-only stopping; it does not certify residual convergence. Acceptance
+still requires the printed residual certificate for every family. Geometry,
+functional, basis and spin treatment stay fixed. Keep the reviewed 100-iteration,
+2-process, 2-GiB, 600-second limits. A retry is a separate calculation requiring
+explicit review, not an automatic remedy or a reinterpretation of the old node.
+The checkbox is off by default: existing inputs, settings and reuse identities
+retain native defaults. Selecting it changes the reviewed request explicitly.
+Changing either tolerance or the checkbox invalidates review; restoring a value
+still requires a new review. Both values appear in review, native input and
+stored settings. The parser checks that each family used the requested native
+tolerances; a printed rounding difference never weakens the requested residual
+limit. Oversized-output extracts retain both tolerance lines and stopping criteria.
 
 NTOs are a separate orbital basis for one transition. Each listed pair contains
 a hole and particle orbital; it is not a pair of unchanged KS orbitals. Native

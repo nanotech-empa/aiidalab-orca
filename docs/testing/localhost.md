@@ -324,7 +324,11 @@ its independent readback, then a small downstream CASCI request.
 1. From **3. Choose energy solver**, choose **Optimize the orbitals first —
    CASSCF / SA-CASSCF**. Use the confirmed CAS(3,3), charge 0.
 2. Choose **One selected state**, multiplicity **2**, **Root to optimize = 0**.
-   Use local limits and the standard 75 macro-iteration cap. Review CASSCF.
+   Use **2 processes / 2 GiB / 10 minutes** and the standard 75 macro-iteration
+   cap. Set **PDOS resources · serial** to **2 GiB / 10 minutes** too. Review
+   must show optimization plus readback in one serial CalcJob sharing the
+   ten-minute budget, followed by one serial PDOS CalcJob. Check that a PDOS
+   budget edit invalidates review, restore/review and submit once.
 3. Submit once and wait for optimization **and independent frozen readback**.
    Successful native termination without a passing readback is insufficient.
 4. Inspect the reported state energy and optimized orbitals. One requested

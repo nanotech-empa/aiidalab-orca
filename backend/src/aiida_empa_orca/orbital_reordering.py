@@ -116,8 +116,14 @@ def _checked_plan(reference, plan):
 
 def _spatial_table(document, reference):
     """Require a narrow native export, never silently retain MO-indexed extras."""
-    if set(document)-{'Molecule', 'ORCA Header'}:
-        raise ValueError('Export geometry, basis, MOs and AO overlap only; omit density/integral arrays')
+    unknown = set(document)-{'Molecule', 'ORCA Header', 'Citations'}
+    if unknown:
+        raise ValueError('Unqualified native top-level fields: '+', '.join(sorted(unknown)))
+    # ORCA exports bibliography even when only geometry/basis/MOs/S are
+    # requested. It has no orbital indices: retain it without modification.
+    if 'Citations' in document and (not isinstance(document['Citations'], list) or
+            any(not isinstance(item, dict) for item in document['Citations'])):
+        raise ValueError('Native Citations must be a list of bibliography records')
     mol = document['Molecule']
     allowed = {'Atoms', 'BaseName', 'Charge', 'CoordinateUnits', 'HFTyp', 'Multiplicity',
                'MolecularOrbitals', 'S-Matrix', 'PointGroup', 'NCorelessECP', 'Origin'}
@@ -182,6 +188,8 @@ def verify_roundtrip(source, prepared, reference, plan):
     expected = permute_document(source, reference, plan)
     a, ca, sa, oa, source_ortho = _spatial_table(expected, reference)
     b, cb, sb, ob, target_ortho = _spatial_table(prepared, reference)
+    if expected.get('Citations') != prepared.get('Citations'):
+        raise ValueError('Native roundtrip changed Citations metadata')
     if set(a) != set(b):
         raise ValueError('Native roundtrip changed molecular fields')
     for key in set(a)-{'BaseName', 'Atoms', 'S-Matrix', 'MolecularOrbitals'}:

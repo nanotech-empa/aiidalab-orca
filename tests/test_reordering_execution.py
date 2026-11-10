@@ -70,6 +70,42 @@ def test_submitted_prepare_check_scripts_preserve_source_and_remove_only_tempora
     assert hashlib.sha256(Path('aiida.gbw').read_bytes()).hexdigest() == record['prepared_file_sha256']
 
 
+@pytest.mark.parametrize('failure', ['source_digest', 'unknown_scientific_field'])
+def test_failed_prepare_cannot_publish_reference_when_serial_shell_continues(
+        spatial_source, tmp_path, monkeypatch, failure):
+    ref, doc = deepcopy(spatial_source)
+    monkeypatch.chdir(tmp_path)
+    source = b'synthetic source bytes'
+    Path('source.gbw').write_bytes(source)
+    plan = reorder.selection_plan(ref, {'electrons': 3, 'orbitals': [1, 3, 5]},
+        [r['Occupancy'] for r in doc['Molecule']['MolecularOrbitals']['MOs']],
+        source_reference_uuid=SOURCE, source_file_sha256=hashlib.sha256(source).hexdigest())
+    if failure == 'source_digest': Path('source.gbw').write_bytes(b'changed source bytes')
+    if failure == 'unknown_scientific_field': doc['Unknown-MO-Density'] = [[1]]
+    Path('source.json').write_text(json.dumps(doc))
+    Path('reordering_request.json').write_text(json.dumps({'reference': ref, 'plan': plan}))
+    Path('orbital_reordering.py').write_text(Path(reorder.__file__).read_text())
+    for stage in ('prepare', 'check'):
+        Path(stage+'.py').write_text(backend._script(stage))
+    with pytest.raises(ValueError):
+        runpy.run_path('prepare.py', run_name='__main__')
+    assert not Path('prepared.json').exists()
+    # The scheduler's SERIAL shell may continue after a helper fails. Without
+    # prepared.json the converters cannot produce a GBW/JSON; no native
+    # executable is invoked in this synthetic regression.
+    with pytest.raises((ValueError, FileNotFoundError)):
+        runpy.run_path('check.py', run_name='__main__')
+    assert not Path('aiida.gbw').exists()
+    assert not Path('reordering.json').exists()
+    errors, accepted = [], []
+    parser = SimpleNamespace(retrieved=SimpleNamespace(base=SimpleNamespace(repository=SimpleNamespace(
+        get_object_content=lambda *a, **kw: Path('reordering.json').read_bytes()))),
+        logger=SimpleNamespace(error=errors.append), out=lambda *args: accepted.append(args),
+        exit_codes=SimpleNamespace(ERROR_REORDERING='rejected'))
+    assert backend.OrbitalReorderingParser.parse(parser) == 'rejected'
+    assert errors and accepted == []
+
+
 def test_native_job_is_serial_bounded_and_keeps_all_electronic_arrays_external(common_reference, aiida_manager, entry_points):
     entry_points.add(backend.OrbitalReorderingCalculation, 'aiida.calculations:empa_orca.orbital_reordering')
     entry_points.add(backend.OrbitalReorderingParser, 'aiida.parsers:empa_orca.orbital_reordering')

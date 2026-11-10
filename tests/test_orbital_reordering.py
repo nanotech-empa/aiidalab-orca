@@ -23,10 +23,15 @@ def spatial_source():
     occ = [2, 2, 2, 1, 0, 0, 0]
     ref = {'kind': 'QRO', 'n_electrons': 7, 'n_orbitals': 7, 'charge': 0,
            'source_multiplicity': 2, 'structure_uuid': 'synthetic-geometry'}
-    document = {'ORCA Header': {'Version': 'synthetic'}, 'Molecule': {
+    document = {'ORCA Header': {'Version': 'synthetic'}, 'Citations': [
+        {'RN001': {'Authors': ['Invented Author'], 'Title': 'Synthetic citation one'}},
+        {'RN002': {'Authors': ['Another Invented Author'], 'Title': 'Synthetic citation two'}}],
+        'Molecule': {
         'Atoms': [{'ElementNumber': 7, 'NuclearCharge': 7, 'Coords': [0, 0, 0],
+                   'ElementLabel': 'N', 'Idx': 0, 'BasisAuxJ': [],
                    'Basis': [{'Shell': 's', 'Exponents': [1], 'Coefficients': [1]}]}],
-        'BaseName': 'synthetic', 'HFTyp': 'RHF', 'CoordinateUnits': 'Angs', 'Origin': [0, 0, 0],
+        'BaseName': 'synthetic', 'HFTyp': 'ROHF', 'PointGroup': 'C1',
+        'CoordinateUnits': 'Angs', 'Origin': [0, 0, 0],
         'Charge': 0, 'Multiplicity': 2, 'S-Matrix': s.tolist(),
         'MolecularOrbitals': {'EnergyUnit': 'Eh', 'OrbitalLabels': list(range(7)),
             'MOs': [{'MOCoefficients': c[:, i].tolist(), 'Occupancy': occ[i],
@@ -58,9 +63,46 @@ def test_noncontiguous_partition_and_whole_signed_overlap(spatial_source):
     assert check['array_checks_passed'] is True
     assert check['native_readback_qualified'] is False
     assert source == original
+    assert prepared['Citations'] == source['Citations']
+    assert prepared['Citations'] is not source['Citations']
     # Independent direct equality includes every column's sign and its row data.
     for native, index in enumerate(plan['native_to_source']):
         assert prepared['Molecule']['MolecularOrbitals']['MOs'][native] == source['Molecule']['MolecularOrbitals']['MOs'][index]
+
+
+@pytest.mark.parametrize('change', ['missing', 'modified', 'malformed'])
+def test_native_citations_are_preserved_through_roundtrip(spatial_source, change):
+    ref, doc = spatial_source
+    assert set(doc) == {'ORCA Header', 'Citations', 'Molecule'}
+    assert set(doc['Molecule']) == {'Atoms', 'BaseName', 'MolecularOrbitals',
+        'CoordinateUnits', 'Multiplicity', 'Charge', 'HFTyp', 'PointGroup', 'Origin', 'S-Matrix'}
+    plan = plan_for(ref, doc)
+    actual = reorder.permute_document(doc, ref, plan)
+    if change == 'missing': actual.pop('Citations')
+    if change == 'modified': actual['Citations'][0]['RN001']['Title'] = 'Changed title'
+    if change == 'malformed': actual['Citations'] = 'not bibliography records'
+    with pytest.raises(ValueError, match='Citations'):
+        reorder.verify_roundtrip(doc, actual, ref, plan)
+
+
+def test_older_export_without_citations_remains_valid(spatial_source):
+    ref, doc = deepcopy(spatial_source)
+    doc.pop('Citations')
+    plan = plan_for(ref, doc)
+    actual = reorder.permute_document(doc, ref, plan)
+    assert 'Citations' not in actual
+    assert reorder.verify_roundtrip(doc, actual, ref, plan)['array_checks_passed']
+
+
+@pytest.mark.parametrize('level', ['document', 'molecule', 'orbitals'])
+def test_bibliography_support_does_not_allow_unknown_scientific_arrays(spatial_source, level):
+    ref, doc = deepcopy(spatial_source)
+    plan = plan_for(ref, doc)
+    target = {'document': doc, 'molecule': doc['Molecule'],
+              'orbitals': doc['Molecule']['MolecularOrbitals']}[level]
+    target['Unknown-MO-Density'] = [[1, 0], [0, 1]]
+    with pytest.raises(ValueError):
+        reorder.permute_document(doc, ref, plan)
 
 
 def test_exact_allyl_pilot_and_contiguous_identity():

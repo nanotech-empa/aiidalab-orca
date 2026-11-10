@@ -178,6 +178,27 @@ def permute_document(document, reference, plan):
     return result
 
 
+def _check_atom_value(first, second, path, tolerance):
+    """Compare JSON structure exactly; bound finite float leaves absolutely."""
+    if type(first) is not type(second):
+        raise ValueError('Native roundtrip changed '+path+' type')
+    if isinstance(first, dict):
+        if first.keys() != second.keys():
+            raise ValueError('Native roundtrip changed '+path+' fields')
+        for key in first:
+            _check_atom_value(first[key], second[key], path+'.'+key, tolerance)
+    elif isinstance(first, list):
+        if len(first) != len(second):
+            raise ValueError('Native roundtrip changed '+path+' length')
+        for index, (a, b) in enumerate(zip(first, second)):
+            _check_atom_value(a, b, f'{path}[{index}]', tolerance)
+    elif isinstance(first, float):
+        if not np.isfinite(first) or not np.isfinite(second) or abs(first-second) > tolerance:
+            raise ValueError('Native roundtrip changed or has nonfinite '+path)
+    elif first != second:
+        raise ValueError('Native roundtrip changed '+path)
+
+
 def verify_roundtrip(source, prepared, reference, plan):
     """Check re-exported arrays without fitting, rotating or repairing them.
 
@@ -197,11 +218,15 @@ def verify_roundtrip(source, prepared, reference, plan):
             raise ValueError('Native roundtrip changed '+key)
     if len(a['Atoms']) != len(b['Atoms']):
         raise ValueError('Native roundtrip changed atoms')
-    for first, second in zip(a['Atoms'], b['Atoms']):
-        if (set(first) != set(second) or
-                any(first[k] != second[k] for k in first if k != 'Coords') or
-                np.max(np.abs(np.asarray(first['Coords'])-second['Coords'])) > DATA_TOLERANCE):
-            raise ValueError('Native roundtrip changed atom order, geometry or basis')
+    for index, (first, second) in enumerate(zip(a['Atoms'], b['Atoms'])):
+        if set(first) != set(second):
+            raise ValueError('Native roundtrip changed atom fields')
+        for key in first:
+            # Native basis serialization may round float coefficients by an
+            # ULP. Use the same absolute data bound as coefficients/energies;
+            # all identities, other atom metadata and integer leaves stay exact.
+            tolerance = DATA_TOLERANCE if key in ('Coords', 'Basis', 'BasisAuxJ') else 0
+            _check_atom_value(first[key], second[key], f'Atoms[{index}].{key}', tolerance)
     ta, tb = a['MolecularOrbitals'], b['MolecularOrbitals']
     if {k:v for k,v in ta.items() if k != 'MOs'} != {k:v for k,v in tb.items() if k != 'MOs'}:
         raise ValueError('Native roundtrip changed AO labels or orbital metadata')

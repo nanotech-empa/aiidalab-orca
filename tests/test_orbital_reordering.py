@@ -207,6 +207,79 @@ def test_complete_roundtrip_rejects_scientific_changes(spatial_source, change):
         reorder.verify_roundtrip(doc, actual, ref, plan)
 
 
+@pytest.fixture
+def basis_roundtrip(spatial_source):
+    ref, doc = deepcopy(spatial_source)
+    atom = doc['Molecule']['Atoms'][0]
+    atom['Coords'] = [.125, -.25, .5]
+    # Invented shells, preserving native nesting and distinct identities.
+    atom['Basis'] = [{'Shell': 's', 'Exponents': [1.25, .5],
+                      'Coefficients': [0.0, -.25], 'AngularMomentum': 0}]
+    atom['BasisAuxJ'] = [{'Shell': 'p', 'Exponents': [2.5, .75],
+                          'Coefficients': [0.0, -.5], 'AngularMomentum': 1}]
+    plan = plan_for(ref, doc)
+    return ref, doc, plan, reorder.permute_document(doc, ref, plan)
+
+
+@pytest.mark.parametrize('field', ['Basis', 'BasisAuxJ'])
+@pytest.mark.parametrize('delta,accepted', [
+    (float(np.nextafter(reorder.DATA_TOLERANCE, 0)), True),
+    (reorder.DATA_TOLERANCE, True),
+    (float(np.nextafter(reorder.DATA_TOLERANCE, np.inf)), False)])
+def test_basis_float_absolute_boundary_uses_existing_data_tolerance(basis_roundtrip, field, delta, accepted):
+    ref, doc, plan, actual = basis_roundtrip
+    actual['Molecule']['Atoms'][0][field][0]['Coefficients'][0] = delta
+    if accepted:
+        assert reorder.verify_roundtrip(doc, actual, ref, plan)['array_checks_passed']
+    else:
+        with pytest.raises(ValueError, match=field):
+            reorder.verify_roundtrip(doc, actual, ref, plan)
+
+
+def test_native_like_float_roundoff_needs_no_array_repair(basis_roundtrip):
+    ref, doc, plan, actual = basis_roundtrip
+    atom = actual['Molecule']['Atoms'][0]
+    atom['BasisAuxJ'][0]['Coefficients'][1] = float(np.nextafter(-.5, -np.inf))
+    atom['Coords'][0] = float(np.nextafter(.125, np.inf))
+    original_source, original_actual = deepcopy(doc), deepcopy(actual)
+    assert reorder.verify_roundtrip(doc, actual, ref, plan)['array_checks_passed']
+    assert doc == original_source and actual == original_actual
+
+
+@pytest.mark.parametrize('field', ['Basis', 'BasisAuxJ'])
+@pytest.mark.parametrize('value', [float('nan'), float('inf'), -float('inf')])
+@pytest.mark.parametrize('side', ['source', 'prepared'])
+def test_nonfinite_basis_floats_are_rejected(basis_roundtrip, field, value, side):
+    ref, doc, plan, actual = basis_roundtrip
+    target = doc if side == 'source' else actual
+    target['Molecule']['Atoms'][0][field][0]['Coefficients'][0] = value
+    with pytest.raises(ValueError, match=field):
+        reorder.verify_roundtrip(doc, actual, ref, plan)
+
+
+@pytest.mark.parametrize('change', ['integer', 'integer_to_float', 'integer_to_bool',
+    'float_to_integer', 'text', 'list_to_tuple', 'new_key', 'missing_key', 'length', 'order',
+    'atom_index', 'atom_index_type', 'nuclear_identity'])
+def test_basis_tolerance_keeps_structure_types_order_and_identity_exact(basis_roundtrip, change):
+    ref, doc, plan, actual = basis_roundtrip
+    atom = actual['Molecule']['Atoms'][0]; shell = atom['BasisAuxJ'][0]
+    if change == 'integer': shell['AngularMomentum'] = 2
+    if change == 'integer_to_float': shell['AngularMomentum'] = 1.0
+    if change == 'integer_to_bool': shell['AngularMomentum'] = True
+    if change == 'float_to_integer': shell['Coefficients'][0] = 0
+    if change == 'text': shell['Shell'] = 's'
+    if change == 'list_to_tuple': shell['Coefficients'] = tuple(shell['Coefficients'])
+    if change == 'new_key': shell['Unknown'] = 0
+    if change == 'missing_key': shell.pop('AngularMomentum')
+    if change == 'length': shell['Exponents'].append(.25)
+    if change == 'order': shell['Exponents'].reverse()
+    if change == 'atom_index': atom['Idx'] = 1
+    if change == 'atom_index_type': atom['Idx'] = False
+    if change == 'nuclear_identity': atom['ElementNumber'] = 8
+    with pytest.raises(ValueError):
+        reorder.verify_roundtrip(doc, actual, ref, plan)
+
+
 @pytest.mark.parametrize('case', ['nan', 'complex', 'uhf', 'rank', 'missing_basis', 'nonfinite_occ'])
 def test_unqualified_exports_fail_closed(spatial_source, case):
     ref, doc = deepcopy(spatial_source)

@@ -613,6 +613,13 @@ class QuantumEnergy(ipw.VBox):
             )
             if self._operation == 'export':
                 self.review.value += '<p>Full files: ' + html.escape(retention_description(self._plan['native_output_policy'])) + '.</p>'
+                budget = self._plan['settings']
+                self.review.value += (
+                    f'<p>Sequential jobs: native ORCA export ({budget["nprocs"]} processes), '
+                    f'then one validation worker ({budget["nprocs"]} CPU threads). '
+                    f'Each job: total memory {budget["memory_mb"]/1024:g} GiB; '
+                    f'up to {budget["wallclock_seconds"]/60:g} minutes. '
+                    'OMP, OpenBLAS and MKL thread limits follow this CPU budget.</p>')
             transfer = self._plan.get('hamiltonian_transfer')
             if transfer:
                 self.review.value += ('<p>The Hamiltonian stays outside the AiiDA repository. ' +

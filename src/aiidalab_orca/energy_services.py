@@ -6,6 +6,7 @@ from aiida_empa_orca.energy import (
     EnergyExportWorkChain,
     EnergyStageCalculation,
     export_input,
+    export_validation_options,
     worker_manifest,
 )
 from . import casci_services
@@ -80,6 +81,7 @@ def prepare_export(reference_uuid, space, values, worker_uuid, *, native_output_
         "reference_uuid": str(reference_uuid),
         "space": space,
         "settings": settings,
+        "validation_options": export_validation_options(settings),
         "worker_uuid": str(worker_uuid),
         "worker_manifest": worker,
         "computer": node.inputs.code.computer.label,

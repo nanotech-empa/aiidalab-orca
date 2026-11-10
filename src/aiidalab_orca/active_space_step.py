@@ -101,8 +101,11 @@ class ActiveSpaceStep(ipw.VBox):
 
     def _use_selected(self, indices):
         indices = list(indices)
-        start = (self.reference['n_electrons']-self.electrons.value)//2
-        if self.reordering and indices != list(range(start, start+len(indices))):
+        if not indices:
+            raise ValueError('Select source orbital indices before confirming the active space')
+        # Preserve the existing window-based count choice for every contiguous
+        # selection, including one different from the suggested initial window.
+        if self.reordering and indices != list(range(indices[0], indices[-1]+1)):
             self._requires_reordering = True
             if self.selection_invalidated:
                 self.selection_invalidated()

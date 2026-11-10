@@ -296,6 +296,15 @@ def nto_selection(data, values):
     return state, [list(p) for p in sorted(orbitals)]
 
 
+def active_nto_preview(excitations_uuid):
+    """Return the oldest unfinished preview for this optical result, as a UUID."""
+    rows = orm.QueryBuilder().append(orm.Dict, filters={'uuid': str(excitations_uuid)}, tag='source').append(
+        orm.WorkChainNode, with_incoming='source', edge_filters={'label': 'excitations'}, tag='run',
+        filters={'process_type': NTO_PROCESS,
+                 'attributes.process_state': {'!in': ['finished', 'excepted', 'killed']}}, project='uuid')
+    return next(iter(rows.order_by({'run': {'ctime': 'asc'}}).all(flat=True)), None)
+
+
 class NtoCubesWorkChain(engine.WorkChain):
     @classmethod
     def define(cls, spec):
@@ -304,6 +313,8 @@ class NtoCubesWorkChain(engine.WorkChain):
                          'parameters': orm.Dict, 'storage_policy': orm.Dict, 'code': orm.AbstractCode,
                          'plot_code': orm.AbstractCode, 'cubehandler_code': orm.AbstractCode}.items():
             spec.input(key, valid_type=typ)
+        spec.input('preview_resources', valid_type=orm.Dict, default=lambda: orm.Dict(
+            dict={'memory_mb': 2048, 'wallclock_seconds': 600}))
         for key, typ in {'manifest': orm.Dict, 'retrieved': orm.FolderData, 'remote_folder': orm.RemoteData}.items():
             spec.output(key, valid_type=typ)
         spec.output('remote_stash', valid_type=orm.RemoteStashFolderData, required=False)
@@ -315,7 +326,12 @@ class NtoCubesWorkChain(engine.WorkChain):
 
     def setup(self):
         from .orbitals import cube_parameters
+        from .rendering import helper_resources
         try:
+            helper_resources(self.inputs.preview_resources.get_dict(), default_seconds=600)
+            active = active_nto_preview(self.inputs.excitations.uuid)
+            if active is not None and str(active) != str(self.node.uuid):
+                raise ValueError('An NTO preview is still active: '+str(active)+'. Wait for completion.')
             producer = self.inputs.excitations.creator
             if (producer is None or not producer.is_finished_ok or producer.process_type != PROCESS_TYPE or
                     self.inputs.source_remote.creator.uuid != producer.uuid):
@@ -345,6 +361,7 @@ class NtoCubesWorkChain(engine.WorkChain):
         b = storage_builder(self.inputs.source_remote, self.inputs.code,
                             {'threshold_mb': 0, 'stash_directory': native_retention(self.inputs.source_remote)['stash_directory']},
                             names=[self.ctx.filename])
+        b.metadata.options.update(self._preview_options())
         b.metadata.call_link_label = 'preserve_nto'
         return engine.ToContext(storage=self.submit(b))
 
@@ -356,19 +373,24 @@ class NtoCubesWorkChain(engine.WorkChain):
     def cubes(self):
         from .orbitals import OrbitalCubesCalculation, attach_source
         from .artifacts import stash_options
-        from .rendering import calcjob_options
         b = OrbitalCubesCalculation.get_builder()
         b.code, b.plot_code, b.cubehandler_code = self.inputs.code, self.inputs.plot_code, self.inputs.cubehandler_code
         b.parameters = self.inputs.parameters
         b.orbital_filename, b.orbital_identity = orm.Str(self.ctx.filename), orm.Dict(dict=self.ctx.identity)
         attach_source(b, self.ctx.location)
-        b.metadata.options = calcjob_options(self.inputs.source_remote)
+        b.metadata.options = self._preview_options()
         p = self.inputs.parameters.get_dict()
         if p['retention'] == 'stash':
             b.metadata.options.stash = stash_options(p['stash_directory'], 'full_cubes')
         b.metadata.disable_cache = True
         b.metadata.call_link_label = 'nto_cubes'
         return engine.ToContext(calculation=self.submit(b))
+
+    def _preview_options(self):
+        from .rendering import calcjob_options, helper_resources
+        resources = helper_resources(self.inputs.preview_resources.get_dict(), default_seconds=600)
+        return calcjob_options(self.inputs.source_remote, seconds=resources['wallclock_seconds'],
+                               memory_mb=resources['memory_mb'])
 
     def inspect_cubes(self):
         if not self.ctx.calculation.is_finished_ok:

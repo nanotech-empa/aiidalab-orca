@@ -431,7 +431,10 @@ and a selected NTO preview pair, serially.
    **Wavelength (nm)**. Check displayed/downloaded units. Export States CSV and
    a spectrum CSV/SVG; changing a display must not submit another response job.
 4. Choose one leading NTO pair for one selected singlet. Use local helpers,
-   80-point grids and full cubes **Leave**. Review and **Generate hole/particle previews**.
+   80-point grids and full cubes **Leave**. Under **Preview resources · serial**,
+   set **2 GiB / 10 minutes**. Review must show one process and this budget for
+   every required helper stage. Check that a memory or wall-time edit invalidates
+   review; restore, review again and **Generate hole/particle previews** once.
 5. Refresh NTO previews, choose **Inspect pair**, switch **Hole / Particle** and
    inspect the shared viewer. Both members must belong to the same run/state/pair.
 6. Change isovalue, switch member and return. The actual value must remain

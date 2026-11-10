@@ -119,18 +119,23 @@ def cube_runs(optical_uuid):
         filters={'process_type': optical.NTO_PROCESS}, project='uuid').order_by({'run': {'ctime': 'desc'}}).all(flat=True)
 
 
-def review_cubes(optical_uuid, selection, parameters, policy, codes, force=False):
+def review_cubes(optical_uuid, selection, parameters, policy, codes, force=False, *, resources=None):
+    from aiida_empa_orca.rendering import helper_resources
+    resources = helper_resources(resources, default_seconds=600)
     data = result(optical_uuid)
     state, orbitals = optical.nto_selection(data, selection)
     parameters = cube_parameters(dict(parameters, orbitals=orbitals, spin_density=False))
     policy = storage_policy(dict(policy, threshold_mb=0))
     node = orm.load_node(optical_uuid)
+    active = optical.active_nto_preview(node.outputs.excitations.uuid)
+    if active is not None:
+        raise ValueError('An NTO preview is still active: '+str(active)+'. Wait for completion.')
     computer = node.computer.uuid
     codes = dict(codes, helper=helper_code(computer))
     if any(not uid or orm.load_code(uid).computer.uuid != computer for uid in codes.values()):
         raise ValueError('Select ORCA plot and cubehandler on the optical calculation computer')
     signature = _signature({'optical_uuid': str(optical_uuid), 'selection': selection, 'parameters': parameters,
-                            'policy': policy, 'codes': codes})
+                            'policy': policy, 'codes': codes, 'resources': resources})
     reuse = None
     for uid in ([] if force else cube_runs(optical_uuid)):
         old = orm.load_node(uid)
@@ -148,16 +153,21 @@ def review_cubes(optical_uuid, selection, parameters, policy, codes, force=False
                     break
                 except (ValueError, OSError):
                     continue
+    preserve_nto = False
     if reuse is None:
-        resolve_electronic(node.outputs.remote_folder, names=[state['nto']['filename']])
+        from aiida_empa_orca.artifacts import native_retention
+        location = resolve_electronic(node.outputs.remote_folder, names=[state['nto']['filename']])
+        preserve_nto = location['kind'] == 'remote' and native_retention(node.outputs.remote_folder)['mode'] == 'stash'
     return {'optical_uuid': str(optical_uuid), 'selection': selection, 'parameters': parameters,
             'policy': policy, 'codes': codes, 'force': bool(force), 'signature': signature,
+            'resources': resources, 'preserve_nto': preserve_nto,
             'reuse_uuid': reuse, 'action': 'reuse' if reuse else 'compute'}
 
 
 def cube_builder(plan):
     codes = {k: v for k, v in plan['codes'].items() if k != 'helper'}
-    checked = review_cubes(plan['optical_uuid'], plan['selection'], plan['parameters'], plan['policy'], codes, plan['force'])
+    checked = review_cubes(plan['optical_uuid'], plan['selection'], plan['parameters'], plan['policy'], codes, plan['force'],
+                          resources=plan.get('resources'))
     if checked['signature'] != plan['signature']:
         raise ValueError('The NTO request changed; review it again')
     source = orm.load_node(plan['optical_uuid'])
@@ -165,6 +175,7 @@ def cube_builder(plan):
     b.excitations, b.source_remote = source.outputs.excitations, source.outputs.remote_folder
     b.selection, b.parameters = orm.Dict(dict=plan['selection']), orm.Dict(dict=plan['parameters'])
     b.storage_policy = orm.Dict(dict=plan['policy'])
+    b.preview_resources = orm.Dict(dict=checked['resources'])
     b.code, b.plot_code, b.cubehandler_code = [orm.load_code(plan['codes'][k]) for k in ('helper', 'plot', 'cubehandler')]
     b.metadata.label = 'NTO hole/particle previews · ' + plan['selection']['state_id']
     return b
@@ -172,7 +183,8 @@ def cube_builder(plan):
 
 def submit_cubes(plan):
     codes = {k: v for k, v in plan['codes'].items() if k != 'helper'}
-    checked = review_cubes(plan['optical_uuid'], plan['selection'], plan['parameters'], plan['policy'], codes, plan['force'])
+    checked = review_cubes(plan['optical_uuid'], plan['selection'], plan['parameters'], plan['policy'], codes, plan['force'],
+                          resources=plan.get('resources'))
     if checked['signature'] != plan['signature']:
         raise ValueError('The NTO request changed; review it again')
     return checked['reuse_uuid'] or str(engine.submit(cube_builder(plan)).uuid)

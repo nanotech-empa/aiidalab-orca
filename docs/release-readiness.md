@@ -81,6 +81,8 @@ or full cubes. This is local runtime coverage, not remote-machine qualification.
 6. The general CAS input supports a contiguous window in the prepared ordering.
    Arbitrary orbital-preview selections do not implement CAS reordering. Atoms
    use one-based viewer indices; ORCA orbitals use zero-based indices.
+   Supporting noncontiguous CAS orbitals is an acknowledged follow-up, explicitly
+   deferred until the authorized GUI acceptance cases L09–L19 are complete.
 7. Export uses only AiiDA-stored data. Remote/stashed full files remain external
    references. One reviewed entry can produce several scientific result types;
    it does not acquire an invented synthetic workflow parent.

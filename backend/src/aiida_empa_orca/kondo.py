@@ -10,7 +10,7 @@ from .dyson import previous, script, run_code, export_location, stage, DysonCube
 from .kondo_data import exchange, parameters
 from .orbitals import cube_parameters, validate_cube_outputs, OrbitalCubesCalculation, attach_source
 from .artifacts import stash_options, resolve_electronic, remote_files
-from .rendering import calcjob_options
+from .rendering import calcjob_options, helper_resources
 
 PROCESS = 'aiida.workflows:empa_orca.kondo'
 CUBES_PROCESS = 'aiida.workflows:empa_orca.kondo_cubes'
@@ -79,6 +79,8 @@ class KondoWorkChain(engine.WorkChain):
         for key, typ in {'transitions': orm.Dict, 'parameters': orm.Dict, 'code': orm.AbstractCode}.items():
             spec.input(key, valid_type=typ)
         spec.input('force_recompute', valid_type=orm.Bool, default=lambda: orm.Bool(False))
+        spec.input('channel_resources', valid_type=orm.Dict,
+                   default=lambda: orm.Dict(dict={'memory_mb':2048,'wallclock_seconds':600}))
         for key, typ in {'channels': orm.Dict, 'retrieved': orm.FolderData, 'remote_folder': orm.RemoteData}.items():
             spec.output(key, valid_type=typ)
         spec.outline(cls.setup, engine.if_(cls.needs_execution)(cls.compute, cls.inspect), cls.results)
@@ -88,6 +90,8 @@ class KondoWorkChain(engine.WorkChain):
     def setup(self):
         self.ctx.reuse_uuid = None
         try:
+            helper_resources(self.inputs.channel_resources.get_dict() if 'channel_resources' in self.inputs else None,
+                             default_seconds=600)
             source(self.inputs.transitions)
             table = self.inputs.transitions.get_dict()
             self.ctx.parameters = parameters(self.inputs.parameters.get_dict(), table)
@@ -113,8 +117,11 @@ class KondoWorkChain(engine.WorkChain):
         b.code, b.transitions = self.inputs.code, self.inputs.transitions
         b.parameters = orm.Dict(dict=self.ctx.parameters)
         # Compact durable inputs can be processed on either local or remote tools.
+        budget=helper_resources(self.inputs.channel_resources.get_dict() if 'channel_resources' in self.inputs else None,
+                                default_seconds=600)
         b.metadata.options = dict(resources={'num_machines': 1, 'num_mpiprocs_per_machine': 1},
-                                 max_wallclock_seconds=600, withmpi=False)
+                                 max_wallclock_seconds=budget['wallclock_seconds'],
+                                 max_memory_kb=budget['memory_mb']*1024, withmpi=False)
         b.metadata.disable_cache = True
         job = self.submit(b)
         self.ctx.job_uuid = str(job.uuid)
@@ -271,6 +278,9 @@ class KondoCubesWorkChain(engine.WorkChain):
                          'cubehandler_code': orm.AbstractCode}.items():
             spec.input(key, valid_type=typ)
         spec.input('plot_code',valid_type=orm.AbstractCode,required=False)
+        for name in ('reference_resources','cube_resources'):
+            spec.input(name,valid_type=orm.Dict,
+                       default=lambda:orm.Dict(dict={'memory_mb':2048,'wallclock_seconds':600}))
         for key, typ in {'manifest': orm.Dict, 'retrieved': orm.FolderData, 'remote_folder': orm.RemoteData,
                          'remote_stash': orm.RemoteStashFolderData}.items():
             spec.output(key, valid_type=typ, required=key != 'remote_stash')
@@ -283,6 +293,8 @@ class KondoCubesWorkChain(engine.WorkChain):
         self.ctx.reuse_uuid = None
         self.ctx.native_uuid = None
         try:
+            for name in ('reference_resources','cube_resources'):
+                helper_resources(self.inputs[name].get_dict() if name in self.inputs else None,default_seconds=3600)
             calc = channel_source(self.inputs.channels)
             p = cube_parameters(self.inputs.parameters.get_dict())
             if 'plot_code' in self.inputs:
@@ -361,7 +373,9 @@ class KondoCubesWorkChain(engine.WorkChain):
             source_gbw_sha256=data['source_gbw_sha256'],orbital_reference_uuid=data['identity']['orbital_reference_uuid'],
             levels=[dict(index=i) for i in range(max(indices)+1)]))
         attach_source(b,location)
-        b.metadata.options=calcjob_options(calc.outputs.remote_folder,seconds=3600)
+        budget=helper_resources(self.inputs.reference_resources.get_dict() if 'reference_resources' in self.inputs else None,
+                                default_seconds=3600)
+        b.metadata.options=calcjob_options(calc.outputs.remote_folder,seconds=budget['wallclock_seconds'],memory_mb=budget['memory_mb'])
         b.metadata.disable_cache=True
         job=self.submit(b)
         self.ctx.native_uuid=str(job.uuid)
@@ -383,7 +397,9 @@ class KondoCubesWorkChain(engine.WorkChain):
         if self.ctx.native_uuid:
             b.native_manifest=orm.load_node(self.ctx.native_uuid).outputs.manifest
         b.source, b.location = orm.load_node(self.ctx.location['uuid']), orm.Dict(dict=self.ctx.location)
-        b.metadata.options = calcjob_options(calc.outputs.remote_folder, seconds=3600)
+        budget=helper_resources(self.inputs.cube_resources.get_dict() if 'cube_resources' in self.inputs else None,
+                                default_seconds=3600)
+        b.metadata.options = calcjob_options(calc.outputs.remote_folder, seconds=budget['wallclock_seconds'],memory_mb=budget['memory_mb'])
         p = cube_parameters(self.inputs.parameters.get_dict())
         if p['retention'] == 'stash':
             b.metadata.options.stash = stash_options(p['stash_directory'], 'full_cubes')

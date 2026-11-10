@@ -10,7 +10,7 @@ from aiida.parsers import Parser
 from .artifacts import remote_files, resolve_electronic, stash_options
 from .dyson_data import selection, blend_options
 from .orbitals import cube_parameters, validate_cube_outputs
-from .rendering import calcjob_options
+from .rendering import calcjob_options, helper_resources
 from .native_logs import output_policy
 
 EXPORT_PROCESS = 'aiida.workflows:empa_orca.dyson_export'
@@ -241,6 +241,7 @@ class StateExportWorkChain(engine.WorkChain):
         for key,typ in {'state_energies':orm.Dict,'code':orm.AbstractCode,'helper_code':orm.AbstractCode,
                         'storage_policy':orm.Dict}.items():
             spec.input(key,valid_type=typ)
+        spec.input('export_resources',valid_type=orm.Dict,default=lambda:orm.Dict(dict={'memory_mb':2048,'wallclock_seconds':1800}))
         spec.input('force_recompute',valid_type=orm.Bool,default=lambda:orm.Bool(False))
         spec.output('artifact',valid_type=orm.Dict)
         spec.outline(cls.setup,engine.if_(cls.needs_execution)(cls.run_export,cls.inspect),cls.results)
@@ -251,6 +252,7 @@ class StateExportWorkChain(engine.WorkChain):
         self.ctx.reuse_uuid = None
         try:
             calc = state_source(self.inputs.state_energies)
+            helper_resources(self.inputs.export_resources.get_dict() if 'export_resources' in self.inputs else None)
             output_policy(self.inputs.retention_policy.get_dict())
             if not self.inputs.force_recompute.value:
                 self.ctx.reuse_uuid = existing_export(self.inputs.state_energies,self.inputs.code,self.inputs.helper_code)
@@ -272,7 +274,8 @@ class StateExportWorkChain(engine.WorkChain):
         b.state_energies,b.code,b.helper_code,b.storage_policy = (self.inputs.state_energies,self.inputs.code,
                                                                 self.inputs.helper_code,self.inputs.storage_policy)
         b.source,b.location = orm.load_node(self.ctx.location['uuid']),orm.Dict(dict=self.ctx.location)
-        b.metadata.options = calcjob_options(calc.outputs.remote_folder,seconds=1800)
+        budget=helper_resources(self.inputs.export_resources.get_dict() if 'export_resources' in self.inputs else None)
+        b.metadata.options = calcjob_options(calc.outputs.remote_folder,seconds=budget['wallclock_seconds'],memory_mb=budget['memory_mb'])
         retention = output_policy(self.inputs.retention_policy.get_dict())
         b.retention_policy = orm.Dict(dict=retention)
         if retention['mode'] == 'stash':
@@ -321,6 +324,19 @@ def validate_transitions(node):
     return data
 
 
+def runtime_settings(values):
+    """Execution controls are independent of the physical state selection."""
+    if not isinstance(values,dict) or set(values)-{'workers','max_wallclock_seconds','memory_mb'}:
+        raise ValueError('Unknown Dyson execution option')
+    result = {'workers':1,'max_wallclock_seconds':3600} | values
+    if any(type(value) is not int or value < 1 for value in result.values()):
+        raise ValueError('Dyson workers and wall time must be positive integers')
+    result.setdefault('memory_mb',4096*result['workers'])
+    if result['memory_mb'] < 256*result['workers']:
+        raise ValueError('Allocate at least 256 MiB per Dyson worker')
+    return result
+
+
 class DysonCalculation(engine.CalcJob):
     @classmethod
     def define(cls,spec):
@@ -331,6 +347,7 @@ class DysonCalculation(engine.CalcJob):
         spec.input_namespace('sources',dynamic=True,valid_type=orm.Data)
         spec.input('locations',valid_type=orm.Dict)
         spec.input('selection',valid_type=orm.Dict)
+        spec.input('runtime',valid_type=orm.Dict,default=lambda:orm.Dict(dict=runtime_settings({})))
         spec.input('metadata.options.parser_name',default='empa_orca.dyson')
         spec.input('metadata.options.withmpi',default=False)
         spec.output('transitions',valid_type=orm.Dict)
@@ -338,6 +355,9 @@ class DysonCalculation(engine.CalcJob):
 
     def prepare_for_submission(self,folder):
         selected = checked_request(self.inputs)
+        runtime=runtime_settings(self.inputs.runtime.get_dict())
+        if self.inputs.metadata.options.resources.get('num_mpiprocs_per_machine',1)!=runtime['workers'] or self.inputs.metadata.options.withmpi:
+            raise ValueError('Allocate the requested Dyson workers inside one non-MPI CalcJob')
         locations = self.inputs.locations.get_dict()
         info = common.CalcInfo()
         info.local_copy_list,info.remote_copy_list = [],[]
@@ -351,7 +371,7 @@ class DysonCalculation(engine.CalcJob):
                 raise ValueError('Export source differs from its checked location')
             stage(info,source,locations[key],key+'.json.gz')
             artifacts[key] = artifact.get_dict()
-        script(folder,'compute_dyson.py',{'selection':selected,'artifacts':artifacts})
+        script(folder,'compute_dyson.py',{'selection':selected,'artifacts':artifacts,'workers':runtime['workers']})
         info.codes_info = [run_code(self.inputs.code.uuid,['compute_dyson.py'],'driver.log')]
         info.retrieve_list = ['transitions.json','coefficients.npz','driver.log']
         return info
@@ -388,10 +408,13 @@ class DysonWorkChain(engine.WorkChain):
         for key,typ in {'selection':orm.Dict,'code':orm.AbstractCode,'export_code':orm.AbstractCode,
                         'storage_policy':orm.Dict}.items():
             spec.input(key,valid_type=typ)
+        spec.input('runtime',valid_type=orm.Dict,default=lambda:orm.Dict(dict=runtime_settings({})))
+        spec.input('export_resources',valid_type=orm.Dict,default=lambda:orm.Dict(dict={'memory_mb':2048,'wallclock_seconds':1800}))
         spec.input('force_recompute',valid_type=orm.Bool,default=lambda:orm.Bool(False))
         for key,typ in {'transitions':orm.Dict,'retrieved':orm.FolderData,'remote_folder':orm.RemoteData}.items():
             spec.output(key,valid_type=typ)
-        spec.outline(cls.setup,engine.if_(cls.needs_execution)(cls.export_states,cls.compute,cls.inspect),cls.results)
+        spec.outline(cls.setup,engine.if_(cls.needs_execution)(cls.export_states,
+            engine.while_(cls.has_exports)(cls.run_export,cls.inspect_export),cls.compute,cls.inspect),cls.results)
         spec.exit_code(400,'ERROR_INPUT',message='Incompatible Dyson states or unavailable prerequisites; see report.')
         spec.exit_code(401,'ERROR_EXPORT',message='State export failed; no electronic calculation was repeated.')
         spec.exit_code(402,'ERROR_DYSON',message='Dyson evaluation failed.')
@@ -400,6 +423,8 @@ class DysonWorkChain(engine.WorkChain):
         self.ctx.reuse_uuid = None
         try:
             self.ctx.selected = checked_request(self.inputs)
+            self.ctx.runtime = runtime_settings(self.inputs.runtime.get_dict())
+            helper_resources(self.inputs.export_resources.get_dict() if 'export_resources' in self.inputs else None)
             if self.inputs.export_code.computer.uuid != self.inputs.code.computer.uuid:
                 raise ValueError('ORCA export and Dyson tools must use the same computer')
             output_policy(self.inputs.retention_policy.get_dict())
@@ -424,22 +449,43 @@ class DysonWorkChain(engine.WorkChain):
         return self.ctx.reuse_uuid is None
 
     def export_states(self):
-        pending = {}
-        for key,state in {'initial':self.inputs.initial,**dict(self.inputs.finals)}.items():
-            b = StateExportWorkChain.get_builder()
-            b.state_energies,b.code,b.helper_code,b.storage_policy = (state,self.inputs.export_code,self.inputs.code,self.inputs.storage_policy)
-            b.retention_policy = self.inputs.retention_policy
-            pending['export_'+key] = self.submit(b)
-        return engine.ToContext(**pending)
+        self.ctx.export_queue=['initial',*self.inputs.finals]
+        self.ctx.export_uuids={}
+
+    def has_exports(self):
+        return bool(self.ctx.get('export_queue',[]))
+
+    def run_export(self):
+        key=self.ctx.export_queue[0]
+        state=self.inputs.initial if key=='initial' else self.inputs.finals[key]
+        b=StateExportWorkChain.get_builder()
+        b.state_energies,b.code,b.helper_code,b.storage_policy=(state,self.inputs.export_code,self.inputs.code,self.inputs.storage_policy)
+        b.retention_policy=self.inputs.retention_policy
+        if 'export_resources' in self.inputs:b.export_resources=self.inputs.export_resources
+        b.metadata.call_link_label='export_'+key
+        job=self.submit(b)
+        self.ctx.export_uuids[key]=str(job.uuid)
+        return engine.ToContext(export_wait=job)
+
+    def inspect_export(self):
+        key=self.ctx.export_queue[0]
+        node=orm.load_node(self.ctx.export_uuids[key])
+        if not node.is_terminated:
+            raise RuntimeError('Wait for the current state export before advancing')
+        self.ctx.pop('export_wait',None)
+        self.ctx.export_queue.pop(0)
+        if not node.is_finished_ok:return self.exit_codes.ERROR_EXPORT
 
     def compute(self):
         b = DysonCalculation.get_builder()
         b.code,b.initial,b.selection = self.inputs.code,self.inputs.initial,orm.Dict(dict=self.ctx.selected)
+        runtime=runtime_settings(self.ctx.runtime)
+        b.runtime=orm.Dict(dict=runtime)
         for key,state in self.inputs.finals.items():
             b.finals[key] = state
         locations = {}
         for key in ['initial',*self.inputs.finals]:
-            export = self.ctx['export_'+key]
+            export = (orm.load_node(self.ctx.export_uuids[key]) if self.ctx.get('export_uuids') else self.ctx['export_'+key])
             if not export.is_finished_ok:
                 return self.exit_codes.ERROR_EXPORT
             artifact = export.outputs.artifact
@@ -447,7 +493,9 @@ class DysonWorkChain(engine.WorkChain):
             b.artifacts[key],b.sources[key] = artifact,orm.load_node(location['uuid'])
             locations[key] = location
         b.locations = orm.Dict(dict=locations)
-        b.metadata.options = calcjob_options(state_source(self.inputs.initial).outputs.remote_folder,seconds=3600)
+        b.metadata.options = calcjob_options(state_source(self.inputs.initial).outputs.remote_folder,
+            seconds=runtime['max_wallclock_seconds'],memory_mb=runtime['memory_mb'])
+        b.metadata.options.resources={'num_machines':1,'num_mpiprocs_per_machine':runtime['workers']}
         b.metadata.disable_cache = True
         return engine.ToContext(dyson=self.submit(b))
 
@@ -529,6 +577,7 @@ class DysonCubesWorkChain(engine.WorkChain):
         for key,typ in {'manifest':orm.Dict,'retrieved':orm.FolderData,'remote_folder':orm.RemoteData,
                         'remote_stash':orm.RemoteStashFolderData}.items():
             spec.output(key,valid_type=typ,required=key != 'remote_stash')
+        spec.input('cube_resources',valid_type=orm.Dict,default=lambda:orm.Dict(dict={'memory_mb':2048,'wallclock_seconds':3600}))
         spec.input('blend',valid_type=orm.Dict,required=False)
         spec.outline(cls.setup,engine.if_(cls.needs_execution)(cls.generate,cls.inspect),cls.results)
         spec.exit_code(400,'ERROR_SOURCE',message='Dyson cube source is unavailable; see report.')
@@ -537,6 +586,7 @@ class DysonCubesWorkChain(engine.WorkChain):
     def setup(self):
         self.ctx.reuse_uuid = None
         try:
+            helper_resources(self.inputs.cube_resources.get_dict() if 'cube_resources' in self.inputs else None,default_seconds=3600)
             calc = self.inputs.transitions.creator
             if calc is None or calc.process_type != 'aiida.calculations:empa_orca.dyson' or not calc.is_finished_ok:
                 raise ValueError('Select successful Dyson transitions')
@@ -569,7 +619,8 @@ class DysonCubesWorkChain(engine.WorkChain):
         if 'blend' in self.inputs:
             b.blend = orm.Dict(dict=blend_options(self.inputs.blend.get_dict()))
         b.source,b.location = orm.load_node(self.ctx.location['uuid']),orm.Dict(dict=self.ctx.location)
-        b.metadata.options = calcjob_options(calc.outputs.remote_folder,seconds=3600)
+        budget=helper_resources(self.inputs.cube_resources.get_dict() if 'cube_resources' in self.inputs else None,default_seconds=3600)
+        b.metadata.options = calcjob_options(calc.outputs.remote_folder,seconds=budget['wallclock_seconds'],memory_mb=budget['memory_mb'])
         p = cube_parameters(self.inputs.parameters.get_dict())
         if p['retention'] == 'stash':
             b.metadata.options.stash = stash_options(p['stash_directory'],'full_cubes')

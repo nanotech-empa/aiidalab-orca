@@ -203,7 +203,7 @@ def test_render_progress_clears_old_download_and_restores_controls(monkeypatch):
     import ipywidgets as ipw
     from aiidalab_orca.maps import DysonMaps
     monkeypatch.setattr(map_services, 'progress', lambda uuid: dict(state='finished', finished=True, success=True))
-    holder = SimpleNamespace(compute=ipw.Button(), render=ipw.Button(), review=ipw.Button(),
+    holder = SimpleNamespace(compute=ipw.Button(), render=ipw.Button(), review=ipw.Button(),figure_review=ipw.Button(),figure_plan=None,
                              image=ipw.Image(value=b'old'), download=ipw.HTML('old download'),
                              message=ipw.HTML(), plan=None, _refresh_figures=lambda uuid: None)
     holder._poll = lambda uuid, kind: DysonMaps._poll(holder, uuid, kind)
@@ -212,12 +212,13 @@ def test_render_progress_clears_old_download_and_restores_controls(monkeypatch):
         assert holder.image.value == b'' and holder.download.value == ''
         assert holder.review.disabled and holder.render.disabled
         await holder._task
-        assert not holder.review.disabled and not holder.render.disabled
+        assert not holder.review.disabled and not holder.figure_review.disabled
+        assert holder.render.disabled  # Rendering again requires a fresh figure review.
         assert holder.compute.disabled  # A fresh review is required for another numerical map.
     try:
         asyncio.run(exercise())
     finally:
-        for name in ('compute', 'render', 'review', 'image', 'download', 'message'):
+        for name in ('compute', 'render', 'review', 'figure_review', 'image', 'download', 'message'):
             getattr(holder, name).close()
 
 

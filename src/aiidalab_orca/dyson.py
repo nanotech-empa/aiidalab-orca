@@ -8,6 +8,7 @@ from . import dyson_services as service
 from .orbitals import CubeDisplayMixin
 from .property_services import default_stash_directory,property_result
 from .spectra import SpectralViewer
+from .helper_budget import HelperBudget
 
 
 class DysonStates(CubeDisplayMixin,ipw.VBox):
@@ -43,8 +44,14 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.force = ipw.Checkbox(value=False,description='Recompute Dyson coefficients',layout=ipw.Layout(width='auto'))
         from .retention import FullFileRetention
         self.full_files = FullFileRetention(directory=choices.get('storage_policy', {}).get('stash_directory', ''))
-        advanced = ipw.Accordion(children=[ipw.VBox([self.loss,self.force,self.export_code,self.dyson_code,self.cubehandler_code])],selected_index=None)
-        advanced.set_title(0,'Dyson validation and codes')
+        self.compute_budget,self.export_budget=HelperBudget(),HelperBudget()
+        self.memory,self.walltime=self.compute_budget.memory,self.compute_budget.walltime
+        self.workers=ipw.BoundedIntText(value=1,min=1,max=128,description='Dyson processes',style=style)
+        self.export_resources=ipw.Accordion(children=[self.export_budget],selected_index=None)
+        self.export_resources.set_title(0,'State-export resources · serial')
+        advanced = ipw.Accordion(children=[ipw.VBox([self.loss,self.force,self.workers,self.compute_budget,
+            self.export_resources,self.export_code,self.dyson_code,self.cubehandler_code])],selected_index=None)
+        advanced.set_title(0,'Dyson validation, resources and codes')
         self.review = ipw.Button(description='Review Dyson calculation',icon='list',button_style='primary',layout=ipw.Layout(width='auto'))
         self.review.on_click(self._review)
         self.submit = ipw.Button(description='Compute Dyson transitions',icon='play',button_style='success',disabled=True,layout=ipw.Layout(width='auto'))
@@ -58,8 +65,11 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.grid = ipw.BoundedIntText(value=80,min=40,max=256,description='Grid points/axis',style=style)
         self.retention = ipw.Dropdown(options=[('Stash full-resolution cubes','stash'),('Leave full cubes in calculation directory','leave'),
             ('Delete full cubes after preview validation','delete')],value='stash',description='Full cubes',style=style,layout=wide)
-        self.stash = ipw.Text(value=choices.get('storage_policy',{}).get('stash_directory',default_stash_directory()),description='Cube stash directory',style=style,layout=wide)
+        self.stash = ipw.Text(value=choices.get('storage_policy',{}).get('stash_directory',default_stash_directory()),description='Cube stash directory',style=style,layout=ipw.Layout(width='95%'))
         self.retention.observe(lambda _:setattr(self.stash.layout,'display','' if self.retention.value == 'stash' else 'none'),names='value')
+        self.cube_budget=HelperBudget()
+        self.cube_resources=ipw.Accordion(children=[self.cube_budget],selected_index=None)
+        self.cube_resources.set_title(0,'Cube resources')
         self.cube_review = ipw.Button(description='Review Dyson cubes / blend',icon='list',layout=ipw.Layout(width='auto'))
         self.cube_review.on_click(self._review_cubes)
         self.cube_submit = ipw.Button(description='Generate cubes / blend',icon='play',button_style='success',disabled=True,layout=ipw.Layout(width='auto'))
@@ -72,7 +82,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         self.download,self.cube_box = ipw.HTML(),ipw.VBox()
         from .presentation import ComputePanel
         self.cube_calculation = ComputePanel('Generate Dyson cubes / intensity blends…', [ipw.HTML('<p>Generate only the requested Dyson amplitudes and optional incoherent intensity blend. Full cubes pass through cubehandler before previews are retrieved. Blends are spectral intensities, without an STM tip or vacuum-decay model.</p>'),
-            self.cube_states,self.blend,self.grid,self.retention,self.stash,self.cube_review,self.cube_message,self.cube_submit,
+            self.cube_states,self.blend,self.grid,self.retention,self.stash,self.cube_resources,self.cube_review,self.cube_message,self.cube_submit,
             ])
         self.orbital_view = ipw.Accordion(children=[ipw.VBox([self.cube,self.download,self.cube_box])], selected_index=None)
         self.orbital_view.set_title(0, '3D orbitals and slicing plane')
@@ -90,6 +100,9 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
                           self.spectrum_box,self.cube_controls,self.kondo_box])
         self.initial.observe(self._initial_changed,names='value')
         self.side.observe(self._initial_changed,names='value')
+        for budget in (self.compute_budget,self.export_budget):budget.observe(self._invalidate,names='revision')
+        self.cube_budget.observe(self._invalidate_cubes,names='revision')
+        self.workers.observe(self._invalidate,names='value')
         for w in (self.finals,self.loss,self.force,self.export_code,self.dyson_code):
             w.observe(self._invalidate,names='value')
         self.full_files.observe(self._invalidate, names='revision')
@@ -164,11 +177,14 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
         (self.cube_message if cubes else self.message).value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
 
     def _review(self,_=None):
+        if self._job_uuid:return
         self._invalidate()
         try:
             self.plan = service.review(self.common_uuid,self.initial.value,self.finals.value,
                 {'export':self.export_code.value,'dyson':self.dyson_code.value},self.loss.value,self.force.value,
-                retention_policy=self.full_files.values())
+                retention_policy=self.full_files.values(),
+                runtime={'workers':self.workers.value,'memory_mb':self.memory.value,'max_wallclock_seconds':self.walltime.value*60},
+                export_resources=self.export_budget.values())
             text = '<p><b>'+('Reuse stored Dyson coefficients and transition energies.' if self.plan['action'] == 'reuse' else 'Compute selected Dyson transitions from existing CASCI wavefunctions.')+'</b></p>'
             text += ''.join('<p>'+html.escape(r['label']+' · '+r['action'])+'</p>' for r in self.plan['exports'])
             retention = self.plan['retention_policy']
@@ -177,16 +193,20 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             text += ('<p>New full CI exports are '+destination+
                      '; they are not retrieved. Reused exports keep their recorded retention. '
                      'CI coefficients are checked without renormalization.</p>')
+            if self.plan['action']!='reuse':
+                text += '<p>State exports: one at a time, '+self.export_budget.summary()+'. '
+                text += f'Dyson evaluation: {self.workers.value} process(es), {self.memory.value/1024:g} GiB, up to {self.walltime.value:g} minutes.</p>'
             self.message.value = text
             self.submit.disabled = self._job_uuid is not None
         except Exception as exc:
             self._error(exc)
 
     def _submit(self,_=None):
-        if self.plan and not self.submit.disabled:
+        if self.plan and not self.submit.disabled and not self._job_uuid:
+            plan=self.plan
+            self._invalidate()
             try:
-                uuid = service.submit_dyson(self.plan)
-                self._invalidate()
+                uuid = service.submit_dyson(plan)
                 self._start(uuid,'dyson')
             except Exception as exc:
                 self._error(exc)
@@ -299,6 +319,7 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
             self.on_show_maps()
 
     def _review_cubes(self,_=None):
+        if self._job_uuid:return
         self._invalidate_cubes()
         try:
             from aiida_empa_orca.dyson_data import blend_options
@@ -311,17 +332,18 @@ class DysonStates(CubeDisplayMixin,ipw.VBox):
                 'grid_points':self.grid.value,'retention':self.retention.value,'stash_directory':self.stash.value.strip()})
             blend = blend_options(self.spectrum.blend()) if self.blend.value else None
             self.cube_plan = {'transitions_uuid':self.record['transitions_uuid'],'parameters':p,
-                'code_uuid':self.dyson_code.value,'cubehandler_uuid':self.cubehandler_code.value,'blend':blend}
-            self.cube_message.value = '<p>Generate '+str(len(p['orbitals']))+' Dyson amplitudes'+(' and their spectral intensity blend' if blend else '')+'. Only reduced previews are retrieved; full cubes: '+html.escape(self.retention.label)+'.</p>'
+                'code_uuid':self.dyson_code.value,'cubehandler_uuid':self.cubehandler_code.value,'blend':blend,'resources':self.cube_budget.values()}
+            self.cube_message.value = '<p>Generate '+str(len(p['orbitals']))+' Dyson amplitudes'+(' and their spectral intensity blend' if blend else '')+'. '+self.cube_budget.summary()+'. Only reduced previews are retrieved; full cubes: '+html.escape(self.retention.label)+'.</p>'
             self.cube_submit.disabled = self._job_uuid is not None
         except Exception as exc:
             self._error(exc,True)
 
     def _submit_cubes(self,_=None):
-        if self.cube_plan and not self.cube_submit.disabled:
+        if self.cube_plan and not self.cube_submit.disabled and not self._job_uuid:
+            plan=self.cube_plan
+            self._invalidate_cubes()
             try:
-                uuid = service.submit_cubes(**self.cube_plan)
-                self._invalidate_cubes()
+                uuid = service.submit_cubes(**plan)
                 self._start(uuid,'cubes')
             except Exception as exc:
                 self._error(exc,True)

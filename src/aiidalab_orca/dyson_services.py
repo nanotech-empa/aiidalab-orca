@@ -11,6 +11,8 @@ from aiida_empa_orca.orbitals import cube_parameters
 from aiida_empa_orca.native_logs import output_policy
 from .inspection_services import codes as inspection_codes,common_node
 from .casci_services import progress  # re-export short-lived monitoring
+from aiida_empa_orca.rendering import helper_resources
+from .analysis_execution import assert_idle
 
 
 def codes(common_uuid):
@@ -45,13 +47,15 @@ def builder(plan):
     b.selection = orm.Dict(dict=plan['selection'])
     b.code,b.export_code = orm.load_code(plan['codes']['dyson']),orm.load_code(plan['codes']['export'])
     b.storage_policy = common.inputs.storage_policy
+    b.export_resources = orm.Dict(dict=helper_resources(plan.get('export_resources')))
+    b.runtime = orm.Dict(dict=backend.runtime_settings(plan.get('runtime',{})))
     b.retention_policy = orm.Dict(dict=output_policy(plan.get('retention_policy')))
     b.force_recompute = orm.Bool(plan.get('force',False))
     b.metadata.label = 'CASCI Dyson transitions and spectral weights'
     return b
 
 
-def review(common_uuid,initial,finals,selected_codes,loss=1e-5,force=False, *, retention_policy=None):
+def review(common_uuid,initial,finals,selected_codes,loss=1e-5,force=False,runtime=None, *, retention_policy=None,export_resources=None):
     if not initial or not finals:
         raise ValueError('Choose an initial state and at least one compatible final state')
     if any(not selected_codes.get(key) for key in ('dyson','export')):
@@ -66,7 +70,9 @@ def review(common_uuid,initial,finals,selected_codes,loss=1e-5,force=False, *, r
                          {key:orm.load_node(uuid).get_dict() for key,uuid in mapping.items()})
     plan = {'common_uuid':common_uuid,'initial_uuid':initial[0],'finals':mapping,'selection':selected,
             'codes':selected_codes,'force':force,'action':'compute','exports':[],
-            'retention_policy':output_policy(retention_policy)}
+            'retention_policy':output_policy(retention_policy),
+            'runtime':backend.runtime_settings({} if runtime is None else runtime),
+            'export_resources':helper_resources(export_resources)}
     b = builder(plan)
     if not force:
         for uuid in backend.previous(initial_node.uuid,'initial',backend.DYSON_PROCESS):
@@ -89,6 +95,8 @@ def review(common_uuid,initial,finals,selected_codes,loss=1e-5,force=False, *, r
 
 
 def submit_dyson(plan):
+    if plan['action']!='reuse':
+        assert_idle(orm.load_node(plan['initial_uuid']).get_dict().get('orbital_reference_uuid'))
     return str(submit(builder(plan)).uuid)
 
 
@@ -118,11 +126,13 @@ def diagram_states(table,context):
     return [r for r in context if (r['charge'],r['multiplicity']) not in sectors]+source_rows
 
 
-def submit_cubes(transitions_uuid,parameters,code_uuid,cubehandler_uuid,blend=None):
+def submit_cubes(transitions_uuid,parameters,code_uuid,cubehandler_uuid,blend=None,*,resources=None):
     if not code_uuid or not cubehandler_uuid:
         raise ValueError('Configure Dyson and cubehandler codes on the calculation computer')
     b = backend.DysonCubesWorkChain.get_builder()
     b.transitions = orm.load_node(transitions_uuid)
+    assert_idle(b.transitions.get_dict().get('orbital_reference_uuid'))
+    b.cube_resources = orm.Dict(dict=helper_resources(resources,default_seconds=3600))
     b.parameters = orm.Dict(dict=cube_parameters(parameters))
     b.code,b.cubehandler_code = orm.load_code(code_uuid),orm.load_code(cubehandler_uuid)
     if blend:

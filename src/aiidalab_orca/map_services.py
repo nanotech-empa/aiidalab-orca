@@ -6,9 +6,10 @@ from aiida.common.constants import AIIDA_FLOAT_PRECISION
 from aiida_empa_orca.maps import (DysonMapsCalculation, KondoMapsCalculation, MapFigureCalculation,
                                   MAP_PROCESS, KONDO_MAP_PROCESS, FIGURE_PROCESS, selected_cubes)
 from aiida_empa_orca.maps_data import map_parameters, figure_style
-from aiida_empa_orca.rendering import calcjob_options
+from aiida_empa_orca.rendering import calcjob_options,helper_resources
 from .render_services import render_source
 from .casci_services import progress
+from .analysis_execution import assert_idle
 
 
 def stored_values(value):
@@ -46,14 +47,15 @@ def source_data(cube_uuid):
                 transitions_uuid=str(producer.inputs[key].uuid), table=producer.inputs[key].get_dict())
 
 
-def prepare_maps(cube_uuid, parameters, code_uuid):
+def prepare_maps(cube_uuid, parameters, code_uuid, *, resources=None):
     data = source_data(cube_uuid)
     # Match AiiDA's attribute serialization before exact provenance comparison.
     p = stored_values(map_parameters(parameters))
     cubes = selected_cubes(data['manifest'], data['table'], p)
     if not code_uuid:
         raise ValueError('Configure ORCA Dyson tools on the cube computer')
-    plan = dict(cube_uuid=str(cube_uuid), parameters=p, code_uuid=str(code_uuid), action='compute')
+    plan = dict(cube_uuid=str(cube_uuid), parameters=p, code_uuid=str(code_uuid), action='compute',
+                resources=helper_resources(resources,default_seconds=3600))
     # Numerical maps are durable; reuse them before checking expendable cubes.
     for _, uuid in map_history(cube_uuid):
         run = orm.load_node(uuid)
@@ -68,20 +70,28 @@ def prepare_maps(cube_uuid, parameters, code_uuid):
 
 
 def submit_maps(plan):
-    checked = prepare_maps(plan['cube_uuid'], plan['parameters'], plan['code_uuid'])
+    checked = prepare_maps(plan['cube_uuid'], plan['parameters'], plan['code_uuid'],resources=plan.get('resources'))
     if checked['action'] == 'reuse':
         return checked['reuse_uuid']
+    return str(submit(maps_builder(checked)).uuid)
+
+
+def maps_builder(plan):
     data = source_data(plan['cube_uuid'])
+    assert_idle(data['table'].get('orbital_reference_uuid'))
+    checked=plan
     b = (KondoMapsCalculation if data['table_input'] == 'channels' else DysonMapsCalculation).get_builder()
     b.code = orm.load_code(plan['code_uuid'])
     b.source_manifest = orm.load_node(data['manifest_uuid'])
     b[data['table_input']] = orm.load_node(data['table_uuid'])
     b.parameters = orm.Dict(dict=checked['parameters'])
     b['source_'+checked['location']['kind']] = orm.load_node(checked['location']['uuid'])
-    b.metadata.options = calcjob_options(b.source_manifest.creator.outputs.remote_folder, seconds=3600)
+    budget=helper_resources(plan.get('resources'),default_seconds=3600)
+    b.metadata.options = calcjob_options(b.source_manifest.creator.outputs.remote_folder,
+        seconds=budget['wallclock_seconds'],memory_mb=budget['memory_mb'])
     b.metadata.disable_cache = True
     b.metadata.label = 'Constant-height '+('Kondo channel' if data['table_input'] == 'channels' else 'Dyson')+' maps'
-    return str(submit(b).uuid)
+    return b
 
 
 def map_result(uuid):
@@ -92,27 +102,46 @@ def map_result(uuid):
                 figures=history(node.outputs.maps.uuid, 'maps', FIGURE_PROCESS))
 
 
-def submit_figure(map_uuid, settings, code_uuid):
+def prepare_figure(map_uuid, settings, code_uuid, *, resources=None):
     node = orm.load_node(map_uuid)
     if not node.is_finished_ok or node.process_type not in (MAP_PROCESS, KONDO_MAP_PROCESS):
         raise ValueError('Compute numerical maps before rendering')
     p = stored_values(figure_style(settings))
+    plan={'map_uuid':str(map_uuid),'settings':p,'code_uuid':str(code_uuid),'action':'compute',
+          'resources':helper_resources(resources)}
     for _, uuid in history(node.outputs.maps.uuid, 'maps', FIGURE_PROCESS):
         old = orm.load_node(uuid)
         if old.is_finished_ok and old.inputs.settings.get_dict() == p and str(old.inputs.code.uuid) == str(code_uuid):
             for key in ('png', 'pdf'):
                 with old.outputs[key].open(mode='rb') as handle:
-                    if not handle.read(8):
-                        raise ValueError('Empty stored figure')
-            return str(uuid)
-    b = MapFigureCalculation.get_builder()
-    b.code = orm.load_code(code_uuid)
-    b.maps, b.map_metadata = node.outputs.maps, node.outputs.map_metadata
-    b.settings = orm.Dict(dict=p)
-    b.metadata.options = calcjob_options(node.outputs.remote_folder)
-    b.metadata.disable_cache = True
-    b.metadata.label = 'Molecular maps · shared intensity scale'
-    return str(submit(b).uuid)
+                    if not handle.read(8):raise ValueError('Empty stored figure')
+            return dict(plan,action='reuse',reuse_uuid=str(uuid))
+    return plan
+
+
+def figure_builder(plan):
+    from .analysis_execution import process_reference
+    node=orm.load_node(plan['map_uuid'])
+    assert_idle(process_reference(node.uuid))
+    b=MapFigureCalculation.get_builder()
+    b.code=orm.load_code(plan['code_uuid'])
+    b.maps,b.map_metadata=node.outputs.maps,node.outputs.map_metadata
+    b.settings=orm.Dict(dict=plan['settings'])
+    budget=helper_resources(plan.get('resources'))
+    b.metadata.options=calcjob_options(node.outputs.remote_folder,seconds=budget['wallclock_seconds'],memory_mb=budget['memory_mb'])
+    b.metadata.disable_cache=True
+    b.metadata.label='Molecular maps · shared intensity scale'
+    return b
+
+
+def submit_figure_plan(plan):
+    fresh=prepare_figure(plan['map_uuid'],plan['settings'],plan['code_uuid'],resources=plan['resources'])
+    if fresh['action']=='reuse':return fresh['reuse_uuid']
+    return str(submit(figure_builder(fresh)).uuid)
+
+
+def submit_figure(map_uuid,settings,code_uuid,*,resources=None):
+    return submit_figure_plan(prepare_figure(map_uuid,settings,code_uuid,resources=resources))
 
 
 def figure_result(uuid):

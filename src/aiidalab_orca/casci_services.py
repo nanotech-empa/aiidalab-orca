@@ -15,7 +15,9 @@ def reference_runs(source_uuid):
     source = source_node(source_uuid)
     choices, seen = [], set()
     from .casscf_services import optimized_references
-    uuids = [*optimized_references(source.outputs.retrieved.uuid, source.inputs.code.uuid),
+    from .reordering_services import references
+    uuids = [*references(source.outputs.retrieved.uuid, source.inputs.code.uuid),
+             *optimized_references(source.outputs.retrieved.uuid, source.inputs.code.uuid),
              *common_orbitals.matching_references(source.outputs.retrieved.uuid, source.inputs.code.uuid)]
     for uuid in uuids:
         node = orm.load_node(uuid)
@@ -24,7 +26,8 @@ def reference_runs(source_uuid):
             continue
         seen.add(key)
         data = node.outputs.orbital_reference.get_dict()
-        choices.append({'uuid':uuid, 'reference_uuid':key, 'kind':data['kind'],
+        label = data['kind'] + (' · reordered' if data.get('preparation') == 'signed_permutation_verified_v1' else '')
+        choices.append({'uuid':uuid, 'reference_uuid':key, 'kind':label,
                         'n_orbitals':data['n_orbitals'], 'charge':data['charge']})
     return choices
 
@@ -93,7 +96,8 @@ def submit_common(plan):
 
 def reference_data(uuid):
     node = orm.load_node(uuid)
-    if node.process_type not in (common_orbitals.PROCESS_TYPE, 'aiida.workflows:empa_orca.casscf') or not node.is_finished_ok:
+    if node.process_type not in (common_orbitals.PROCESS_TYPE, 'aiida.workflows:empa_orca.casscf',
+                                'aiida.workflows:empa_orca.orbital_reordering') or not node.is_finished_ok:
         raise ValueError('Select completed common-orbital preparation')
     return node.outputs.orbital_reference.get_dict()
 

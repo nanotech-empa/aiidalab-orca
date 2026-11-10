@@ -18,7 +18,7 @@ from test_reference import electronic_source
 
 
 def reference_data():
-    return {'n_electrons':15,'n_orbitals':28,'charge':0,'source_multiplicity':2,
+    return {'kind':'QRO','n_electrons':15,'n_orbitals':28,'charge':0,'source_multiplicity':2,
             'structure_uuid':'geometry','settings':reference_settings(protocol_settings()), 'filename':'aiida.qro',
             'preparation':'moread_noiter_v1'}
 

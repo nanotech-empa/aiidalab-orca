@@ -20,12 +20,14 @@ HARTREE_TO_EV = 27.211386245988
 def validate_reference(reference, remote):
     from .casci import validate_reference as checked_reference
     data = checked_reference(reference, remote)
-    if data.get('preparation') not in ('moread_noiter_v1', 'casscf_verified_v1'):
+    if data.get('preparation') not in ('moread_noiter_v1', 'casscf_verified_v1', 'signed_permutation_verified_v1'):
         raise ValueError('Select a verified fixed-orbital preparation')
     return data
 
 
 def variants(reference):
+    if reference.get('preparation') == 'signed_permutation_verified_v1':
+        return {reference['kind']: 'aiida.gbw'}
     if reference.get('preparation') == 'casscf_verified_v1':
         return {'CASSCF': 'aiida.gbw'}
     if reference['filename'] == 'aiida.qro':
@@ -40,6 +42,9 @@ def parse_catalog(raw, reference, structure):
     for kind, value in raw['sets'].items():
         if kind not in variants(reference) or value['source_filename'] != variants(reference)[kind]:
             raise ValueError('Unknown orbital set in export')
+        if (reference.get('preparation') == 'signed_permutation_verified_v1' and
+                value['sha256'] != reference['orbital_mapping']['prepared_file_sha256']):
+            raise ValueError('Reordered orbital-file identity changed before catalog export')
         molecule = value['molecule']
         exported = molecule['Atoms']
         if molecule['CoordinateUnits'] not in ('Angs', 'Angstrom'):

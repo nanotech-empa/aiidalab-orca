@@ -245,6 +245,10 @@ class CasscfParser(Parser):
                            parent_orbital_reference_uuid=str(self.node.inputs.orbital_reference.uuid),
                            optimized_active_space=space, casscf_settings=settings,
                            readback_max_error_hartree=data['readback_max_error_hartree'])
+            if 'orbital_mapping' in orbital:
+                # Optimized orbitals are new functions, not a permutation of
+                # the original QROs. Retain the mapping as starting-guess history.
+                orbital['starting_orbital_mapping'] = orbital.pop('orbital_mapping')
             orbital['settings'] = ref['settings'] | {k: settings[k] for k in ('nprocs', 'memory_mb', 'wallclock_seconds')}
             orbital_node = orm.Dict(dict=orbital)
             data['orbital_reference_uuid'] = str(orbital_node.uuid)

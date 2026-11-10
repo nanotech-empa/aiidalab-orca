@@ -13,7 +13,8 @@ from .property_services import helper_code, tool_codes
 
 def common_node(uuid):
     node = orm.load_node(uuid)
-    if node.process_type not in ('aiida.workflows:empa_orca.common_orbitals', 'aiida.workflows:empa_orca.casscf') or not node.is_finished_ok:
+    if node.process_type not in ('aiida.workflows:empa_orca.common_orbitals', 'aiida.workflows:empa_orca.casscf',
+                                'aiida.workflows:empa_orca.orbital_reordering') or not node.is_finished_ok:
         raise ValueError('Select a completed common-orbital preparation')
     return node
 

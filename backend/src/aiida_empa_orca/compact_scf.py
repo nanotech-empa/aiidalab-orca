@@ -86,10 +86,11 @@ def collect(root, protocol, summary_limit):
         raise ValueError('SCF results exceed the compact-output budget; full results remain remote')
     (root / 'scf_results.json').write_bytes(content)
     summary = root / 'aiida.out'
-    combined = summary.read_bytes() + last_orbital_table(original, summary_limit)
-    if len(combined) > summary_limit:
-        raise ValueError('SCF validation/orbital summary exceeds the compact-output budget')
-    summary.write_bytes(combined)
+    if summary_limit is not None:
+        combined = summary.read_bytes() + last_orbital_table(original, summary_limit)
+        if len(combined) > summary_limit:
+            raise ValueError('SCF validation/orbital summary exceeds the compact-output budget')
+        summary.write_bytes(combined)
     retained, compact = [], [root / 'scf_results.json']
     if protocol == 'optimization-v1':
         for name in ('aiida.xyz', 'aiida_trj.xyz'):

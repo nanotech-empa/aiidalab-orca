@@ -1,13 +1,14 @@
-"""Bounded native-output summaries; this stdlib-only module also runs remotely.
+"""Size-aware native output; this stdlib-only module also runs remotely.
 
 The original log and property file remain in ``native_output/``. Only the
-selected validation lines, a bounded diagnostic tail and a manifest are retrieved.
+originals below the threshold, or extracts/notices above it, are retrieved.
 """
 
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 
 
 DIRECTORY = 'native_output'
@@ -15,6 +16,7 @@ MANIFEST = 'native_output.json'
 SUMMARY_LIMIT = 2 * 1024**2
 TAIL_LIMIT = 64 * 1024
 LINE_LIMIT = 64 * 1024
+DEFAULT_MAXSIZEOUTPUT = 5 * 1024**2
 SCHEMA = 'orca_native_output_v1'
 STATE_MARKERS = re.compile(
     r'ORCA TERMINATED NORMALLY|Number of active (?:electrons|orbitals)|'
@@ -85,20 +87,24 @@ HESSIAN_SECTIONS = {'hessian', 'normal_modes', 'vibrational_frequencies', 'atoms
 
 
 def output_policy(values=None):
-    """Explicit retention of full native files; no retrieval mode exists."""
+    """Large-artifact retention and an independent native-text byte threshold."""
     values = dict(values or {'mode': 'remote'})
-    if set(values) - {'mode', 'stash_directory'}:
+    if set(values) - {'mode', 'stash_directory', 'maxsizeoutput'}:
         raise ValueError('Unknown full-file retention setting')
+    limit = values.get('maxsizeoutput', DEFAULT_MAXSIZEOUTPUT)
+    if type(limit) is not int or limit < 0:
+        raise ValueError('maxsizeoutput must be a nonnegative integer number of bytes')
+    extra = {'maxsizeoutput': limit} if 'maxsizeoutput' in values else {}
     mode = values.get('mode')
     if mode not in ('remote', 'stash'):
         raise ValueError('Choose remote retention or stashing for full files')
     if mode == 'remote':
-        return {'mode': 'remote'}
+        return {'mode': 'remote', **extra}
     directory = values.get('stash_directory', '')
     if (not isinstance(directory, str) or not PurePosixPath(directory).is_absolute()
             or directory == '/' or '..' in PurePosixPath(directory).parts):
         raise ValueError('Choose an absolute stash directory on the calculation computer')
-    return {'mode': mode, 'stash_directory': directory}
+    return {'mode': mode, 'stash_directory': directory, **extra}
 
 
 def read_state_summary(handle):
@@ -129,7 +135,8 @@ def _file_record(path):
     return {'name': path.name, 'size_bytes': after.st_size, 'sha256': checksum}
 
 
-def _collect_log(root, name, markers, tail_name, *, mark_omissions=False):
+def _collect_log(root, name, markers, tail_name, *, mark_omissions=False,
+                 maxsizeoutput=DEFAULT_MAXSIZEOUTPUT):
     original = root / DIRECTORY / name
     selected, size, error = [], 0, None
     checksum = hashlib.sha256()
@@ -137,6 +144,16 @@ def _collect_log(root, name, markers, tail_name, *, mark_omissions=False):
     before = original.stat()
     if original.is_symlink() or not original.is_file():
         raise ValueError('Native output is not a regular file')
+    if before.st_size <= maxsizeoutput:
+        shutil.copyfile(original, root / name)
+        record = _file_record(original)
+        copied = _file_record(root / name)
+        if record != copied:
+            raise ValueError('Native output changed while copying for retrieval')
+        with original.open('rb') as stream:
+            stream.seek(max(0, record['size_bytes'] - TAIL_LIMIT))
+            (root / tail_name).write_bytes(stream.read(TAIL_LIMIT))
+        return record, copied, None
     with original.open('rb') as stream:
         while raw := stream.readline(LINE_LIMIT + 1):
             checksum.update(raw)
@@ -205,6 +222,7 @@ def collect_output(request, root=Path('.')):
     if protocol not in PROTOCOLS:
         raise ValueError('Unsupported native-output collection protocol')
     policy, root = output_policy(request['policy']), Path(root)
+    maxsizeoutput = policy.get('maxsizeoutput', DEFAULT_MAXSIZEOUTPUT)
     records, summaries, errors = [], [], []
     molecular = protocol in ('scf-v1', 'optimization-v1')
     markers = (ENERGY_MARKERS if protocol == 'energy-export-v1'
@@ -216,7 +234,8 @@ def collect_output(request, root=Path('.')):
     for name in PROTOCOLS[protocol]:
         tail = 'native_output_tail.txt' if name == 'aiida.out' else 'verify_tail.txt'
         original, summary, error = _collect_log(root, name, markers, tail,
-                                               mark_omissions=protocol in ('correlation-v1', 'optical-v1', 'vibrations-v1'))
+                                               mark_omissions=protocol in ('correlation-v1', 'optical-v1', 'vibrations-v1'),
+                                               maxsizeoutput=maxsizeoutput)
         records.append(original)
         summaries.append(summary)
         if error:
@@ -268,18 +287,37 @@ def collect_output(request, root=Path('.')):
             # sys.path. Load the reviewed sibling script by its staged path.
             import runpy
             collect = runpy.run_path(str(root / 'compact_scf.py'))['collect']
-            retained, results = collect(root, protocol, SUMMARY_LIMIT)
+            retained, results = collect(root, protocol,
+                                        SUMMARY_LIMIT if records[0]['size_bytes'] > maxsizeoutput else None)
             records.extend(_file_record(path) for path in retained)
             compact = [_file_record(path) for path in results]
             summaries[0] = _file_record(root / 'aiida.out')
         except Exception as exc:
             errors.append('Compact SCF collection failed: ' + str(exc)[:2000])
+    retrieved_outputs, warnings = [], []
+    for original, summary in zip(records[:len(PROTOCOLS[protocol])], summaries):
+        name = original['name']
+        summary['source_name'] = name
+        kind = 'full'
+        if original['size_bytes'] > maxsizeoutput:
+            kind = 'summary_notice'
+            summary_name = name.removesuffix('.out') + '_summary.out'
+            (root / name).replace(root / summary_name)
+            summary['name'] = summary_name
+            message = (f"ORCA output {name} is {original['size_bytes']} bytes, above maxsizeoutput="
+                       f"{maxsizeoutput} bytes. The retrieved {name} is a notice, not the original output. "
+                       f"Read {summary_name} for the validation extract. The complete original remains at "
+                       f"{root.resolve() / DIRECTORY / name}; full-file retention: {policy['mode']}.")
+            (root / name).write_text(message + '\n', encoding='utf-8')
+            warnings.append(message)
+        retrieved_outputs.append(dict(_file_record(root / name), kind=kind))
     error = '; '.join(errors) or None
     record = {'schema': SCHEMA, 'protocol': protocol, 'policy': policy,
               'status': 'error' if error else 'complete', 'error': error,
               'directory': DIRECTORY, 'files': records,
               'summary': summaries[0],
-              'diagnostic_tail_limit': TAIL_LIMIT}
+              'diagnostic_tail_limit': TAIL_LIMIT, 'maxsizeoutput': maxsizeoutput,
+              'retrieved_outputs': retrieved_outputs, 'warnings': warnings}
     if len(summaries) > 1:
         record['additional_summaries'] = summaries[1:]
     if molecular:
@@ -301,14 +339,41 @@ def validate_manifest(record):
         raise ValueError(record.get('error') or 'Native-output collection did not complete')
     summaries = [record['summary'], *record.get('additional_summaries', [])]
     expected = list(PROTOCOLS[record['protocol']])
-    if [s['name'] for s in summaries] != expected or any(
-            not 0 <= s['size_bytes'] <= SUMMARY_LIMIT for s in summaries):
+    if [s.get('source_name', s['name']) for s in summaries] != expected:
         raise ValueError('Invalid compact-output budget or filenames')
+    adaptive = 'retrieved_outputs' in record
+    limit = record.get('maxsizeoutput', DEFAULT_MAXSIZEOUTPUT)
+    if type(limit) is not int or limit < 0:
+        raise ValueError('Invalid maxsizeoutput')
+    if adaptive and limit != output_policy(record['policy']).get('maxsizeoutput', DEFAULT_MAXSIZEOUTPUT):
+        raise ValueError('Retrieved-output threshold differs from the reviewed policy')
+    retrieved = record.get('retrieved_outputs', [])
+    if adaptive and ([s['name'] for s in retrieved] != expected or len(retrieved) != len(summaries)):
+        raise ValueError('Missing retrieved-output identities')
+    for i, summary in enumerate(summaries):
+        full = adaptive and retrieved[i].get('kind') == 'full'
+        budget = limit if full else SUMMARY_LIMIT
+        if not 0 <= summary['size_bytes'] <= budget:
+            raise ValueError('Invalid compact-output budget or filenames')
+        if adaptive:
+            source = expected[i]
+            item = retrieved[i]
+            if item.get('kind') not in ('full', 'summary_notice'):
+                raise ValueError('Invalid retrieved-output kind')
+            original = next((f for f in record['files'] if f['name'] == source), None)
+            target = source if full else source.removesuffix('.out') + '_summary.out'
+            if (original is None or summary['name'] != target or
+                    full != (original['size_bytes'] <= limit) or
+                    full and (summary['sha256'] != original['sha256'] or item['sha256'] != original['sha256']
+                              or summary['size_bytes'] != original['size_bytes'] or item['size_bytes'] != original['size_bytes']) or
+                    not full and item['size_bytes'] > TAIL_LIMIT):
+                raise ValueError('Retrieved output differs from its original/summary policy')
     names = [f['name'] for f in record['files']]
     if names[:len(expected)] != expected or len(set(names)) != len(names):
         raise ValueError('Missing or ambiguous full native output')
-    for item in [*summaries, *record['files']]:
+    for item in [*summaries, *record['files'], *retrieved]:
         allowed = (item['name'] in expected + [n.replace('.out', '.property.txt') for n in expected]
+                   + [n.removesuffix('.out') + '_summary.out' for n in expected]
                    + ['aiida.xyz', 'aiida_trj.xyz'] or record['protocol'] == 'energy-export-v1' and item['name'] == 'hamiltonian.fcidump'
                    or record['protocol'] in ('correlation-v1', 'optical-v1', 'vibrations-v1', 'energy-export-v1')
                    and re.fullmatch(r'aiida[._][A-Za-z0-9_.-]+', item['name']))
@@ -331,7 +396,8 @@ def validate_manifest(record):
 
 def validate_summary(record, content, name='aiida.out'):
     validate_manifest(record)
-    item = next(s for s in [record['summary'], *record.get('additional_summaries', [])] if s['name'] == name)
+    item = next(s for s in [record['summary'], *record.get('additional_summaries', [])]
+                if s.get('source_name', s['name']) == name)
     if len(content) != item['size_bytes'] or hashlib.sha256(content).hexdigest() != item['sha256']:
         raise ValueError('Compact output differs from its recorded checksum')
 

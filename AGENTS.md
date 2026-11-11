@@ -17,10 +17,11 @@ computer/code installation, scheduler configuration and wrappers belong to
 `aiidalab-empa-setup`. Do not add machine names or scheduler/transport allowlists
 to application discovery or workflow validation.
 
-Large artifacts must remain remotely or be stashed according to the user's
-explicit retention choice. Retrieve only compact results, bounded diagnostics,
-manifests and reduced previews into AiiDA. Apply this to logs and CI exports as
-well as wavefunctions, integrals and full cubes. Streaming reduces RAM use; it
-does not make permanent retrieval of large files acceptable. Preserve historical
-nodes and scientific acceptance checks. The remaining unbounded native-log
-retrieval is a release gate documented in `docs/release-readiness.md`.
+Wavefunctions, integrals, full cubes and large CI exports remain remote/stashed
+according to the user's explicit choice. Native text outputs follow a separate
+`maxsizeoutput` threshold: default 5 MiB per file, original bytes retrieved at or
+below the threshold, otherwise a separate extract and an explicit outputcat
+notice. Never present the extract as the original output. Keep all compact PDOS
+data needed for interactive projections in AiiDA. Streaming reduces RAM use but
+does not replace these storage rules. Preserve historical nodes and scientific
+acceptance checks; see `docs/release-readiness.md` for remaining work.

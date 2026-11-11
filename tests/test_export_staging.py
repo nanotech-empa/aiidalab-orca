@@ -32,7 +32,7 @@ def test_manifest_stages_full_ci_log_and_never_the_retrieved_summary(tmp_path, m
     directory.mkdir()
     full = output() + '   [20u]  1.0000000\n'
     (directory / 'aiida.out').write_text(full)
-    policy = {'mode': mode, 'stash_directory': '/stash'}
+    policy = {'mode': mode, 'stash_directory': '/stash', 'maxsizeoutput': 0}
     record = native_logs.collect_output({'protocol': 'casci-v1', 'policy': policy}, tmp_path)
     outputs = Outputs(native_output_manifest=SimpleNamespace(get_dict=lambda: record))
     computer = SimpleNamespace(uuid='computer')

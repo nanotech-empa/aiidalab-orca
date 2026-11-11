@@ -45,7 +45,7 @@ def source(tmp_path, monkeypatch, *, optimized=False, suffix='', oversized=False
         if oversized:
             (tmp_path / 'aiida_trj.xyz').write_bytes(b'X' * (compact_scf.LIMITS['aiida_trj.xyz'] + 1))
     protocol = 'optimization-v1' if optimized else 'scf-v1'
-    record = native_logs.collect_output({'protocol': protocol, 'policy': {'mode': 'remote'}}, tmp_path)
+    record = native_logs.collect_output({'protocol': protocol, 'policy': {'mode': 'remote', 'maxsizeoutput': 0}}, tmp_path)
     return original, text, record, received
 
 
@@ -54,7 +54,7 @@ def test_remote_reader_gets_full_output_but_only_compact_data_is_published(tmp_p
     original, text, record, received = source(tmp_path, monkeypatch, optimized=optimized)
     native_logs.validate_manifest(record)
     assert received == [str(original)] and original.read_text() == text
-    summary = (tmp_path / 'aiida.out').read_text()
+    summary = (tmp_path / 'aiida_summary.out').read_text()
     assert len(summary) < 2000
     assert orbital_levels(summary, 3) == orbital_levels(text, 3)
     assert reference_summary(summary) == reference_summary(text)
@@ -69,7 +69,7 @@ def test_remote_reader_gets_full_output_but_only_compact_data_is_published(tmp_p
 def test_late_scf_failure_is_not_hidden_by_compaction(tmp_path, monkeypatch):
     source(tmp_path, monkeypatch, suffix='SCF NOT CONVERGED\n')
     with pytest.raises(ValueError, match='convergence'):
-        reference_summary((tmp_path / 'aiida.out').read_text())
+        reference_summary((tmp_path / 'aiida_summary.out').read_text())
 
 
 def test_oversized_geometry_history_stays_remote_and_cannot_pass(tmp_path, monkeypatch):

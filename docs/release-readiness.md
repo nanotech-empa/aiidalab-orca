@@ -83,6 +83,26 @@ or full cubes. This is local runtime coverage, not remote-machine qualification.
 
 ### Native-log retention cleanup
 
+The 9 November output-size follow-up supersedes the earlier always-compact
+text-output policy described below. New native outputs up to **5 MiB per file**
+are retrieved unchanged; `maxsizeoutput` is configurable under Output retrieval.
+Larger outputs produce a distinct validation extract and an explicit `outputcat`
+notice containing the size, threshold and original path. Both paths retain
+parser results and scientific checks. Native wavefunction/integral/cube files
+keep the independent remote/stash policy. Historical records are not rewritten.
+Complete PDOS projection data remain stored for interactive plots.
+
+The size-threshold follow-up passed 569 tests (five optional skips), including
+exact threshold boundaries, mixed CASSCF output sizes, historical manifests and
+the real `verdi calcjob outputcat` command. Two serial one-core NO SCFs through
+the app's reviewed builder exercised normal retrieval and forced extraction
+with stash retention. Both gave the same energy and all 124 orbital levels.
+The ordinary output used the upstream parser and retained its SCF iteration
+data; the forced extract produced visible notices and an identical stashed
+original. Scientific input renderers and numerical validation functions were
+checked unchanged. No browser/live-GUI or remote-runtime qualification is
+established by those local pilots.
+
 Large files must remain remote or be stashed after an explicit user choice;
 the AiiDA repository receives compact results, bounded diagnostics, manifests
 and reduced previews. This includes large CI logs and exports, not only GBW

@@ -28,7 +28,7 @@ def native_file(root, text=None):
 
 
 def collect(root, policy=None):
-    return native_logs.collect_output({'protocol': 'casci-v1', 'policy': policy or {'mode': 'remote'}}, root)
+    return native_logs.collect_output({'protocol': 'casci-v1', 'policy': policy or {'mode': 'remote', 'maxsizeoutput': 0}}, root)
 
 
 def parse(text):
@@ -44,7 +44,7 @@ def test_large_native_output_is_preserved_with_a_small_equivalent_summary(tmp_pa
     property_bytes = b'full property output\n' * 100000
     (tmp_path / 'aiida.property.txt').write_bytes(property_bytes)
     record = collect(tmp_path)
-    summary = (tmp_path / 'aiida.out').read_bytes()
+    summary = (tmp_path / 'aiida_summary.out').read_bytes()
     native_logs.validate_summary(record, summary)
     assert len(summary) < 2000
     assert parse(summary.decode()) == parse(text)
@@ -65,14 +65,14 @@ def test_compaction_keeps_late_scientific_failure_markers(tmp_path, suffix):
     native_file(tmp_path, output() + suffix)
     collect(tmp_path)
     with pytest.raises(ValueError):
-        parse((tmp_path / 'aiida.out').read_text())
+        parse((tmp_path / 'aiida_summary.out').read_text())
 
 
 def test_summary_checksum_mismatch_is_rejected(tmp_path):
     native_file(tmp_path)
     record = collect(tmp_path)
     with pytest.raises(ValueError, match='checksum'):
-        native_logs.validate_summary(record, (tmp_path / 'aiida.out').read_bytes() + b'changed')
+        native_logs.validate_summary(record, (tmp_path / 'aiida_summary.out').read_bytes() + b'changed')
 
 
 def test_budget_exhaustion_never_becomes_a_truncated_success(tmp_path, monkeypatch):
@@ -80,7 +80,7 @@ def test_budget_exhaustion_never_becomes_a_truncated_success(tmp_path, monkeypat
     original = path.read_bytes()
     monkeypatch.setattr(native_logs, 'SUMMARY_LIMIT', 100)
     record = collect(tmp_path)
-    assert (tmp_path / 'aiida.out').stat().st_size <= 100
+    assert (tmp_path / 'aiida_summary.out').stat().st_size <= 100
     with pytest.raises(ValueError, match='budget'):
         native_logs.validate_manifest(record)
     assert path.read_bytes() == original
@@ -134,7 +134,7 @@ def test_new_casci_runs_collect_on_the_calculation_computer(common_reference, ai
                 assert info.codes_info[1].code_uuid == str(b.storage_code.uuid)
                 assert info.codes_info[1].cmdline_params == ['compact_output.py']
                 assert info.retrieve_list == ['aiida.out', native_logs.MANIFEST,
-                                              'native_output_tail.txt', 'compact_output.log']
+                                              'native_output_tail.txt', 'compact_output.log', '*_summary.out']
                 assert 'aiida.property.txt' not in info.retrieve_list
                 assert open(folder.get_abs_path('aiida.inp')).read() == casci.casci_input(
                     b.orbital_reference.get_dict(), b.active_space.get_dict(), b.settings.get_dict())

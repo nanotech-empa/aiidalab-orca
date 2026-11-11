@@ -214,7 +214,7 @@ class CorrelationEnergies(ipw.VBox):
                 self.notice.value += ('<p>CASPT2 uses a different perturbation model from NEVPT2. '
                     'Review its explicit shifts and inspect reference weights, denominators and residual convergence. '
                     'The full first-order wavefunction increases memory and disk demands on larger systems.</p>')
-            self.notice.value += '<p>Only bounded validation text and diagnostics are retrieved. Full native logs, properties and electronic files are left remotely or stashed using Full files.</p>'
+            self.notice.value += '<p>Native text outputs up to maxsizeoutput are retrieved unchanged; larger outputs use a separate extract and notice. Large properties and electronic files are left remotely or stashed using Full files.</p>'
         except (ValueError, KeyError, OSError) as exc:
             self.form.layout.display = 'none'
             self.notice.value = '<p class="orca-notice">' + html.escape(str(exc)) + '</p>'

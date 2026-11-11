@@ -5,6 +5,14 @@ release work; it does not claim that the following paths already enforce a
 uniform repository-size budget. The owners below are modules in this repository.
 Setup owns installed tools and wrappers, not result collection policy.
 
+The user clarified the storage contract after this audit: ordinary native text
+output is retained unchanged up to a configurable `maxsizeoutput` (default 5 MiB
+per file). Only larger outputs use a distinct extract and explicit notice.
+Complete compact PDOS projections are scientific results to keep for interactive
+plots. They must not be discarded under a generic diagnostic-file cap. The
+remaining work below concerns measured excess, avoidable copies and diagnostic
+failure paths; it is not a blanket requirement to externalize useful results.
+
 ## Closed in the Kohn–Sham component
 
 `orbitals.py` now inherits the producing reference's remote/stash policy.
@@ -20,7 +28,7 @@ density, reference settings or scientific acceptance tolerances.
 
 | Owner | Current permanent retrieval | Existing guards | Remaining storage work |
 | --- | --- | --- | --- |
-| `pdos.py`, `scripts/orbital_character.py` | `character.json`, `character.npz`, `export.log`, `character.log` | At most 6000 AOs; native-export memory estimate; complete normalized orbital partitions and directional tensors | Bound encoded JSON/NPZ and diagnostics before retrieval. An AO or RAM limit is not a compact-output byte budget. |
+| `pdos.py`, `scripts/orbital_character.py` | `character.json`, `character.npz`, `export.log`, `character.log` | At most 6000 AOs; native-export memory estimate; complete normalized orbital partitions and directional tensors | Retain complete PDOS data for interactive projections. Check avoidable NPZ/ArrayData duplication and abnormal diagnostic growth; large coefficient/overlap exports stay external. |
 | `orbital_inspection.py`, `scripts/compact_orbitals.py` | `orbital_metadata.json`, inspection and per-set export logs | Combined metadata limited to 2 MiB; full orbital files remote/stashed | Bound the logs, including native export failures. |
 | `orbitals.py`, `orbital_inspection.py`, `optical.py`, `dyson.py`, `kondo.py` | `previews/`, `manifest.json`, `plot.log`, `driver.log` for orbital/NTO/Dyson/Kondo cubes | Shared selection limit of 64 orbitals; full-grid bounds; disk estimates; finite grids; preview smaller than full; full-cube retention | Bound the aggregate previews, manifests and logs before retrieval. Per-file reduction alone does not bound the sum. |
 | `dyson.py`, `scripts/export_dyson.py` | `artifact.json`, `export.log`, `driver.log` | Complete native CI exports external with identity/norm checks | Bound descriptor and export/driver diagnostics. |

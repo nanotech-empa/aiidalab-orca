@@ -10,11 +10,21 @@ reference orbitals, not natural or Dyson orbitals.
 
 New geometry/SCF submissions expose **Full native files**: leave originals on
 the calculation computer, or stash them at an explicit directory. This applies
-to the native log, property output and complete electronic bundle:
+to native property output and the complete electronic bundle:
 `aiida.gbw`, `aiida.densities`, and `aiida.densitiesinfo`. New full bundles are
 never retrieved into AiiDA. The application records sizes and SHA-256 checksums.
-Only bounded native summaries, compact electronic observables, the final orbital
-table and optimization trajectory are retrieved. The configured `orca-tools`
+Native text output has a separate **Output retrieval → maxsizeoutput (MiB)**
+control, default 5 MiB per file. Up to and including that size, `aiida.out` is the
+complete unchanged original and `verdi calcjob outputcat PK` shows it. Above the
+threshold, `aiida_summary.out` contains the validation extract; `aiida.out` is a
+small explicit notice giving the original size, threshold and full-original path.
+Read the extract with `verdi calcjob outputcat PK aiida_summary.out`. The notice
+also appears in parser logs and app result warnings. The original remains
+remote/stashed. A zero threshold always selects extracts for nonempty outputs.
+Reused/historical records keep their recorded policy and files.
+
+Compact electronic observables, the final orbital table and optimization
+trajectory remain available in both cases. The configured `orca-tools`
 code must support the staged compact collector; users do not select Python.
 
 Preservation is an independent `empa_orca.electronic_storage` CalcJob, linked to

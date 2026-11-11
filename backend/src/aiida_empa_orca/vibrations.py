@@ -13,8 +13,8 @@ from .common_orbitals import options, validate_source
 from .reference import reference_settings, single_point_parameters
 from .parser import reference_summary
 from .native_logs import output_policy
-from .native_output import read_manifest
 from .artifacts import stash_options
+from .native_output import output_content, read_manifest
 
 PROCESS_TYPE = 'aiida.workflows:empa_orca.vibrations'
 OUTPUTS = {'vibrational_data': orm.ArrayData, 'summary': orm.Dict,
@@ -216,8 +216,8 @@ class VibrationsParser(Parser):
     def parse(self, **kwargs):
         try:
             repository = self.retrieved.base.repository
-            manifest = read_manifest(self.node, repository, 'vibrations-v1')
-            arrays, summary = parse_vibrations(repository.get_object_content('aiida.out'),
+            manifest = read_manifest(self.node, repository, 'vibrations-v1', logger=self.logger)
+            arrays, summary = parse_vibrations(output_content(repository, 'aiida.out'),
                 repository.get_object_content('aiida.hess'), self.node.inputs.structure.get_ase(),
                 self.node.inputs.raman.value)
             data = orm.ArrayData()
@@ -245,7 +245,7 @@ def validate_result(node):
         content = handle.read()
     if not content:
         raise ValueError('Stored Hessian is empty')
-    arrays, _ = parse_vibrations(node.outputs.retrieved.base.repository.get_object_content('aiida.out'),
+    arrays, _ = parse_vibrations(output_content(node.outputs.retrieved.base.repository, 'aiida.out'),
         content.decode(), node.inputs.structure.get_ase(), node.outputs.summary.get_dict()['raman'])
     for name, values in arrays.items():
         if not np.array_equal(node.outputs.vibrational_data.get_array(name), values):

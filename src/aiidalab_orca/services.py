@@ -12,6 +12,7 @@ from aiida_empa_orca.workchains import get_builder, plan_geometry
 from aiida_empa_orca.reference import (
     PROCESS_TYPE as REFERENCE_PROCESS, get_reference_builder, plan_reference, reference_settings,
 )
+from aiida_empa_orca.native_output import output_content
 
 NO_XYZ = "2\nNO, neutral doublet, stretched test geometry\nN 0 0 0\nO 0 0 1.3\n"
 
@@ -163,7 +164,7 @@ def result(uuid):
             if child.is_failed and "retrieved" in child.outputs:
                 files = child.outputs.retrieved.base.repository
                 if "aiida.out" in files.list_object_names():
-                    data["output_tail"] = files.get_object_content("aiida.out")[-6000:]
+                    data["output_tail"] = output_content(files, "aiida.out")[-6000:]
     # Read the actual CalcJob input (including a source run for explicit reuse),
     # rather than regenerating historical input using today's renderer.
     source = orm.load_node(data["source_uuid"]) if data["source_uuid"] else node
@@ -185,7 +186,8 @@ def result(uuid):
                 data["input_files"][filename] = repository.get_object_content(filename)
             except (FileNotFoundError, OSError):
                 pass
-    data["warnings"] = [node.exit_message] if node.exit_status == 405 else []
+    from aiida_empa_orca.native_output import retrieval_warnings
+    data["warnings"] = ([node.exit_message] if node.exit_status == 405 else []) + retrieval_warnings(node)
     if 'pdos_status' in node.outputs:
         data['pdos_status'] = node.outputs.pdos_status.get_dict()
         if data['pdos_status']['state'] in ('unavailable', 'incomplete'):
@@ -215,7 +217,7 @@ def result(uuid):
     if data["scientific_success"] and "retrieved" in node.outputs and "output_parameters" in node.outputs:
         from aiida_empa_orca.levels import orbital_levels
         try:
-            data["levels"] = orbital_levels(node.outputs.retrieved.base.repository.get_object_content("aiida.out"),
+            data["levels"] = orbital_levels(output_content(node.outputs.retrieved.base.repository, "aiida.out"),
                                              node.outputs.output_parameters.get_dict().get("nmo"))
         except (ValueError, OSError, KeyError) as exc:
             data["warnings"].append(f"Orbital levels unavailable: {exc}")

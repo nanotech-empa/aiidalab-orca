@@ -16,6 +16,7 @@ from .input import render_input
 from .reference import single_point_parameters
 from .native_logs import (DIRECTORY, MANIFEST, output_policy, read_state_summary,
                           validate_manifest, validate_summary)
+from .native_output import output_content, open_output
 
 PROCESS_TYPE = 'aiida.workflows:empa_orca.casci'
 HARTREE_TO_EV = 27.211386245988
@@ -173,6 +174,7 @@ class CasciCalculation(engine.CalcJob):
                    default=lambda: orm.Dict(dict={'mode': 'remote'}))
         source_spec(spec)
         spec.input('metadata.options.parser_name', default='empa_orca.casci')
+        spec.input('metadata.options.output_filename', valid_type=str, default='aiida.out')
         spec.input('metadata.options.withmpi', default=False)
         spec.output('state_energies', valid_type=orm.Dict)
         spec.output('native_output_manifest', valid_type=orm.Dict, required=False)
@@ -209,7 +211,7 @@ class CasciCalculation(engine.CalcJob):
         compact.code_uuid, compact.cmdline_params = self.inputs.compact_code.uuid, ['compact_output.py']
         compact.stdout_name, compact.join_files = 'compact_output.log', True
         info.codes_info, info.codes_run_mode = [code, compact], common.CodeRunMode.SERIAL
-        info.retrieve_list = ['aiida.out', MANIFEST, 'native_output_tail.txt', 'compact_output.log']
+        info.retrieve_list = ['aiida.out', MANIFEST, 'native_output_tail.txt', 'compact_output.log', '*_summary.out']
         return info
 
 
@@ -223,13 +225,15 @@ class CasciParser(Parser):
             if MANIFEST in self.retrieved.base.repository.list_object_names():
                 record = json.loads(self.retrieved.base.repository.get_object_content(MANIFEST))
                 validate_manifest(record)
-                content = self.retrieved.base.repository.get_object_content('aiida.out', mode='rb')
+                content = output_content(self.retrieved.base.repository, 'aiida.out', mode='rb')
                 validate_summary(record, content)
                 if record['policy']['mode'] == 'stash' and 'remote_stash' not in self.node.outputs:
                     raise ValueError('The requested full native-output stash is missing')
+                for warning in record.get('warnings', []):
+                    self.logger.warning(warning)
             elif 'compact_code' in self.node.inputs:
                 raise ValueError('Compact native-output collection failed; inspect compact_output.log and the remote log')
-            with self.retrieved.base.repository.open('aiida.out', mode='r') as handle:
+            with open_output(self.retrieved.base.repository, 'aiida.out', mode='r') as handle:
                 text = read_state_summary(handle)
             data = parse_states(text, reference, space, settings)
             data['orbital_reference_uuid'] = str(self.node.inputs.orbital_reference.uuid)
@@ -296,7 +300,7 @@ class CasciWorkChain(engine.WorkChain):
                         continue
                     # Stored state summaries survive scratch deletion. Dyson
                     # separately needs the preserved full CI log and GBW.
-                    with node.outputs.retrieved.base.repository.open('aiida.out', mode='r') as handle:
+                    with open_output(node.outputs.retrieved.base.repository, 'aiida.out', mode='r') as handle:
                         text = read_state_summary(handle)
                     parsed = parse_states(text, ref, self.ctx.space, self.ctx.settings)
                     if parsed['model'] != node.outputs.state_energies.get_dict().get('model'):

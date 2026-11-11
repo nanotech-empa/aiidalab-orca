@@ -162,8 +162,9 @@ class CasscfOrbitals(ipw.VBox):
                 f'{html.escape(p["execution"])} · {p["settings"]["nprocs"]} {processes} · '
                 f'{memory_label(p["settings"]["memory_mb"])} · {p["settings"]["wallclock_seconds"] // 60} minutes. '
                 'One job runs orbital optimization followed by independent frozen-orbital verification; '
-                f'new full logs and wavefunction are {destination}. Only bounded summaries and diagnostics '
-                'are retrieved. Reused/running results keep their recorded retention.</p>'
+                f'large artifacts are {destination}. Native outputs up to '
+                f'{retention.get("maxsizeoutput", 5 * 1024**2) / 1024**2:g} MiB are retrieved unchanged; '
+                'larger files use a separate extract and explicit notice. Reused/running results keep their recorded retention.</p>'
                 f'<table style="border-collapse: collapse"><tr><th{cell}>Multiplicity</th><th{cell}>Root</th>'
                 f'<th{cell}>Normalized optimization weight</th></tr>' + rows + '</table>'
                 '<details><summary>Review ORCA optimization and readback inputs</summary><pre>' +

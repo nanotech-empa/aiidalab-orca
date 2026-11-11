@@ -25,8 +25,8 @@ def collect(root, text, protocol, hessian=None):
     (root / 'native_output/aiida.out').write_text(text)
     if hessian is not None:
         (root / 'aiida.hess').write_text(hessian)
-    record = native_logs.collect_output({'protocol': protocol, 'policy': {'mode': 'remote'}}, root)
-    return record, (root / 'aiida.out').read_text()
+    record = native_logs.collect_output({'protocol': protocol, 'policy': {'mode': 'remote', 'maxsizeoutput': 0}}, root)
+    return record, (root / 'aiida_summary.out').read_text()
 
 
 @pytest.mark.parametrize('name,settings', [
@@ -93,7 +93,8 @@ def test_native_nto_bundle_is_resolved_without_electronic_retrieval(tmp_path, ai
     name = 'aiida.s1.nto'
     (tmp_path / name).write_bytes(b'native NTO bytes')
     record, _ = collect(tmp_path, native(), 'optical-v1')
-    record['policy'] = {'mode': mode, **({'stash_directory': str(tmp_path)} if mode == 'stash' else {})}
+    record['policy'] = {'mode': mode, 'maxsizeoutput': 0,
+                        **({'stash_directory': str(tmp_path)} if mode == 'stash' else {})}
     producer = orm.CalcJobNode(process_type=optical.PROCESS_TYPE).store()
     remote = orm.RemoteData(computer=aiida_localhost,
                             remote_path=str(tmp_path / 'lost-scratch' if mode == 'stash' else tmp_path))

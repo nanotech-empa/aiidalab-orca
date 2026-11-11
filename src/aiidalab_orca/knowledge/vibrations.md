@@ -1,8 +1,10 @@
 # ORCA harmonic IR/Raman: choosing the reference geometry
 
-Review **Full files** before submitting: full logs, original Hessian and
-electronic files remain on the calculation computer or in its selected stash.
-AiiDA retains bounded native validation text and the exact numeric Hessian
+Review **Full files** before submitting: the original Hessian and electronic
+files remain on the calculation computer or in its selected stash. Native text
+outputs up to **maxsizeoutput** (default 5 MiB per file) are retrieved unchanged;
+larger outputs use a separate validation extract and an explicit outputcat
+notice, while the original stays remote/stashed. AiiDA retains the exact numeric Hessian
 sections required for spectra, animations and durable reuse. The compact Hessian
 has a 16 MiB limit; exceeding it fails collection instead of retrieving the
 large original. No frequencies, displacement vectors or response tensors are

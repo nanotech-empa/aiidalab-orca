@@ -85,17 +85,15 @@ report/dashboard and a convergence-aware retry coordinator remain **planned**.
 The A2n operational scripts are evidence from one benchmark, not a portable
 submission API. Use the app services and native WorkChains for new work.
 
-For the compact-output candidate, **Full files** explicitly chooses remote
-retention or stashing for new common-orbital/CASCI/CASSCF logs and orbital files,
-and Dyson CI exports. Catalog/preview requests inherit the reference's orbital
-retention; full cubes keep their separate retention choice. These full
-files are not retrieved. CASCI saves bounded validation text, a diagnostic tail
-and an immutable size/checksum manifest. Dyson needs the original CI log from
-that manifest, not the compact summary. Stored energies remain inspectable if
-scratch disappears; this does not guarantee that new Dyson evaluation is still
-possible. Reused/running results keep their recorded policy. Verify deployment
-and the configured `orca-tools` support for `compact_output.py` before promising
-these controls; other native calculation routes still require retention cleanup.
+**Full files** chooses remote/stash retention for large orbital files and Dyson
+CI exports. Native text outputs up to **maxsizeoutput**, default 5 MiB per file,
+are retrieved unchanged. Larger outputs produce a separate `aiida_summary.out`
+(or `verify_summary.out`) plus an explicit notice under the original output
+filename. A validation extract cannot supply CI vectors. Dyson uses the complete
+retrieved CI log when present, otherwise the checksum-verified remote/stash
+original. Catalog/preview requests inherit orbital retention; full cubes keep
+their independent choice. Reused/running and historical records keep their
+original policy. Verify installed `orca-tools` support before promising controls.
 
 ## Establish the reviewed plan
 

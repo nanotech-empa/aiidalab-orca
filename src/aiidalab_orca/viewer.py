@@ -89,7 +89,8 @@ class ResultsView(ipw.VBox):
         from .presentation import LazyStack
         self.data = data
         self.confirmed_space = None
-        self._selection_reference = None
+        self._selection_signature = None
+        self._selection_epoch = 0
         self._preparation_button = None
         self._preparation_status = None
         s = data['settings']
@@ -252,9 +253,7 @@ class ResultsView(ipw.VBox):
                 signature = self._space_signature(panel)
                 if getattr(self, '_energy_signature', None) != signature:
                     for key in ('energy','quantum_energy','casscf'):
-                        old = self.tabs.panels.pop(key, None)
-                        if old:
-                            old.close()
+                        self.tabs.invalidate_section(key)
                     self._energy_signature = signature
                 return self.tabs.show_section(task)
             mode = {'casci': 'states', 'dyson': 'spectrum'}.get(task, task)
@@ -293,6 +292,9 @@ class ResultsView(ipw.VBox):
             widget.close()
 
     def _prepared_reference_changed(self, event):
+        panel = self.tabs.panels.get('states')
+        if panel is not None:
+            self._refresh_selection(panel)
         if self._preparation_button is not None:
             self._preparation_button.disabled = not bool(event['new'])
         if self._preparation_status is not None:
@@ -301,24 +303,29 @@ class ResultsView(ipw.VBox):
                 '<p>Prepare or select an orbital reference to continue to visualization.</p>')
 
     def _refresh_selection(self, panel):
-        if self._selection_reference == panel.reference.value:
+        signature = self._space_signature(panel)
+        if self._selection_signature == signature:
             return
-        old = self.tabs.panels.pop('active',None)
-        if old:
-            from .widget_lifecycle import close_widget_tree
-            close_widget_tree(old)
-        self._selection_reference = str(panel.reference.value)
+        self._selection_epoch += 1
+        self._selection_signature = signature
+        self.confirmed_space = None
+        self._energy_signature = None
+        for key in ('active','energy','quantum_energy','casscf'):
+            self.tabs.invalidate_section(key)
 
     def _active_space(self):
         from .active_space_step import ActiveSpaceStep
         panel = self.tabs.panels['states']
-        return ActiveSpaceStep(panel.reference.value,panel.electrons.value,panel.norb.value,self._confirm_space)
+        epoch = self._selection_epoch
+        return ActiveSpaceStep(panel.reference.value,panel.electrons.value,panel.norb.value,
+            lambda uid, space: self._confirm_space(uid, space, epoch))
 
-    def _confirm_space(self, common_uuid, space):
-        panel = self.tabs.show_section('states')
-        if str(panel.reference.value) != str(common_uuid):
+    def _confirm_space(self, common_uuid, space, epoch):
+        panel = self.tabs.panels['states']
+        if epoch != self._selection_epoch or str(panel.reference.value) != str(common_uuid):
             raise ValueError('The orbital reference changed; inspect the selected reference again.')
         panel._apply_orbital_window(space['orbitals'])
+        self._selection_signature = self._space_signature(panel)
         self.confirmed_space = self._space_signature(panel)
         self.open_analysis('energy')
 

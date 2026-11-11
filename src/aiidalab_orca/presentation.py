@@ -97,6 +97,19 @@ class _LazySections:
         self.selected_index = index
         return self._load(index)
 
+    def invalidate_section(self, key):
+        """Detach a stale section before disposing its widgets and cached state."""
+        from .widget_lifecycle import close_widget_tree
+        index = self.section_keys.index(key)
+        cached = self.panels.pop(key, None)
+        mounted = self.children[index]
+        children = list(self.children)
+        children[index] = ipw.VBox()
+        self.children = children
+        close_widget_tree(mounted)
+        if cached is not None and cached is not mounted:
+            close_widget_tree(cached)
+
     def set_active(self, active):
         if self.selected_index is not None:
             panel = self.panels.get(self.section_keys[self.selected_index])

@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 from aiida import common, engine, orm
 from aiida.parsers import Parser
 
-from .artifacts import ELECTRONIC_FILES, resolve_electronic, storage_builder, storage_policy, stash_options
+from .artifacts import ELECTRONIC_FILES, native_retention, resolve_electronic, storage_builder, storage_policy, stash_options
 
 PROCESS_TYPE = 'aiida.workflows:empa_orca.orbitals'
 
@@ -181,6 +181,7 @@ class OrbitalsWorkChain(engine.WorkChain):
     def setup(self):
         try:
             self.ctx.parameters = cube_parameters(self.inputs.parameters.get_dict())
+            self.ctx.native_policy = native_retention(self.inputs.source_remote)
             storage_policy(self.inputs.storage_policy.get_dict())
             computer=self.inputs.python_code.computer
             if any(self.inputs[k].computer.uuid!=computer.uuid for k in ('plot_code','cubehandler_code','orca_code')):
@@ -241,6 +242,9 @@ class OrbitalsWorkChain(engine.WorkChain):
     def run_reference(self):
         from .reference import get_reference_builder
         builder=get_reference_builder(self.inputs.structure,self.inputs.reference_settings.get_dict(),self.inputs.orca_code)
+        builder.storage_code = self.inputs.python_code
+        builder.native_output_policy = orm.Dict(dict=self.ctx.native_policy)
+        builder.bypass_cache = orm.Bool(True)
         return engine.ToContext(reference=self.submit(builder))
 
     def inspect_reference(self):
@@ -252,9 +256,10 @@ class OrbitalsWorkChain(engine.WorkChain):
         try:
             remote=orm.load_node(self.ctx.source_uuid)
             self.ctx.location=resolve_electronic(remote)
-            if self.ctx.location['kind']!='remote':
+            if self.ctx.location['kind']!='remote' or self.ctx.native_policy['mode'] == 'remote':
                 return
-            return engine.ToContext(storage=self.submit(storage_builder(remote,self.inputs.python_code,self.inputs.storage_policy.get_dict())))
+            policy = {'threshold_mb': 0, 'stash_directory': self.ctx.native_policy['stash_directory']}
+            return engine.ToContext(storage=self.submit(storage_builder(remote,self.inputs.python_code,policy)))
         except (OSError,ValueError,RuntimeError,KeyError) as exc:
             self.report(str(exc))
             return self.exit_codes.ERROR_STORAGE
@@ -264,7 +269,7 @@ class OrbitalsWorkChain(engine.WorkChain):
             return self.exit_codes.ERROR_STORAGE
         try:
             self.ctx.location=resolve_electronic(orm.load_node(self.ctx.source_uuid))
-            if self.ctx.location['kind']=='remote':
+            if self.ctx.location['kind']=='remote' and self.ctx.native_policy['mode'] == 'stash':
                 return self.exit_codes.ERROR_STORAGE
         except (OSError,ValueError,RuntimeError,KeyError) as exc:
             self.report(str(exc))

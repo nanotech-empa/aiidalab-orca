@@ -24,6 +24,13 @@ The historical `storage_policy` input remains for API/provenance compatibility;
 new stashes use a zero retrieval threshold. Legacy retrieved bundles remain
 readable and checksum-verified, without migrating or rewriting existing nodes.
 
+Kohn–Sham cube jobs inherit the producing calculation's recorded remote/stash
+choice. The property panel displays that choice; it has no separate wavefunction
+retrieval threshold. A remote reference stays remote, and an existing stash or
+historical repository copy is reused. A historical reference without a recorded
+native policy defaults to remote retention for newly generated electronic files.
+The separate full-cube choice does not change the source wavefunction policy.
+
 Stashing creates a separate copy. It does **not** delete the original files or
 clean the calculation directory. Choose a stash filesystem with an appropriate
 retention policy; a stash on the same disposable scratch filesystem does not
@@ -71,8 +78,10 @@ unrestricted reference. Review the plan, then submit. The independent
 If all electronic copies are missing, the reviewed plan explicitly proposes SCF
 at the saved final geometry with the original electronic settings. The backend
 requires that regeneration choice before submitting it and bypasses calculation
-caching when needed. Optimization is not repeated. If files disappear after a
-review that did not include regeneration, submission fails with a request to
+caching when needed. Recovery passes the configured ORCA tools helper and the
+inherited native-file choice to the SCF workflow. Optimization is not repeated.
+If files disappear after a review that did not include regeneration, submission
+fails with a request to
 review again. This recovery rule is specific to the present HF/DFT reference;
 future correlated calculations must also validate common-orbital-basis identity.
 
@@ -89,6 +98,10 @@ wavefunction staging copies in the property job are removed after success.
 Full-cube reuse checks the required stash/working files as well as the retrieved
 previews. A preview can still be opened after the full data is lost; asking for
 the full-data retention policy again requires regeneration.
+
+The [postprocessing storage audit](postprocessing-retention.md) records remaining
+diagnostic and result-size limits needed before release. Reduced previews and
+small test outputs alone do not establish a repository-size bound for every job.
 
 The adjustable grid has 40–256 points on each axis (default 80). ORCA determines
 the bounding box. A fixed point count is not an accuracy guarantee for large

@@ -5,7 +5,7 @@ from pathlib import Path, PurePosixPath
 from aiida import orm
 from aiida.engine import submit
 
-from aiida_empa_orca.artifacts import resolve_electronic, storage_policy
+from aiida_empa_orca.artifacts import native_retention, resolve_electronic, storage_policy
 from aiida_empa_orca.levels import orbital_levels
 from aiida_empa_orca.orbitals import PROCESS_TYPE, OrbitalsWorkChain, cube_parameters, validate_cube_outputs
 from aiida_empa_orca.reference import PROCESS_TYPE as SCF_PROCESS, GEOMETRY_PROCESS
@@ -19,6 +19,8 @@ def tool_codes(computer_uuid=None):
     result = {'python':[], 'plot':[], 'cubehandler':[]}
     for (uuid,) in orm.QueryBuilder().append(orm.InstalledCode,project=['uuid']).all():
         code=orm.load_code(uuid)
+        if code.is_hidden:
+            continue
         if computer_uuid and code.computer.uuid!=computer_uuid:
             continue
         name=Path(code.filepath_executable).name
@@ -44,24 +46,14 @@ def wavefunction_status(source_uuid):
     from aiida_empa_orca.reference import ArtifactUnavailable
     node = source_node(source_uuid)
     remote = source_remote(node)
-    policy = None
-    seen = set()
-    while str(node.uuid) not in seen:
-        seen.add(str(node.uuid))
-        if 'storage_policy' in node.inputs:
-            policy = node.inputs.storage_policy.get_dict()
-            break
-        if 'reuse_source' not in node.inputs:
-            break
-        node = source_node(node.inputs.reuse_source.value)
-    result = {'policy': policy or {'threshold_mb':100, 'stash_directory':default_stash_directory()},
-              'inherited': policy is not None}
+    retention = native_retention(remote)
+    result = {'retention': retention,
+              'policy': {'threshold_mb': 0, 'stash_directory': retention.get('stash_directory', default_stash_directory())},
+              'inherited': remote.creator is not None and 'native_output_policy' in remote.creator.inputs}
     try:
         location = resolve_electronic(remote)
         result.update(state=location['kind'], path=location.get('path', ''),
                       size_bytes=sum(f['size_bytes'] for f in location['files']))
-        if not policy and location.get('storage_uuid'):
-            result.update(policy=orm.load_node(location['storage_uuid']).inputs.policy.get_dict(), inherited=True)
     except ArtifactUnavailable as exc:
         result.update(state='unavailable', message=str(exc))
     except (ValueError, FileNotFoundError) as exc:
@@ -101,7 +93,7 @@ def property_runs(source_uuid):
 def prepare_property(source_uuid, parameters, policy, codes):
     node=source_node(source_uuid)
     p=cube_parameters(parameters)
-    policy=storage_policy(policy)
+    policy=storage_policy(dict(policy, threshold_mb=0))
     remote=source_remote(node)
     codes = dict(codes)
     if not codes.get('python'):
@@ -119,6 +111,7 @@ def prepare_property(source_uuid, parameters, policy, codes):
     if p['spin_density'] and not levels['spin_polarized']:
         raise ValueError('The restricted reference does not provide a spin-density channel')
     plan={'source_uuid':source_uuid,'parameters':p,'storage_policy':policy,'codes':dict(codes),
+          'native_output_policy': native_retention(remote),
           'action':'compute','reuse_uuid':None,'regenerate_reference':False,'warnings':[]}
     for row in property_runs(source_uuid):
         previous=orm.load_node(row['uuid'])
@@ -135,7 +128,7 @@ def prepare_property(source_uuid, parameters, policy, codes):
         plan['electronic_location']=location['kind']
         total=sum(f['size_bytes'] for f in location['files'])
         plan['wavefunction_bytes']=total
-        plan['storage_action']=('retrieve' if total<=policy['threshold_mb']*1024**2 else 'stash') if location['kind']=='remote' else 'already preserved'
+        plan['storage_action'] = (plan['native_output_policy']['mode'] if location['kind']=='remote' else 'already preserved')
     except (FileNotFoundError,ValueError) as exc:
         plan['regenerate_reference']=True
         plan['warnings'].append(str(exc))
@@ -143,14 +136,15 @@ def prepare_property(source_uuid, parameters, policy, codes):
     return plan
 
 
-def submit_property(plan):
-    from aiida.engine.daemon.client import get_daemon_client
-    if not get_daemon_client().is_daemon_running:
-        raise ValueError('Start the AiiDA daemon before submitting')
+def property_builder(plan):
     node=source_node(plan['source_uuid'])
+    remote=source_remote(node)
+    retention=native_retention(remote)
+    if plan.get('native_output_policy', retention) != retention:
+        raise ValueError('The wavefunction retention changed; review the property request again')
     builder=OrbitalsWorkChain.get_builder()
     builder.source_retrieved=node.outputs.retrieved
-    builder.source_remote=source_remote(node)
+    builder.source_remote=remote
     builder.structure=node.outputs.structure
     builder.reference_settings=node.inputs.settings
     builder.orca_code=node.inputs.code
@@ -162,6 +156,14 @@ def submit_property(plan):
     if plan['reuse_uuid']:
         builder.reuse_uuid=orm.Str(plan['reuse_uuid'])
     builder.metadata.label=f'{node.outputs.structure.get_formula()} orbitals and spin density'
+    return builder
+
+
+def submit_property(plan):
+    from aiida.engine.daemon.client import get_daemon_client
+    if not get_daemon_client().is_daemon_running:
+        raise ValueError('Start the AiiDA daemon before submitting')
+    builder=property_builder(plan)
     run=submit(builder)
     return str(run.uuid)
 

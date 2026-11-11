@@ -24,6 +24,7 @@ orca-dyson = "aiida_empa_orca.dyson_tools:main"
 orca-tools = "aiida_empa_orca.tools:main"
 
 [project.entry-points."aiida.calculations"]
+"empa_orca.orbital_reordering" = "aiida_empa_orca.orbital_reordering_job:OrbitalReorderingCalculation"
 "empa_orca.dmrg" = "aiida_empa_orca.dmrg:DmrgCalculation"
 "empa_orca.optical" = "aiida_empa_orca.optical:OpticalCalculation"
 "empa_orca.correlation" = "aiida_empa_orca.correlation:CorrelationCalculation"
@@ -51,6 +52,7 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.calculation:SinglePointCalculation"
 
 [project.entry-points."aiida.parsers"]
+"empa_orca.orbital_reordering" = "aiida_empa_orca.orbital_reordering_job:OrbitalReorderingParser"
 "empa_orca.dmrg" = "aiida_empa_orca.dmrg:DmrgParser"
 "empa_orca.optical" = "aiida_empa_orca.optical:OpticalParser"
 "empa_orca.correlation" = "aiida_empa_orca.correlation:CorrelationParser"
@@ -77,6 +79,7 @@ orca-tools = "aiida_empa_orca.tools:main"
 "empa_orca.single_point" = "aiida_empa_orca.parser:SinglePointParser"
 
 [project.entry-points."aiida.workflows"]
+"empa_orca.orbital_reordering" = "aiida_empa_orca.orbital_reordering_job:OrbitalReorderingWorkChain"
 "empa_orca.dmrg_sweeps" = "aiida_empa_orca.dmrg_workchain:DmrgSweepConvergenceWorkChain"
 "empa_orca.dmrg_convergence" = "aiida_empa_orca.dmrg_workchain:DmrgConvergenceWorkChain"
 "empa_orca.dmrg_timeout_recovery" = "aiida_empa_orca.dmrg_recovery:DmrgTimeoutRecoveryWorkChain"

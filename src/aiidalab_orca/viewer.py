@@ -318,7 +318,26 @@ class ResultsView(ipw.VBox):
         panel = self.tabs.panels['states']
         epoch = self._selection_epoch
         return ActiveSpaceStep(panel.reference.value,panel.electrons.value,panel.norb.value,
-            lambda uid, space: self._confirm_space(uid, space, epoch))
+            lambda uid, space: self._confirm_space(uid, space, epoch),
+            lambda uid, space, source=str(panel.reference.value): self._use_reordered_reference(uid, space, source, epoch),
+            self._invalidate_pending_space)
+
+    def _invalidate_pending_space(self):
+        self.confirmed_space = None
+        self._energy_signature = None
+        for key in ('energy', 'quantum_energy', 'casscf'):
+            self.tabs.invalidate_section(key)
+
+    def _use_reordered_reference(self, uuid, space, source_uuid, epoch):
+        panel = self.tabs.panels['states']
+        if epoch != self._selection_epoch or str(panel.reference.value) != str(source_uuid):
+            raise ValueError('The source selection changed; select the saved reordered reference explicitly')
+        panel._refresh()
+        if uuid not in [value for _, value in panel.reference.options]:
+            raise ValueError('The prepared reference is not available in this molecular entry')
+        panel.reference.value = uuid
+        panel.electrons.value, panel.norb.value = space['electrons'], len(space['orbitals'])
+        self.open_analysis('active')  # New identity always needs fresh inspection/confirmation.
 
     def _confirm_space(self, common_uuid, space, epoch):
         panel = self.tabs.panels['states']

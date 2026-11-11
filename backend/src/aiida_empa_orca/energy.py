@@ -86,21 +86,15 @@ class EnergyHamiltonianCalculation(engine.CalcJob):
         )
 
     def prepare_for_submission(self, folder):
-        reference = self.inputs.orbital_reference.get_dict()
+        producer = self.inputs.orbital_reference.creator
+        if producer is None or "remote_folder" not in producer.outputs:
+            raise ValueError("Use a completed prepared orbital reference")
+        reference = casci.validate_reference(
+            self.inputs.orbital_reference, producer.outputs.remote_folder
+        )
         if str(self.inputs.structure.uuid) != reference["structure_uuid"]:
             raise ValueError("Use the geometry bound to the prepared orbitals")
-        producer = self.inputs.orbital_reference.creator
-        if (
-            producer is None
-            or not producer.is_finished_ok
-            or producer.process_type not in (
-                "aiida.calculations:empa_orca.common_orbitals",
-                "aiida.calculations:empa_orca.casscf",
-            )
-            or (producer.process_type == "aiida.calculations:empa_orca.casscf"
-                and reference.get("preparation") != "casscf_verified_v1")
-            or str(self.inputs.code.uuid) != str(producer.inputs.code.uuid)
-        ):
+        if str(self.inputs.code.uuid) != casci.reference_orca_code(self.inputs.orbital_reference):
             raise ValueError(
                 "Use the ORCA code bound to the prepared orbital reference"
             )

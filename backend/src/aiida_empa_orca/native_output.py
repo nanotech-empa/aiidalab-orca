@@ -87,7 +87,8 @@ def prepare_compact(info, inputs, folder, protocol, *, extra_request=None):
         info.retrieve_list.extend(['aiida.xyz', 'aiida_trj.xyz'])
     if protocol == 'vibrations-v1':
         info.retrieve_list.append('aiida.hess')
-    return info
+    from .orbital_reordering_job import protect_reordered_input
+    return protect_reordered_input(info, inputs, folder)
 
 
 def read_manifest(node, repository, protocol, *, logger=None):

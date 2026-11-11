@@ -66,3 +66,8 @@ after explicit active-space confirmation. Its state-specific/state-average
 weights optimize orbitals; they are not populations or tunnelling factors.
 Require successful optimization and frozen readback, then inspect/reconfirm
 the new orbitals before CASCI/Dyson or a new quantum Hamiltonian export.
+
+The [noncontiguous-CAS preparation candidate](../orbital-reordering.md) documents
+explicit source/prepared mapping, signed checks, supported source types and the
+pending native/browser pilot. Check installed controls and acceptance status;
+the branch and preview selector alone do not establish deployment.

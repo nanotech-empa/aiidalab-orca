@@ -200,7 +200,8 @@ class CasciStates(ipw.VBox):
             start = (ref['n_electrons']-self.electrons.value)//2
             sector = f'Reference active space: <b>CAS({self.electrons.value},{self.norb.value})</b> at charge {ref["charge"]:+d}.'
             self.space_info.value = (f'<p>ORCA orbital indices <b>{start}–{start+self.norb.value-1}</b> (start at 0). '
-                f'{sector} Orbitals are held fixed; orbital reordering is not yet available.</p>')
+                f'{sector} Orbitals are held fixed. Prepare noncontiguous selections from original '
+                'QRO/restricted orbitals under <b>Inspect / confirm active space</b>.</p>')
             if self._inspection:
                 self._inspection.set_active_indices(list(range(start,start+self.norb.value)))
         except Exception as exc:

@@ -79,7 +79,8 @@ PROTOCOLS = {'casci-v1': ('aiida.out',), 'casscf-v1': ('aiida.out', 'verify.out'
              'scf-v1': ('aiida.out',), 'optimization-v1': ('aiida.out',),
              'common-orbitals-v1': ('aiida.out',), 'correlation-v1': ('aiida.out',),
              'optical-v1': ('aiida.out',), 'vibrations-v1': ('aiida.out',),
-             'energy-export-v1': ('aiida.out',)}
+             'energy-export-v1': ('aiida.out',),
+             'orbital-reordering-v1': ('aiida.out', 'prepare.out', 'write.out', 'verify.out', 'check.out')}
 COMPACT_LIMITS = {'scf_results.json': 2 * 1024**2, 'aiida.xyz': 2 * 1024**2,
                   'aiida_trj.xyz': 8 * 1024**2, 'aiida.hess': 16 * 1024**2}
 HESSIAN_SECTIONS = {'hessian', 'normal_modes', 'vibrational_frequencies', 'atoms',

@@ -154,8 +154,15 @@ def test_preparation_then_explicit_active_selection_precedes_state_requests(monk
     monkeypatch.setattr(casci.service,'results',lambda *args:[])
 
     class Inspection(ipw.VBox):
-        def __init__(self, uuid, *, active_indices, apply_window):
+        def __init__(self, uuid, *, active_indices, apply_window, allow_reordering=False):
             self.apply_window = apply_window
+            self.allow_reordering = allow_reordering
+            self.export_code = ipw.Dropdown(options=[])
+            self.orbitals = ipw.SelectMultiple(options=list(range(20)), value=tuple(active_indices))
+            self.kind = ipw.Dropdown(options=['restricted'])
+            self._job_uuid = None
+            from aiidalab_orca.orbital_selection import OrbitalIndexInput
+            self.selection_input = OrbitalIndexInput(self.orbitals)
             self.catalog_record = None
             self.calculation = ComputePanel('Read orbital information',[])
             super().__init__([self.calculation])

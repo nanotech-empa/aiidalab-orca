@@ -148,15 +148,62 @@ def parse_states(text, reference, space, settings):
                        'energy_hartree':found[(mult, root)]} for mult, root in sorted(expected)]}
 
 
-def validate_reference(reference_node, source_remote):
+def imported_reference_contract():
+    """Preserve the optional verified-import component in research assemblies.
+
+    This component is not supplied by the standard-app branch. Do not loosen
+    its identity/parent checks, or require that it be installed for standard CAS.
+    """
+    from importlib import import_module
+    try:
+        module = import_module('.fixed_orbitals_data', __package__)
+    except ModuleNotFoundError as exc:
+        if exc.name != __package__ + '.fixed_orbitals_data':
+            raise
+        return None
+    return module
+
+
+def reference_orca_code(reference_node):
+    """Imported references are validated by a helper, not their ORCA code."""
+    imported = imported_reference_contract()
     producer = reference_node.creator
-    allowed = ('aiida.calculations:empa_orca.common_orbitals', 'aiida.calculations:empa_orca.casscf')
-    if (producer is None or producer.process_type not in allowed
+    if imported is None or producer.process_type != imported.CALCULATION:
+        return str(producer.inputs.code.uuid)
+    candidates = set()
+    for triple in reference_node.base.links.get_incoming(link_type=common.LinkType.RETURN).all():
+        parent = triple.node
+        if (parent.process_type == imported.PROCESS and parent.is_finished_ok and
+                parent.outputs.remote_folder.uuid == producer.outputs.remote_folder.uuid):
+            candidates.add(str(parent.inputs.code.uuid))
+    if len(candidates) != 1:
+        raise ValueError('Imported orbitals require their successful preparation workflow and declared ORCA code')
+    return candidates.pop()
+
+
+def validate_reference(reference_node, source_remote):
+    from .orbital_reordering_job import CALCULATION, PREPARATION
+    producer = reference_node.creator
+    allowed = ('aiida.calculations:empa_orca.common_orbitals', 'aiida.calculations:empa_orca.casscf', CALCULATION)
+    imported = imported_reference_contract()
+    if imported is not None:
+        allowed += (imported.CALCULATION,)
+    if (producer is None or not producer.is_finished_ok or producer.process_type not in allowed
             or producer.outputs.remote_folder.uuid != source_remote.uuid):
         raise ValueError('The common-orbital metadata and folder must share their preparation CalcJob')
+    if (imported is not None and producer.process_type == imported.CALCULATION and
+            reference_node.get_dict().get('preparation') != imported.PREPARATION):
+        raise ValueError('External orbitals require a verified frozen-CASCI import')
     if producer.process_type == allowed[1] and (
             not producer.is_finished_ok or reference_node.get_dict().get('preparation') != 'casscf_verified_v1'):
         raise ValueError('Use a converged CASSCF reference with a successful frozen-orbital readback')
+    if producer.process_type == CALCULATION:
+        record = reference_node.get_dict()
+        if (not producer.is_finished_ok or record.get('preparation') != PREPARATION or
+                'orbital_mapping' not in producer.outputs or
+                record.get('orbital_mapping') != producer.outputs.orbital_mapping.get_dict() or
+                record['orbital_mapping']['plan'] != producer.inputs.plan.get_dict()):
+            raise ValueError('Use only a completed, provenance-bound verified orbital permutation')
     return reference_node.get_dict()
 
 
@@ -212,7 +259,8 @@ class CasciCalculation(engine.CalcJob):
         compact.stdout_name, compact.join_files = 'compact_output.log', True
         info.codes_info, info.codes_run_mode = [code, compact], common.CodeRunMode.SERIAL
         info.retrieve_list = ['aiida.out', MANIFEST, 'native_output_tail.txt', 'compact_output.log', '*_summary.out']
-        return info
+        from .orbital_reordering_job import protect_reordered_input
+        return protect_reordered_input(info, self.inputs, folder)
 
 
 class CasciParser(Parser):
@@ -286,7 +334,7 @@ class CasciWorkChain(engine.WorkChain):
             self.ctx.native_output_policy = output_policy(self.inputs.native_output_policy.get_dict())
             if self.inputs.code.computer.uuid != self.inputs.storage_code.computer.uuid:
                 raise ValueError('ORCA and storage codes must use the same computer')
-            if str(self.inputs.code.uuid) != str(self.inputs.orbital_reference.creator.inputs.code.uuid):
+            if str(self.inputs.code.uuid) != reference_orca_code(self.inputs.orbital_reference):
                 raise ValueError('Use the same ORCA code as the common-orbital preparation')
             expected = signature(self.inputs.orbital_reference.uuid, self.ctx.space, self.ctx.settings, self.inputs.code.uuid)
             if not self.inputs.force_recompute.value:

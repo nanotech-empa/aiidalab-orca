@@ -15,10 +15,11 @@ from .resources import MemoryInput, memory_label
 
 
 class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
-    def __init__(self, common_uuid, *, active_indices=(), apply_window=None):
+    def __init__(self, common_uuid, *, active_indices=(), apply_window=None, allow_reordering=False):
         self.common_uuid = str(common_uuid)
         self.active_indices = list(active_indices)
         self.apply_window = apply_window
+        self.allow_reordering = allow_reordering
         self.catalog_record, self.plan, self.process_uuid = None,None,None
         self.catalog_plan = None
         self._cube_view, self.render_panel, self._poll_task = None,None,None
@@ -131,8 +132,9 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         record = data['sets'][kind]
         self.review.disabled = bool(self._job_uuid)
         self.use_window.disabled = bool(self._job_uuid) or kind == 'UNO' or self.apply_window is None
-        self.use_window.description = ('Use selected orbital window for CASCI' if kind in ('restricted', 'CASSCF') else
-                                       'Use selected QRO window for CASCI')
+        self.use_window.description = ('Review selected CAS orbitals' if self.allow_reordering else
+            'Use selected orbital window for CASCI' if kind in ('restricted', 'CASSCF') else
+            'Use selected QRO window for CASCI')
         description = ('Fractional occupations diagonalize the source SCF spin-summed density matrix. '
             'They are diagnostics of that SCF reference, not correlated CASCI occupations. UNO indices belong to the UNO ordering; '
             'they are not a one-to-one assignment to QROs.' if kind == 'UNO' else
@@ -141,7 +143,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
             'Integer occupations describe this orbital reference. The orbital energies are QRO labels, not CASCI state energies.' if kind == 'QRO' else
             'Restricted SCF orbitals are retained without an unrestricted-to-QRO conversion.')
         if kind == 'QRO' and 'UNO' not in data['sets']:
-            description += ' UNO information is unavailable for this preparation; use Common-orbital regeneration above to prepare a new reference.'
+            description += ' This preparation contains the shared QRO set only; inspect original UNOs on their source reference when available.'
         self.info.value = '<p><b>'+html.escape(kind)+'</b> · reference <code>'+data['orbital_reference_uuid'][:8]+'</code>. '+description+'</p>'
         options, table = [],[]
         for row in record['levels']:
@@ -201,11 +203,11 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
             if self.kind.value == 'UNO' or not self.apply_window:
                 return
             indices = self.selection_input.selected_indices()
-            if not indices or indices != list(range(indices[0],indices[-1]+1)):
+            if not indices or (not self.allow_reordering and indices != list(range(indices[0],indices[-1]+1))):
                 raise ValueError('The current CASCI preparation requires a contiguous orbital window. '
                                  'Noncontiguous selections can still generate previews.')
             self.apply_window(indices)
-            self.window_message.value = '<p>CASCI active window updated. Review the electron count and calculation before submitting.</p>'
+            self.window_message.value = '<p>Selection forwarded for active-space review. Any required reordering needs its separate preparation and confirmation.</p>'
         except Exception as exc:
             self.window_message.value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
 

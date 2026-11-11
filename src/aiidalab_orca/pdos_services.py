@@ -9,7 +9,8 @@ from . import property_services
 
 def context(source_uuid):
     node = orm.load_node(source_uuid)
-    if node.process_type in ('aiida.workflows:empa_orca.common_orbitals', 'aiida.workflows:empa_orca.casscf') and node.is_finished_ok:
+    if node.process_type in ('aiida.workflows:empa_orca.common_orbitals', 'aiida.workflows:empa_orca.casscf',
+                            'aiida.workflows:empa_orca.orbital_reordering') and node.is_finished_ok:
         ref = node.outputs.orbital_reference.get_dict()
         return {'source_uuid': str(node.uuid), 'remote_uuid': str(node.outputs.remote_folder.uuid),
                 'structure_uuid': str(node.inputs.structure.uuid), 'charge': ref['charge'],

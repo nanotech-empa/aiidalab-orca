@@ -152,13 +152,14 @@ Changing CDXML generation settings invalidates the model and the submission
 review until **Create model** is used again. Charge and multiplicity remain
 explicit user choices for every importer.
 
-The CDXML dependency is pinned to [EMPA widgets PR #12](https://github.com/nanotech-empa/aiidalab-widgets-empa/pull/12),
-revision `8a85258bbb449ff99c1d0ee302fd4b6ae887c254`. The previously installed 0.2.2
-release lacks its graph-validation and `cdxml_storage` APIs. That PR still reports
-version 0.2.2, so a version-number constraint would not identify the required code.
-This app consumes the canonical component revision; it does not modify the shared
-PR stack or its runtime policy. Tests use widgets-base 3.0.0. The app's existing
-Python/AiiDA/AiiDAlab support targets are unchanged.
+The CDXML APIs are supplied by merged canonical EMPA widgets main at
+`8a97ed1ab7b448217ec165df3a3ba48a7495e9dc`, retaining the importer/storage changes
+and newer shared-cube fixes. A package version alone does not identify this
+qualification candidate. The app consumes official widgets-base **3.0.1**.
+Its optional upstream [reload PR832](https://github.com/aiidalab/aiidalab-widgets-base/pull/832) is not installed: explicitly loading the
+same stored node after editing may fail to restore geometry/saved representation
+controls. Record that known limitation; do not hide a local base patch.
+See [candidate dependency status](candidate-dependencies.md).
 
 Selecting a history result checks availability for each action. Missing optimization
 files do not prevent use of an available final geometry. Unreachable storage is

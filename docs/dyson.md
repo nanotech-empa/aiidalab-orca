@@ -241,11 +241,12 @@ run serially and default to one OpenMP/BLAS thread unless the configured runtime
 already specifies a thread count. Scheduler account/queue information is
 inherited from the source calculation.
 
-The reviewed upstream dependency is pinned to commit
-`96658a681815faf1cf260bcb26fe712ca7715103`: its cube writer accepts explicit grid
-sizes, which the released v0.1.0 writer does not. The integration calls the
-library kernel/writer directly; it does not invoke the upstream spectrum CLI's
-known overwritten-grid variable. No upstream code is patched or vendored.
+The reviewed upstream dependency is the official `dyson-orca-tools==0.1.1`
+release. Its kernel and explicit-grid cube writer support the production
+parameter contract, including each state's multiplicity. The older 0.1.0
+writer does not supply that grid API. The integration calls the library
+kernel/writer directly rather than the spectrum CLI. No upstream code is
+patched or vendored; see [candidate dependency status](candidate-dependencies.md).
 
 Current scientific scope remains all-electron, fixed-geometry CASCI in one common
 spatial basis, with no SOC or CASSCF orbital relaxation. The inexpensive NO

@@ -109,7 +109,9 @@ def test_preserved_bundle_survives_loss_of_original_scratch(electronic_source, t
     builder.storage_code = source.inputs.code
     outputs, reused = run_get_node(builder)
     assert reused.is_finished_ok and not reused.called_descendants
-    assert outputs['electronic_repository'].uuid == folder.uuid
+    # Reusing a historical reference does not start a new preservation policy.
+    assert 'electronic_repository' not in outputs
+    assert artifacts.resolve_electronic(source.outputs.remote_folder)['uuid'] == str(folder.uuid)
     corrupt = orm.FolderData()
     corrupt.base.repository.put_object_from_filelike(io.BytesIO(b'wrong'), 'electronic/aiida.gbw')
     with pytest.raises(ValueError, match='integrity'):

@@ -356,9 +356,20 @@ API so previous data are linked as inputs before the new process starts.
 Optimized outputs are `structure`, `trajectory`, `optimization_summary`,
 `output_parameters`, and `retrieved`; a new calculation also returns its
 `remote_folder`. Kept geometries return only `structure`. The `.gbw` remains on
-scratch and is not required to reuse the optimized coordinates. Optional
-[preservation](orbitals.md) retrieves or stashes the complete electronic bundle
-as a separate, provenance-linked step.
+the calculation computer and is not required to reuse the optimized coordinates.
+**Full native files** chooses remote retention or stashing of original logs,
+property files and the complete electronic bundle. No new full electronic bundle
+is retrieved. Stashing the bundle is a separate provenance-linked step.
+
+New compact-output submissions also return `native_output_manifest`. The
+configured `storage_code` must provide the ORCA tools runtime on the calculation
+computer; it collects compact results using the existing aiida-orca cclib reader.
+Only bounded summaries, electronic observables, the final orbital table and XYZ
+history enter AiiDA. Large AO/MO coefficient/overlap fields remain in the originals;
+the compact parameter dictionary lists omitted fields. Native inputs and the
+geometry/final-frame consistency checks are unchanged. A collection-budget
+failure leaves the originals remote and rejects partial data. Historical nodes
+retain their existing full-output parsing path.
 
 ## Reuse and caching
 

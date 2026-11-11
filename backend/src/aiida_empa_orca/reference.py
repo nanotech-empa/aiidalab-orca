@@ -210,6 +210,8 @@ class ReferenceWorkChain(OrbitalCharacterMixin, ElectronicStorageMixin, WorkChai
         self.ctx.regenerate = False
         try:
             self.validate_storage_inputs()
+            if not self.ctx.reusing and 'storage_code' not in self.inputs:
+                raise ValueError('Configure the ORCA tools code before submitting compact SCF output')
             self.ctx.settings = reference_settings(self.inputs.settings.get_dict())
             validate_molecule(self.inputs.structure, self.ctx.settings)
             if self.inputs.force_recompute.value and self.ctx.reusing:
@@ -239,6 +241,10 @@ class ReferenceWorkChain(OrbitalCharacterMixin, ElectronicStorageMixin, WorkChai
         builder = ReferenceBaseWorkChain.get_builder()
         builder.orca.structure = self.inputs.structure
         builder.orca.code = self.inputs.code
+        if 'storage_code' not in self.inputs:
+            raise ValueError('Configure the ORCA tools code before submitting compact SCF output')
+        builder.orca.compact_code = self.inputs.storage_code
+        builder.orca.native_output_policy = self.inputs.native_output_policy
         builder.orca.parameters = orm.Dict(dict=single_point_parameters(s))
         builder.orca.maxcore_mb = orm.Int(int(.75*s["memory_mb"]/s["nprocs"]))
         builder.orca.metadata.options = {
@@ -247,6 +253,11 @@ class ReferenceWorkChain(OrbitalCharacterMixin, ElectronicStorageMixin, WorkChai
             "max_wallclock_seconds": s["wallclock_seconds"], "max_memory_kb": s["memory_mb"]*1024}
         builder.orca.metadata.disable_cache = bool(
             self.inputs.force_recompute.value or self.inputs.bypass_cache.value or self.ctx.regenerate)
+        from .native_logs import output_policy, DIRECTORY
+        from .artifacts import stash_options
+        policy = output_policy(self.inputs.native_output_policy.get_dict())
+        if policy['mode'] == 'stash':
+            builder.orca.metadata.options.stash = stash_options(policy['stash_directory'], DIRECTORY)
         builder.metadata.call_link_label = "scf" if self.ctx.attempt == 0 else "regenerate_missing_data"
         self.ctx.attempt += 1
         self.ctx.regenerate = False
@@ -275,6 +286,8 @@ class ReferenceWorkChain(OrbitalCharacterMixin, ElectronicStorageMixin, WorkChai
         self.out("structure", self.inputs.structure)
         for name in RESULT_TYPES:
             self.out(name, outputs[name])
+        if 'native_output_manifest' in outputs:
+            self.out('native_output_manifest', outputs.native_output_manifest)
 
 
 def get_reference_builder(structure, settings, code, *, force_recompute=False, plan=None):

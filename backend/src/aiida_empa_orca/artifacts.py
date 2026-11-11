@@ -204,26 +204,43 @@ class ElectronicStorageMixin:
     def storage_spec(cls, spec):
         spec.input('storage_policy', valid_type=orm.Dict, required=False)
         spec.input('storage_code', valid_type=orm.AbstractCode, required=False)
+        spec.input('native_output_policy', valid_type=orm.Dict,
+                   default=lambda: orm.Dict(dict={'mode': 'remote'}))
+        spec.output('native_output_manifest', valid_type=orm.Dict, required=False)
         spec.output('electronic_manifest', valid_type=orm.Dict, required=False)
         spec.output('electronic_repository', valid_type=orm.FolderData, required=False)
         spec.output('electronic_stash', valid_type=orm.RemoteStashFolderData, required=False)
         spec.exit_code(405, 'ERROR_ELECTRONIC_STORAGE', message='Scientific results are available, but electronic-file preservation failed.')
 
     def validate_storage_inputs(self):
-        if ('storage_policy' in self.inputs) != ('storage_code' in self.inputs):
-            raise ValueError('Specify storage_policy and storage_code together')
+        from .native_logs import output_policy
+        output_policy(self.inputs.native_output_policy.get_dict())
+        if 'storage_policy' in self.inputs and 'storage_code' not in self.inputs:
+            raise ValueError('Specify a configured ORCA tools code for native-output collection')
         if 'storage_policy' in self.inputs:
             storage_policy(self.inputs.storage_policy.get_dict())
             if self.inputs.storage_code.computer.uuid != self.inputs.code.computer.uuid:
                 raise ValueError('The preservation code must use the ORCA computer')
+        elif 'storage_code' in self.inputs and self.inputs.storage_code.computer.uuid != self.inputs.code.computer.uuid:
+            raise ValueError('The collection code must use the ORCA computer')
 
     def should_preserve(self):
+        from .native_logs import output_policy
+        if 'native_output_policy' in self.inputs:
+            if self.ctx.get('reusing'):
+                return False
+            return output_policy(self.inputs.native_output_policy.get_dict())['mode'] == 'stash' and 'retrieved' in self.outputs
         return 'storage_policy' in self.inputs and 'retrieved' in self.outputs
 
     def preserve_electronic(self):
         try:
             remote = self.outputs['retrieved'].creator.outputs.remote_folder
-            policy = storage_policy(self.inputs.storage_policy.get_dict())
+            if 'native_output_policy' in self.inputs:
+                from .native_logs import output_policy
+                selected = output_policy(self.inputs.native_output_policy.get_dict())
+                policy = {'threshold_mb': 0, 'stash_directory': selected['stash_directory']}
+            else:
+                policy = storage_policy(self.inputs.storage_policy.get_dict())
             for uuid in storage_nodes(remote):
                 source = orm.load_node(uuid)
                 if source.is_finished_ok:

@@ -87,6 +87,7 @@ def test_constraint_preview_matches_stored_calcjob(aiida_profile, aiida_localhos
     preview = preview_input(structure, s)
     builder = OptimizationCalculation.get_builder()
     builder.code = orm.InstalledCode(computer=aiida_localhost, filepath_executable="/bin/true").store()
+    builder.compact_code = builder.code
     builder.structure = structure
     builder.parameters = orm.Dict(dict=orca_parameters(orm.Dict(dict=s).store().get_dict())).store()
     builder.maxcore_mb = orm.Int(768)

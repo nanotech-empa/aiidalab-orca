@@ -120,6 +120,7 @@ def test_custom_model_preview_is_calcjob_input(aiida_profile, aiida_localhost, a
     code = orm.InstalledCode(computer=aiida_localhost, filepath_executable="/bin/true").store()
     builder = OptimizationCalculation.get_builder()
     builder.structure, builder.code = structure, code
+    builder.compact_code = code
     builder.parameters = orm.Dict(dict=orca_parameters(settings))
     builder.maxcore_mb = orm.Int(768)
     builder.metadata.options.resources = {"num_machines": 1, "num_mpiprocs_per_machine": 2}

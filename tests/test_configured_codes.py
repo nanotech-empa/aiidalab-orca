@@ -56,6 +56,7 @@ def test_initial_workflow_preserves_reviewed_inputs_for_any_scheduler(
     ).store()
     builder = workflow.get_builder()
     builder.code = code
+    builder.storage_code = code
     builder.structure = orm.StructureData(ase=Atoms("H2", positions=[[0, 0, 0], [0, 0, .75]]))
     settings = protocol_settings(overrides={
         "multiplicity": 1, "reference": "RKS", "nprocs": 4, "memory_mb": 4096,

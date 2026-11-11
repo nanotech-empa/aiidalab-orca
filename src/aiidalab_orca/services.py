@@ -60,11 +60,22 @@ def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *,
     code = orm.load_code(code_uuid) if code_uuid else None
     if storage:
         from aiida_empa_orca.artifacts import storage_policy
-        storage = {"policy": storage_policy(storage["policy"]), "code_uuid": storage["code_uuid"]}
-        if code and orm.load_code(storage["code_uuid"]).computer.uuid != code.computer.uuid:
+        from aiida_empa_orca.native_logs import output_policy
+        storage = {"policy": storage_policy(storage["policy"]) | {'threshold_mb': 0},
+                   "code_uuid": storage["code_uuid"],
+                   "native_output_policy": output_policy(storage.get('native_output_policy'))}
+        if code and storage['code_uuid'] and orm.load_code(storage["code_uuid"]).computer.uuid != code.computer.uuid:
             raise ValueError("The storage code must run on the ORCA computer")
     plan = (plan_geometry(structure, settings, code, force_recompute=force_recompute) if optimize else
             plan_reference(structure, settings, code, force_recompute=force_recompute))
+    if not storage and plan['action'] == 'compute':
+        from .property_services import helper_code, default_stash_directory
+        storage = {'code_uuid': helper_code(code.computer.uuid),
+                   'policy': {'threshold_mb': 0, 'stash_directory': default_stash_directory()},
+                   'native_output_policy': {'mode': 'remote'}}
+    elif storage and not storage['code_uuid'] and plan['action'] == 'compute':
+        from .property_services import helper_code
+        storage['code_uuid'] = helper_code(code.computer.uuid)
     from aiida_empa_orca.pdos_workflow import default_plan
     character = default_plan(code.computer.uuid, enabled=pdos, memory_gib=pdos_memory_gib)
     if atoms is not None:
@@ -95,25 +106,31 @@ def structure_origin(structure):
     return f"Geometry from {creator.process_label} ({creator.uuid})."
 
 
-def submit_plan(review, label):
-    from aiida.engine.daemon.client import get_daemon_client
-    if not get_daemon_client().is_daemon_running:
-        raise ValueError("The AiiDA daemon is not running. Start it before submitting.")
+def reviewed_builder(review, label):
+    """The app's reviewed builder, also usable by bounded native qualification."""
     build = get_builder if review["optimize"] else get_reference_builder
     builder = build(
         orm.load_node(review["structure_uuid"]), review["settings"],
         orm.load_code(review["code_uuid"]) if review["code_uuid"] else None,
         force_recompute=review["force_recompute"], plan=review["plan"],
     )
-    if review.get("storage"):
+    if review.get("storage") and review['storage'].get('code_uuid'):
         builder.storage_policy = orm.Dict(dict=review["storage"]["policy"])
         builder.storage_code = orm.load_code(review["storage"]["code_uuid"])
+        builder.native_output_policy = orm.Dict(dict=review['storage'].get('native_output_policy', {'mode': 'remote'}))
     if review.get("pdos"):
         from aiida_empa_orca.pdos_workflow import configure
         configure(builder, review["pdos"])
     builder.metadata.label = label.strip() or f"{review['formula']} {'optimization' if review['optimize'] else 'SCF'}"
     builder.metadata.description = "Submitted from AiiDAlab ORCA electronic structure app"
-    node = submit(builder)
+    return builder
+
+
+def submit_plan(review, label):
+    from aiida.engine.daemon.client import get_daemon_client
+    if not get_daemon_client().is_daemon_running:
+        raise ValueError("The AiiDA daemon is not running. Start it before submitting.")
+    node = submit(reviewed_builder(review, label))
     node.base.extras.set("aiidalab_orca", {"version": "0.1.0", "view": "geometry" if review["optimize"] else "scf"})
     return str(node.uuid)
 

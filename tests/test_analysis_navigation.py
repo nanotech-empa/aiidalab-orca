@@ -108,7 +108,7 @@ def test_new_goal_stays_in_setup_and_existing_reference_is_explicit(source, monk
         app.close()
 
 
-def test_new_submission_opens_its_goal_after_reference_completes(source, monkeypatch):
+def test_new_submission_opens_its_goal_after_reference_completes(source, monkeypatch, configured_orca_tools):
     from aiidalab_orca import app as app_module, casci, services, viewer
     monkeypatch.setattr(services, 'codes', lambda: [('Test ORCA', source.inputs.code.uuid)])
     monkeypatch.setattr(casci.service, 'reference_runs', lambda uuid: [])

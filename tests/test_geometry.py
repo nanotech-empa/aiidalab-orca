@@ -56,6 +56,7 @@ def test_forced_recompute_bypasses_child_cache(no, aiida_localhost, aiida_manage
     from aiida.engine.utils import instantiate_process
     code = orm.InstalledCode(computer=aiida_localhost, filepath_executable="/bin/true").store()
     builder = get_builder(no, {}, code, force_recompute=True)
+    builder.storage_code = code
     process = instantiate_process(aiida_manager.get_runner(), builder)
     try:
         assert process.setup() is None

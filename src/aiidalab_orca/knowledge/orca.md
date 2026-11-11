@@ -56,7 +56,16 @@ computer name, transport or scheduler. The application does not configure them.
 Large artifacts must remain remote or be stashed according to the user's
 explicit retention choice. Only compact results, bounded diagnostics, manifests
 and reduced previews belong in permanent retrieval. This also applies to CI
-logs and exports, not only wavefunctions and HQ cubes. Native-log retrieval still
+logs and exports, not only wavefunctions and HQ cubes. New compact-output
+candidates provide **Full native files** in SCF/geometry and **Full files** in
+CASCI/CASSCF/Dyson: choose remote retention or an explicit stash destination.
+SCF/geometry uses the existing native reader remotely; final orbital levels,
+compact electronic observables and the optimization trajectory remain available.
+Large coefficient/overlap arrays stay in the original files, with omitted fields
+listed in the compact result. Exceeding a collection budget rejects the result;
+it does not truncate scientific data into an accepted calculation. Verify the
+installed component and helper revisions before promising these controls.
+Native-log retrieval in the other calculation routes still
 needs the cleanup recorded in the release-readiness guide; streaming by itself
 does not satisfy this storage requirement.
 

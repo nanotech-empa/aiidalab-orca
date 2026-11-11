@@ -67,6 +67,8 @@ class GeometryWorkChain(OrbitalCharacterMixin, ElectronicStorageMixin, WorkChain
                 validate_molecule(self.inputs.structure, self.ctx.settings)
                 if "code" not in self.inputs:
                     raise ValueError("Optimization requires an ORCA code")
+                if 'reuse_source' not in self.inputs and 'storage_code' not in self.inputs:
+                    raise ValueError('Configure the ORCA tools code before submitting compact geometry output')
             if self.inputs.force_recompute.value and "reuse_source" in self.inputs:
                 raise ValueError("Cannot force recomputation and reuse a result simultaneously")
         except ValueError as exc:
@@ -98,6 +100,10 @@ class GeometryWorkChain(OrbitalCharacterMixin, ElectronicStorageMixin, WorkChain
         builder = OptimizationBaseWorkChain.get_builder()
         builder.orca.structure = self.inputs.structure
         builder.orca.code = self.inputs.code
+        if 'storage_code' not in self.inputs:
+            raise ValueError('Configure the ORCA tools code before submitting compact geometry output')
+        builder.orca.compact_code = self.inputs.storage_code
+        builder.orca.native_output_policy = self.inputs.native_output_policy
         builder.orca.parameters = orm.Dict(dict=orca_parameters(s))
         builder.orca.maxcore_mb = orm.Int(int(0.75 * s["memory_mb"] / s["nprocs"]))
         builder.orca.metadata.options = {
@@ -110,6 +116,11 @@ class GeometryWorkChain(OrbitalCharacterMixin, ElectronicStorageMixin, WorkChain
         builder.orca.metadata.disable_cache = bool(
             self.inputs.force_recompute or self.inputs.bypass_cache or self.ctx.regenerate_cache
         )
+        from .native_logs import output_policy, DIRECTORY
+        from .artifacts import stash_options
+        policy = output_policy(self.inputs.native_output_policy.get_dict())
+        if policy['mode'] == 'stash':
+            builder.orca.metadata.options.stash = stash_options(policy['stash_directory'], DIRECTORY)
         builder.metadata.call_link_label = "optimization" if self.ctx.attempt == 0 else "regenerate_missing_data"
         self.ctx.attempt += 1
         self.ctx.regenerate_cache = False
@@ -148,6 +159,8 @@ class GeometryWorkChain(OrbitalCharacterMixin, ElectronicStorageMixin, WorkChain
             for name in set(RESULT_TYPES) - {"structure"}:
                 self.out(name, outputs[name])
             self.out("remote_folder", outputs.remote_folder)
+            if 'native_output_manifest' in outputs:
+                self.out('native_output_manifest', outputs.native_output_manifest)
 
 
 def plan_geometry(structure, settings, code=None, *, optimize=True, force_recompute=False):

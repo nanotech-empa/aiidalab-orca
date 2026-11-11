@@ -18,6 +18,8 @@ def source(aiida_profile_clean, aiida_localhost):
     node = orm.WorkChainNode(process_type=PROCESS_TYPE)
     structure = orm.StructureData(ase=Atoms("NO", positions=[[0,0,0],[0,0,1.3]])).store()
     code = orm.InstalledCode(computer=aiida_localhost, filepath_executable="/bin/true").store()
+    orm.InstalledCode(computer=aiida_localhost, filepath_executable='/configured/orca-tools',
+                      default_calc_job_plugin='empa_orca.electronic_storage').store()
     for name, value in {"structure": structure, "code": code, "settings": orm.Dict(dict=normalize_settings({})),
                         "optimize": orm.Bool(True)}.items():
         value.store()
@@ -95,6 +97,7 @@ def test_invalid_cache_hit_regenerates_once_with_bypass(source, monkeypatch, aii
     from aiida_empa_orca import workchains
     builder = get_builder(source.inputs.structure, {}, source.inputs.code,
                           plan={"action": "compute", "unavailable": []})
+    builder.storage_code = source.inputs.code
     process = instantiate_process(aiida_manager.get_runner(), builder)
     try:
         process.setup()

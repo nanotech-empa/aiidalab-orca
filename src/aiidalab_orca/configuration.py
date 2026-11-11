@@ -125,6 +125,9 @@ class GeometrySettings(ipw.VBox):
         apply.on_click(self._apply)
         self.method = ipw.Combobox(options=METHODS, value="PBE", description="Method", ensure_option=False, style=style, layout=width)
         self.basis = ipw.Combobox(options=BASES, value="def2-SVP", description="Basis", ensure_option=False, style=style, layout=width)
+        for field in (self.method, self.basis):
+            field.placeholder = "Type to search or enter an ORCA name"
+            field.tooltip = "Suggestions match the current text. Clear this field to browse all suggestions, or type another ORCA name."
         self.charge = ipw.IntText(description="Charge", value=0, style=style, layout=width)
         self.multiplicity = ipw.BoundedIntText(description="Multiplicity (2S+1)", value=1, min=1, max=100, style=style, layout=width)
         self.auto_multiplicity = _SpinDefaultState()
@@ -162,8 +165,14 @@ class GeometrySettings(ipw.VBox):
         advanced.set_title(0, "Advanced scientific settings")
         self.optimization_controls = ipw.VBox([
             ipw.HBox([self.protocol, apply], layout=ipw.Layout(flex_flow="row wrap")),
-            ipw.HTML("<p>Starting settings for review, not a universal accuracy level. Edit any exposed setting; Apply defaults resets scientific overrides and keeps charge, spin and resources. Method and basis also accept typed ORCA names.</p>"),
-            self.method, self.basis, self.scf_convergence, self.convergence,
+            ipw.HTML("<p>Starting settings for review, not a universal accuracy level. Edit any exposed setting; Apply defaults resets scientific overrides and keeps charge, spin and resources.</p>"),
+            self.method, self.basis,
+            ipw.HTML("<p><b>Method and basis: type to search or enter an ORCA name.</b> "
+                     "The arrow shows suggestions matching the current text. "
+                     "Clear a field and open its arrow to browse all suggestions. "
+                     "For example, replace <code>def2-SVP</code> with <code>def2-TZVP</code> or <code>cc-pVTZ</code>. "
+                     "ORCA checks whether the requested choice is available for your elements.</p>"),
+            self.scf_convergence, self.convergence,
             ipw.HTML("<p>SCF convergence controls the electronic calculation at each geometry; "
                      "geometry convergence controls when the nuclei stop moving. "
                      "The starting protocols use TightSCF and NormalOpt.</p>"),

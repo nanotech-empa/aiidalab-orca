@@ -318,6 +318,45 @@ def test_reexported_metadata_reuses_same_orbital_identity():
     assert not inspection.same_orbital_set(original,original,'QRO')
 
 
+def test_cube_retention_hides_only_stash_directory_and_preserves_controls(monkeypatch):
+    from aiidalab_orca import inspection_services as service
+    from aiidalab_orca.inspection import OrbitalInspection
+    levels = [{'index':i, 'occupation':2. if i < 11 else 1. if i == 11 else 0.}
+              for i in range(16)]
+    record = {'uuid':'catalog', 'data':{'orbital_reference_uuid':'reference',
+        'n_electrons':23, 'n_orbitals':16,
+        'sets':{'QRO':{'levels':levels}, 'UNO':{'levels':deepcopy(levels)}}}}
+    monkeypatch.setattr(service,'catalog',lambda _:deepcopy(record))
+    monkeypatch.setattr(service,'codes',lambda _:{key:[(key,key+'-code')]
+        for key in ('export','plot','cubehandler')})
+    monkeypatch.setattr(service,'cube_runs',lambda *_:[])
+    monkeypatch.setattr(service,'review_cubes',lambda *args,**kwargs:{
+        'action':'compute', 'parameters':args[3], 'resources':kwargs['resources']})
+    widget = OrbitalInspection('common',active_indices=[10,11,12])
+    try:
+        widget.selection_input.text.value = '10..12'
+        controls = (widget.export_code,widget.kind,widget.retention,widget.plot_code,
+                    widget.cubehandler_code,widget.previous,widget.cube)
+        models = [control.model_id for control in controls]
+        selections = [(control,control.value) for control in controls if control is not widget.retention]
+        for mode in ('leave','delete','stash','leave'):
+            widget.review.click()
+            assert widget.plan is not None and not widget.submit.disabled
+            widget.retention.value = mode
+            assert widget.plan is None and widget.submit.disabled
+            assert widget.stash.layout.display == ('' if mode == 'stash' else 'none')
+            assert all(control.layout.display != 'none' for control in controls)
+            assert all(control.comm is not None for control in controls)
+            assert [control.model_id for control in controls] == models
+            assert all(control.value == value for control,value in selections)
+            assert widget.selection_input.selected_indices() == [10,11,12]
+        widget.review.click()
+        assert widget.plan['parameters']['retention'] == 'leave'
+        assert widget.plan['resources'] == {'memory_mb':2048,'wallclock_seconds':600}
+    finally:
+        widget.close()
+
+
 def test_missing_uno_in_stashed_pair_does_not_hide_available_qro(common_reference,tmp_path):
     from aiida.common import StashMode
     from aiida_empa_orca import artifacts

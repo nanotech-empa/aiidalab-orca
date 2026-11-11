@@ -73,6 +73,16 @@ are listed. Dominant canonical-orbital contributions are truncated response
 information and are not interchangeable with these NTO weights.
 
 Select a state with NTO analysis, choose pair numbers and **Review NTO previews**.
+**Preview resources · serial** exposes memory and wall time, initially one
+process, 2 GiB and ten minutes. Review shows this budget. Changing either value
+invalidates review; restoring the old value still requires a new review.
+Any required native-NTO preservation finishes before cube generation and uses
+the same budget per job. Hole/particle plotting and cubehandler reduction run
+sequentially within the preview CalcJob. Failure stops the successor stage.
+Only one preview request can run per optical result, including different states
+or browser sessions. Submission consumes its review before contacting AiiDA;
+after an uncertain response, inspect status and review again rather than retrying
+the old submission. Reused previews keep their original recorded resources.
 Both members of every pair are generated together by submitted CalcJobs using
 native ORCA orbitals and the existing cubehandler reduction. The shared viewer
 provides isosurfaces, slicing, saved views and separate rendering. Choose an

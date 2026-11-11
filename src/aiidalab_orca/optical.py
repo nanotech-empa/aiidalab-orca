@@ -165,6 +165,7 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
         self.data = service.result(optical_uuid)
         self.plan, self.process_uuid, self._poll_task = None, None, None
         self._job_uuid = None
+        self._submitting = False
         self._cube_view, self.render_panel = None, None
         self._disposed = False
         initial = service.cube_defaults(optical_uuid)
@@ -184,6 +185,10 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
         advanced = ipw.Accordion(children=[ipw.VBox([self.grid, *self.codes.values(),
             ipw.HTML('<p>Native NTO files inherit the optical calculation’s remote/stash choice. Full cube retention is separate. Only cubehandler-reduced cube previews are retrieved.</p>')])], selected_index=None)
         advanced.set_title(0, 'Grid and codes')
+        from .helper_budget import HelperBudget
+        self.preview_budget = HelperBudget()
+        resources = ipw.Accordion(children=[self.preview_budget], selected_index=None)
+        resources.set_title(0, 'Preview resources · serial')
         self.review = ipw.Button(description='Review NTO previews', icon='list', layout=ipw.Layout(width='auto'))
         self.submit = ipw.Button(description='Generate hole/particle previews', icon='play', disabled=True, layout=ipw.Layout(width='auto'))
         self.review.on_click(self._review)
@@ -202,13 +207,14 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
         self.cube.layout.display = 'none'  # Kept for the shared saved-view/render interface.
         self.member_controls = ipw.VBox([self.display_pair, self.member, ipw.HTML('<p>Hole/particle switching keeps the camera, isovalues and slice settings. Blue/gold indicate amplitude signs, not hole versus particle.</p>')])
         self.download, self.cube_box = ipw.HTML(), ipw.VBox()
-        self.compute = ComputePanel('Compute NTO hole/particle previews…', [self.pairs, self.retention, self.stash, advanced,
+        self.compute = ComputePanel('Compute NTO hole/particle previews…', [self.pairs, self.retention, self.stash, resources, advanced,
             ipw.HBox([self.review, self.submit], layout=ipw.Layout(flex_flow='row wrap'))])
         super().__init__([ipw.HTML('<h4>Natural transition orbitals</h4>'), self.note,
                           ipw.HBox([self.previous, self.refresh], layout=ipw.Layout(flex_flow='row wrap')), self.availability_note,
                           self.compute, self.message, self.member_controls, self.cube, self.download, self.cube_box])
         for control in (self.pairs, self.grid, self.retention, self.stash, *self.codes.values()):
             control.observe(self._invalidate, names='value')
+        self.preview_budget.observe(self._invalidate, names='revision')
         self._refresh()
 
     def choose(self, state_id):
@@ -231,24 +237,43 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
 
     def _review(self, _=None):
         self._invalidate()
+        if self._job_uuid or self._submitting:
+            return
         try:
             self.plan = service.review_cubes(self.optical_uuid, {'state_id': self.state_id, 'pairs': list(self.pairs.value)},
                 {'grid_points': self.grid.value, 'retention': self.retention.value, 'stash_directory': self.stash.value.strip()},
                 {'threshold_mb': 0, 'stash_directory': self.stash.value.strip()},
-                {key: control.value for key, control in self.codes.items()})
+                {key: control.value for key, control in self.codes.items()}, resources=self.preview_budget.values())
             self.message.value = f'<p><b>{"Reuse saved previews" if self.plan["reuse_uuid"] else "Generate and reduce both NTO pair members"}</b> · {len(self.pairs.value)} pairs · {self.grid.value} grid points/axis · full cubes: {self.retention.value}.</p>'
+            if not self.plan['reuse_uuid']:
+                self.message.value += ('<p><b>Preview CalcJob: '+self.preview_budget.summary()+'.</b> '
+                    'Native hole/particle plots and cubehandler reduction run in sequence. '
+                    'Only reduced previews are retrieved; no new SCF is run.</p>')
+                if self.plan['preserve_nto']:
+                    self.message.value += ('<p>Preserve the native NTO file first, then generate the cubes. '
+                        'Both jobs use this budget, one at a time; preservation failure stops the preview.</p>')
+            else:
+                self.message.value += '<p>No new preview job; the existing result retains its recorded resources and storage.</p>'
             self.submit.disabled = False
         except (ValueError, KeyError, OSError, RuntimeError) as exc:
             self.message.value = '<p class="orca-notice">' + html.escape(str(exc)) + '</p>'
 
     def _submit(self, _=None):
+        if not self.plan or self.submit.disabled or self._job_uuid or self._submitting:
+            return
+        plan = self.plan
+        self._submitting = True
+        self._invalidate()
+        self.review.disabled = True
         try:
-            self._job_uuid = service.submit_cubes(self.plan)
-            self._invalidate()
+            self._job_uuid = service.submit_cubes(plan)
             self._start_poll()
             self._refresh()
         except (ValueError, KeyError, OSError, RuntimeError) as exc:
             self.message.value = '<p class="orca-notice">' + html.escape(str(exc)) + '</p>'
+        finally:
+            self._submitting = False
+            self.review.disabled = bool(self._job_uuid)
 
     def _start_poll(self):
         if self._poll_task:
@@ -259,7 +284,7 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
             pass
 
     async def _poll(self):
-        while self._job_uuid:
+        while self._job_uuid and not self._disposed:
             status = progress(self._job_uuid)
             self.message.value = '<p>' + html.escape(status['state'] + ' · ' + status.get('message', '')) + '</p>'
             if status['finished']:
@@ -272,12 +297,23 @@ class NtoPreviews(CubeDisplayMixin, ipw.VBox):
 
     def _refresh(self):
         self._inventory = service.preview_inventory(self.optical_uuid)
+        completed = next((r['uuid'] for r in self._inventory
+                          if r['uuid'] == self._job_uuid and r['finished']), None)
+        if completed:
+            self._job_uuid = None
+        active = next((r['uuid'] for r in self._inventory if not r['finished']), None)
+        if active and not self._job_uuid:
+            self._job_uuid = active
+            self._invalidate()
+            self._start_poll()
+        self.review.disabled = bool(self._job_uuid) or self._submitting
         rows = [(r['date'][:16] + ' · ' + r['state_id'] + ' · pairs ' + ', '.join(map(str, r['ready_pairs'])), r['uuid'])
                 for r in self._inventory if r['ready_pairs'] and r['state_id'] == self.state_id]
         old = self.previous.value
         self.previous.options = [('Select saved previews' if rows else 'No saved pair previews for this state', None)] + rows
         valid = {uid for label, uid in rows}
-        self.previous.value = self._job_uuid if self._job_uuid in valid else old if old in valid else rows[0][1] if rows else None
+        preferred = self._job_uuid or completed
+        self.previous.value = preferred if preferred in valid else old if old in valid else rows[0][1] if rows else None
         values = self.availability()
         state = next((r for r in self.data['states'] if r['id'] == self.state_id), None)
         summary = display.preview_label(values.get(self.state_id, {}))

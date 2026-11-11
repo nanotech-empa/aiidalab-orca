@@ -53,7 +53,10 @@ the selection. Selecting an element updates the same atoms; mixed selections
 are labelled **Custom atoms**. Two selected atoms show a distance, three an
 angle and four a dihedral. Atom numbers start at **1**; ORCA orbital indices
 remain **0-based**. Alpha/beta total DOS curves use dashed blue/red lines,
-matching the corresponding spin colours in the projected curves.
+matching the corresponding spin colours in every projection mode. In the angular
+view, line patterns distinguish the contributions: s is dotted, p is solid and
+d is dash-dot, with additional distinct patterns for higher angular momenta.
+Legend samples use the same patterns as the plotted curves.
 
 Choose a projection:
 

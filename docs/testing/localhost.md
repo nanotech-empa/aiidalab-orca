@@ -512,13 +512,10 @@ and preserved source geometry. Do not rank methods by total energy alone.
 are retained, and opening the route submits no QPU job. Missing configured workers
 block the stage. Do not install them or move to remote hardware implicitly.
 
-**DMRG coverage checkpoint:** inspect the offered energy-solver choices. The
-current standard GUI has no general native DMRG submission path. Record
-`L18-DMRG = BLOCKED (GUI route not exposed)` rather than running a backend
-WorkChain from Python. Existing DMRG calculations/native tests remain separate
-evidence; see [DMRG checkpoint rules](../dmrg.md). The neutral allyl example is
-odd-electron and is outside the current native DMRG singlet recipe. Do not relabel
-it a singlet. A future GUI case needs an explicitly supported singlet test model.
+**Native DMRG:** execute the separately numbered [L20–L21 GUI cases](dmrg-localhost.md)
+on the reviewed candidate. The analytic CAS(2,3) and molecular singlet cases are
+separate from this odd-electron allyl simulator route. Never relabel allyl as a
+singlet or substitute a terminal WorkChain for browser acceptance.
 
 ## L19 — Forced output summary, storage and durable reopening
 

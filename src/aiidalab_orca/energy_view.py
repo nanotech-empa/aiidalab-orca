@@ -8,7 +8,7 @@ from .energy_route import assess_space
 
 class EnergyRoutes(ipw.VBox):
     def __init__(self, reference_uuid, reference, space, open_orca, open_quantum,
-                 open_casscf=None, *, allow_quantum=True):
+                 open_casscf=None, *, allow_quantum=True, open_dmrg=None):
         self.reference_uuid = str(reference_uuid)
         self.space = {
             "electrons": space["electrons"],
@@ -19,6 +19,8 @@ class EnergyRoutes(ipw.VBox):
             routes.append(("Optimize the orbitals first — CASSCF / SA-CASSCF", "casscf"))
         if allow_quantum:
             routes.append(("Quantum-assisted energy levels (simulator or QPU)", "quantum"))
+        if open_dmrg and space['electrons'] % 2 == 0 and 3 <= len(space['orbitals']) <= 64:
+            routes.append(('Native DMRG — fixed-orbital singlets', 'dmrg'))
         self.choice = ipw.RadioButtons(
             options=routes,
             value="orca",
@@ -32,6 +34,8 @@ class EnergyRoutes(ipw.VBox):
             layout=ipw.Layout(width="auto"),
         )
         self._callbacks = {"orca": open_orca, "quantum": open_quantum}
+        if open_dmrg:
+            self._callbacks['dmrg'] = open_dmrg
         if open_casscf:
             self._callbacks['casscf'] = open_casscf
         self.choice.observe(self._changed, names="value")
@@ -74,6 +78,13 @@ class EnergyRoutes(ipw.VBox):
                 "ORCA computes the required integrals internally.</p>"
             )
             self.continue_button.description = "Continue with ORCA CASCI"
+        elif self.choice.value == 'dmrg':
+            self.explanation.value = (
+                '<p>Export and validate the same active-space Hamiltonian, then use native Block2 '
+                'for fixed-orbital singlets. No circuits or QPU are used. Check individual-root '
+                'sweep convergence, density normalization and convergence with bond dimension '
+                'separately. MPS checkpoints remain on the calculation computer.</p>')
+            self.continue_button.description = 'Configure native DMRG'
         elif self.choice.value == 'casscf':
             self.explanation.value = (
                 '<p><b>Optimize shared orbitals → inspect and confirm them → choose a solver.</b> '

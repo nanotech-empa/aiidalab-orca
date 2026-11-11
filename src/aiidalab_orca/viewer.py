@@ -115,6 +115,7 @@ class ResultsView(ipw.VBox):
             ('casscf', 'Optimize orbitals · CASSCF', self._casscf),
             ('correlation', 'Correlation energies · MP2 / NEVPT2 / CASPT2', self._correlation),
             ('quantum_energy', 'Quantum-assisted energy levels', self._quantum_energy),
+            ('dmrg', 'Native DMRG · singlets', self._dmrg),
             ('states', 'CASCI, Dyson & Kondo', self._states),
             ('vibrations', 'Vibrations', self._vibrations),
             ('export', 'Export to openBIS', self._export),
@@ -223,7 +224,7 @@ class ResultsView(ipw.VBox):
             label, help_text = stage_help.get(task,ANALYSES.get(task, ANALYSES['dyson'] if task == 'maps' else (labels.get(task, task), '')))
             self.analysis_hint.value = f'<p><b>{html.escape(label)}:</b> {html.escape(help_text)}</p>'
             self.analysis_hint.layout.display = ''
-            if task in self.tabs.section_keys and task not in ('states','active','energy','quantum_energy','casscf'):
+            if task in self.tabs.section_keys and task not in ('states','active','energy','quantum_energy','casscf','dmrg'):
                 return self.tabs.show_section(task)
             panel = self.tabs.show_section('states')
             if not hasattr(panel, 'analysis'):
@@ -234,25 +235,25 @@ class ResultsView(ipw.VBox):
                 panel.set_stage('prepare')
                 self._require_next_preparation(panel)
                 return panel
-            if task in ('active','casci','dyson','maps','kondo','energy','quantum_energy','casscf') and not panel.reference.value:
+            if task in ('active','casci','dyson','maps','kondo','energy','quantum_energy','casscf','dmrg') and not panel.reference.value:
                 self._require(panel, 'First prepare an orbital reference from the saved SCF wavefunction.',
                               'prepare','Prepare orbital reference')
                 return panel
             if task == 'active':
                 self._refresh_selection(panel)
                 return self.tabs.show_section('active')
-            if task in ('casci','energy','quantum_energy','casscf') and not self._space_ready(panel):
+            if task in ('casci','energy','quantum_energy','casscf','dmrg') and not self._space_ready(panel):
                 self._require(panel, 'Inspect the orbitals and confirm the active space before choosing multiplicities and electronic states.',
                               'active','Inspect and choose active orbitals')
                 return panel
-            if task == 'quantum_energy' and self.goal in ('dyson', 'kondo'):
+            if task in ('quantum_energy', 'dmrg') and self.goal in ('dyson', 'kondo'):
                 self._require(panel, 'The current Dyson/Kondo route requires ORCA CASCI wavefunctions. '
-                              'Quantum-assisted energies cannot replace those state vectors.', 'energy', 'Choose a compatible route')
+                              'Energy-only solvers cannot replace those state vectors.', 'energy', 'Choose a compatible route')
                 return panel
-            if task in ('energy','quantum_energy','casscf'):
+            if task in ('energy','quantum_energy','casscf','dmrg'):
                 signature = self._space_signature(panel)
                 if getattr(self, '_energy_signature', None) != signature:
-                    for key in ('energy','quantum_energy','casscf'):
+                    for key in ('energy','quantum_energy','casscf','dmrg'):
                         self.tabs.invalidate_section(key)
                     self._energy_signature = signature
                 return self.tabs.show_section(task)
@@ -310,7 +311,7 @@ class ResultsView(ipw.VBox):
         self._selection_signature = signature
         self.confirmed_space = None
         self._energy_signature = None
-        for key in ('active','energy','quantum_energy','casscf'):
+        for key in ('active','energy','quantum_energy','casscf','dmrg'):
             self.tabs.invalidate_section(key)
 
     def _active_space(self):
@@ -325,7 +326,7 @@ class ResultsView(ipw.VBox):
     def _invalidate_pending_space(self):
         self.confirmed_space = None
         self._energy_signature = None
-        for key in ('energy', 'quantum_energy', 'casscf'):
+        for key in ('energy', 'quantum_energy', 'casscf', 'dmrg'):
             self.tabs.invalidate_section(key)
 
     def _use_reordered_reference(self, uuid, space, source_uuid, epoch):
@@ -362,7 +363,8 @@ class ResultsView(ipw.VBox):
         uid, reference, space = self._energy_context()
         return EnergyRoutes(uid, reference, space,
             lambda: self.open_analysis('casci'), lambda: self.open_analysis('quantum_energy'),
-            lambda: self.open_analysis('casscf'), allow_quantum=self.goal not in ('dyson', 'kondo'))
+            lambda: self.open_analysis('casscf'), allow_quantum=self.goal not in ('dyson', 'kondo'),
+            open_dmrg=(lambda: self.open_analysis('dmrg')) if self.goal not in ('dyson', 'kondo') else None)
 
     def _casscf(self):
         from .casscf import CasscfOrbitals
@@ -377,6 +379,11 @@ class ResultsView(ipw.VBox):
         panel.reference.value = str(uuid)
         self.confirmed_space = None
         self.open_analysis('active')
+
+    def _dmrg(self):
+        from .dmrg import NativeDmrg
+        uid, _, space = self._energy_context()
+        return NativeDmrg(uid, space, lambda: self.open_analysis('quantum_energy'))
 
     def _quantum_energy(self):
         from .quantum_energy import QuantumEnergy

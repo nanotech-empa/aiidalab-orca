@@ -13,11 +13,14 @@ from pathlib import PurePosixPath
 import numpy as np
 from aiida import common, engine, orm
 from aiida.parsers import Parser
+from .energy_storage import hamiltonian_identity, hamiltonian_location, stage_hamiltonian
 from .dmrg_storage import (ARRAY_LIMIT, VERIFY_SCRIPT, checkpoint_manifest, collector_script,
                            compact_arrays, validate_checkpoint, validate_manifest)
 
 
 def file_sha256(node):
+    if isinstance(node, orm.Dict):
+        return hamiltonian_identity(node)
     value = hashlib.sha256()
     with node.open(mode='rb') as stream:
         for block in iter(lambda: stream.read(1024**2), b''):
@@ -41,6 +44,26 @@ def header_parameters(text):
     if symmetry and any(int(v) != 1 for v in re.findall(r'\d+', symmetry.group(1))):
         raise ValueError('This initial DMRG recipe requires trivial orbital symmetry')
     return values
+
+
+def hamiltonian_parameters(data, native_export=None):
+    """Use the checked native export for remote files, without retrieving integrals."""
+    if isinstance(data, orm.SinglefileData):
+        with data.open() as stream:
+            return header_parameters(stream.read(16384))
+    hamiltonian_location(data)  # Verify the immutable producer and file manifest.
+    producer = data.creator
+    if (native_export is None or native_export.creator is None
+            or native_export.creator.uuid != producer.uuid):
+        raise ValueError('Use the Hamiltonian and manifest from the same native export')
+    record = native_export.get_dict()
+    if record['hamiltonian_sha256'] != hamiltonian_identity(data):
+        raise ValueError('Hamiltonian and native export manifest differ')
+    space = record['active_space']
+    # Export already verified the portable spin header and unchanged integrals.
+    # The same singlet/size validation applies to repository and remote inputs.
+    return header_parameters(f'&FCI NORB={len(space["orbitals"])}, '
+        f'NELEC={space["electrons"]}, MS2={record["multiplicity"] - 1}, &END')
 
 
 def dmrg_input(parameters, settings, parent_bond=None, continue_sweeps=False):
@@ -149,7 +172,8 @@ class DmrgCalculation(engine.CalcJob):
     @classmethod
     def define(cls, spec):
         super().define(spec)
-        spec.input('hamiltonian', valid_type=orm.SinglefileData)
+        spec.input('hamiltonian', valid_type=(orm.SinglefileData, orm.Dict))
+        spec.input('native_export', valid_type=orm.Dict, required=False)
         spec.input('settings', valid_type=orm.Dict)
         spec.input('parent_states', valid_type=(orm.FolderData, orm.RemoteData), required=False)
         spec.input('continue_sweeps', valid_type=orm.Bool, default=lambda: orm.Bool(False))
@@ -166,8 +190,7 @@ class DmrgCalculation(engine.CalcJob):
             raise ValueError('Select the installed Block2 block2main executable')
         if self.inputs.code.base.extras.get('block2', {}).get('version') != '0.5.4':
             raise ValueError('Select the verified Block2 deployment')
-        with self.inputs.hamiltonian.open() as stream:
-            parameters = header_parameters(stream.read(16384))
+        parameters = hamiltonian_parameters(self.inputs.hamiltonian, self.inputs.get('native_export'))
         continuation = self.inputs.continue_sweeps.value
         parent_bond = None
         if 'parent_states' in self.inputs:
@@ -186,15 +209,23 @@ class DmrgCalculation(engine.CalcJob):
         with folder.open('dmrg-collect.sh', 'w') as stream:
             stream.write(collector_script(self.inputs.settings.get_dict()['nroots'], self.inputs.maxsizeoutput.value))
         info = common.CalcInfo()
-        info.local_copy_list = [(self.inputs.hamiltonian.uuid, self.inputs.hamiltonian.filename, 'hamiltonian.fcidump')]
+        info.local_copy_list = []
+        stage_hamiltonian(info, self.inputs.hamiltonian, self.inputs.code.computer, folder)
         if 'parent_states' in self.inputs:
             info.prepend_text = 'sh dmrg-verify.sh || exit 1'
             states = self.inputs.parent_states
             if isinstance(states, orm.RemoteData):
-                info.remote_copy_list = [(str(states.computer.uuid),
+                info.remote_copy_list = (info.remote_copy_list or []) + [(str(states.computer.uuid),
                     str(PurePosixPath(states.get_remote_path()) / 'mps'), 'mps')]
             else:
                 info.local_copy_list.append((states.uuid, 'mps', 'mps'))
+        if isinstance(self.inputs.hamiltonian, orm.Dict):
+            with folder.open('hamiltonian.sha256', 'w') as stream:
+                stream.write(file_sha256(self.inputs.hamiltonian) + '  hamiltonian.fcidump\n')
+            verify = ('if command -v sha256sum >/dev/null 2>&1; then '
+                      'sha256sum -c hamiltonian.sha256; else '
+                      'shasum -a 256 -c hamiltonian.sha256; fi || exit 1')
+            info.prepend_text = verify + '\n' + (info.prepend_text or '')
         code = common.CodeInfo()
         code.code_uuid = self.inputs.code.uuid
         code.cmdline_params = ['dmrg.conf']
@@ -226,8 +257,7 @@ class DmrgParser(Parser):
                     raise ValueError('Unexpected oversized compact DMRG array')
                 return np.load(io.BytesIO(content), allow_pickle=False)
             settings = self.node.inputs.settings.get_dict()
-            with self.node.inputs.hamiltonian.open() as stream:
-                parameters = header_parameters(stream.read(16384))
+            parameters = hamiltonian_parameters(self.node.inputs.hamiltonian, self.node.inputs.native_export if 'native_export' in self.node.inputs else None)
             densities = [read('1pdm.npy' if settings['nroots'] == 1 else f'1pdm-{i}-{i}.npy') for i in range(settings['nroots'])]
             continuation = 'continue_sweeps' in self.node.inputs and self.node.inputs.continue_sweeps.value
             result = summarize_dmrg(read('sweep_energies.npy'), read('bond_dims.npy'), read('discarded_weights.npy'), read('E_oh.npy'), densities, settings, parameters['NELEC'], continuation)

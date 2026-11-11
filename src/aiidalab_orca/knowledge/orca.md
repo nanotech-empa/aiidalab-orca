@@ -246,7 +246,8 @@ tool. Ask the user to select the visible goal when necessary.
 The embedded chat has no web-search/browser tool at present. Offer the official
 links below and use packaged facts; do not claim fresh page retrieval or a
 literature search without a real tool. XPS is **Work in progress** in the standard
-GUI. QPU/DMRG demonstrators and research recovery jobs are separate work and
+GUI. Native DMRG has its own reviewed workspace and `orca.dmrg` guide.
+QPU demonstrators and research recovery jobs are separate work and
 must not be reset, restarted or repurposed while guiding these app steps.
 
 ## Official ORCA documentation and model sources

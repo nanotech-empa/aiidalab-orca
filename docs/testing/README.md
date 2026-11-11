@@ -127,10 +127,11 @@ viewers, a simulator, storage controls and reuse. Remote CPU qualifies a
 different configured execution environment. Remote QPU qualifies provider
 integration and measurement handling, not quantum advantage or universal accuracy.
 
-DMRG workflow tests currently exist, including remote-checkpoint controls, but
-the standard energy-solver GUI does not yet expose a general DMRG submission
-route. L18 therefore records that GUI gap. It cannot be counted as a completed
-browser test merely because a maintainer ran a DMRG WorkChain.
+Native DMRG has a dedicated browser workspace and [L20–L21 manual cases](dmrg-localhost.md).
+They exercise an analytic singlet, separate molecular Hamiltonian export,
+per-root convergence, checkpoint continuation, downloads and reopening. Local
+Block2 deployment is an explicit prerequisite. Backend tests do not establish
+these browser results.
 
 An unexecuted optional section is not a failure of the local route, and is also
 not coverage of that feature. If a release advertises a feature, its unresolved

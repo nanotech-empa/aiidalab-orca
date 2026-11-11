@@ -124,10 +124,11 @@ class OrcaApp(ipw.VBox):
         self.calculation_start = ipw.VBox([self.analysis_chooser, self.analysis_hint, self.open_existing])
         self.draft_panel = ipw.VBox([self.calculation_start, self.steps])
         self.history = HistoryWidget(self.load_run, self.use_geometry, self.copy_settings)
+        self.dmrg_panel = None
         self.pages = ipw.Tab(children=[self.draft_panel, self.history,
                                       ipw.VBox([ipw.HBox([refresh, self.use_final, self.copy]), self.status,
-                                                self.result_box])])
-        for i, title in enumerate(["New calculation", "Search calculations", "Results"]):
+                                                self.result_box]), ipw.VBox()])
+        for i, title in enumerate(["New calculation", "Search calculations", "Results", "Native DMRG"]):
             self.pages.set_title(i, title)
         self.pages.observe(self._page_changed, names="selected_index")
         from .qpu_credentials import credentials_panel
@@ -251,6 +252,13 @@ class OrcaApp(ipw.VBox):
         self.science.set_optimization_enabled(change["new"])
 
     def _page_changed(self, change):
+        if change['new'] == 3 and self.dmrg_panel is None:
+            from .dmrg import NativeDmrg
+            self.dmrg_panel = NativeDmrg()
+            children = list(self.pages.children)
+            old, children[3] = children[3], self.dmrg_panel
+            self.pages.children = children
+            old.close()
         if change["new"] == 1:
             self.history.refresh()
         for view in self.result_box.children:

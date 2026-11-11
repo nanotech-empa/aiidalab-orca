@@ -52,7 +52,7 @@ The standard quantum-assisted energy
 route is covered by `orca.quantum-energy`; separate QPU/DMRG research extensions
 must not be disturbed by navigation.
 
-For the DMRG convergence research route, read [checkpoint and restart rules](../dmrg.md)
+For native DMRG, use the packaged `orca.dmrg` guide, [manual cases](../testing/dmrg-localhost.md) and [checkpoint and restart rules](../dmrg.md)
 before resuming a job. New MPS checkpoints stay remote; historical paused jobs
 retain their old retrieval plans and require a new continuation to adopt this policy.
 

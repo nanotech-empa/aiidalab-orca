@@ -33,7 +33,7 @@ Home = "https://github.com/nanotech-empa/aiidalab-orca"
 where = ["src"]
 
 [tool.setuptools.package-data]
-aiidalab_orca = ["static/*.js", "knowledge/*.md"]
+aiidalab_orca = ["static/*.js", "knowledge/*.md", "data/*.fcidump"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

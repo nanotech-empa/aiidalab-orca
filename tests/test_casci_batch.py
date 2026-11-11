@@ -67,11 +67,12 @@ def batch_panel(monkeypatch):
     monkeypatch.setattr(casci_services,'progress',lambda uuid:{'state':'finished','finished':True,
         'success':True,'message':'','reports':[]})
     prepared=[]
-    def prepare(uuid,electrons,norb,values,force=False):
+    def prepare(uuid,electrons,norb,values,force=False,*,native_output_policy=None):
         space=backend.active_space({'electrons':electrons,'orbitals':[4,5]},ref)
         settings=backend.casci_settings(values,ref,space)
         plan={'reference_uuid':uuid,'active_space':space,'settings':settings,'force_recompute':force,
-              'action':'compute','reuse_uuid':None,'input':backend.casci_input(ref,space,settings)}
+              'action':'compute','reuse_uuid':None,'input':backend.casci_input(ref,space,settings),
+              'native_output_policy':native_output_policy}
         prepared.append(deepcopy(plan))
         return plan
     monkeypatch.setattr(casci_services,'prepare_casci',prepare)
@@ -176,12 +177,25 @@ def test_submission_keeps_accepted_uuids_and_stops_after_an_error(batch_panel,mo
 
 def test_reused_sectors_launch_no_calculations(batch_panel,monkeypatch):
     panel,_,_=batch_panel
-    def reuse(uuid,electrons,norb,values,force=False):
+    def reuse(uuid,electrons,norb,values,force=False,**kwargs):
         return {'action':'reuse','reuse_uuid':'saved','input':'saved input'}
     monkeypatch.setattr(casci_services,'prepare_casci',reuse)
     def unexpected(plan):raise AssertionError('Reused sectors must not launch workflows')
     monkeypatch.setattr(casci_services,'submit_casci',unexpected)
     panel.review.click()
     assert '0 new calculations; 6 reused' in panel.batch_review.value
+
+
+def test_retention_is_reviewed_and_editing_it_invalidates_submission(batch_panel):
+    panel, prepared, _ = batch_panel
+    panel.full_files.mode.value = 'stash'
+    panel.full_files.directory.value = '/user/chosen/stash'
+    panel.review.click()
+    assert prepared and all(p['native_output_policy'] == {
+        'mode': 'stash', 'stash_directory': '/user/chosen/stash'} for p in prepared)
+    assert '/user/chosen/stash' in panel.batch_review.value
+    assert not panel.submit.disabled
+    panel.full_files.mode.value = 'remote'
+    assert panel.submit.disabled and panel.plan is None
     panel.submit.click()
     assert all(r['state']=='reused' and r['uuid']=='saved' for r in panel._batch_jobs)

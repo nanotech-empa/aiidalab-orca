@@ -4,7 +4,7 @@ from aiida import orm
 from aiida.engine import submit
 
 from aiida_empa_orca import casci, common_orbitals
-from aiida_empa_orca.artifacts import resolve_electronic, storage_policy
+from aiida_empa_orca.artifacts import resolve_electronic
 from aiida_empa_orca.reference import reference_settings
 from .property_services import helper_code, source_node, source_remote, wavefunction_status
 
@@ -37,6 +37,8 @@ def execution_details(uuid):
         settings = node.inputs.settings.get_dict()
     code = orm.load_code(node.inputs.code.uuid)
     return {'code':code.label,'computer':code.computer.label,
+            'stash_directory':node.inputs.storage_policy.get_dict().get('stash_directory', '')
+                if 'storage_policy' in node.inputs else '',
             **{key:settings[key] for key in ('nprocs','memory_mb','wallclock_seconds')}}
 
 
@@ -88,7 +90,9 @@ def reference_data(uuid):
     return node.outputs.orbital_reference.get_dict()
 
 
-def prepare_casci(reference_uuid, electrons, norb, values, force=False):
+def prepare_casci(reference_uuid, electrons, norb, values, force=False, *, native_output_policy=None):
+    from aiida_empa_orca.native_logs import output_policy
+    retention = output_policy(native_output_policy)
     node = orm.load_node(reference_uuid)
     ref = reference_data(reference_uuid)
     if type(norb) is not int or norb < 1:
@@ -114,6 +118,7 @@ def prepare_casci(reference_uuid, electrons, norb, values, force=False):
     if reuse_uuid is None:
         common_orbitals.reference_location(node)
     return {'reference_uuid':reference_uuid, 'active_space':space, 'settings':s,
+            'native_output_policy': retention,
             'force_recompute':force, 'action':'reuse' if reuse_uuid else 'compute', 'reuse_uuid':reuse_uuid,
             'input':casci.casci_input(ref, space, s)}
 
@@ -124,8 +129,10 @@ def casci_builder(plan):
     b.orbital_reference, b.source_remote = node.outputs.orbital_reference, node.outputs.remote_folder
     b.active_space, b.settings = orm.Dict(dict=plan['active_space']), orm.Dict(dict=plan['settings'])
     b.code, b.storage_code = node.inputs.code, node.inputs.storage_code
-    b.storage_policy = orm.Dict(dict=storage_policy(node.inputs.storage_policy.get_dict()))
+    b.storage_policy = node.inputs.storage_policy  # Historical input; new full-file policy is explicit below.
     b.force_recompute = orm.Bool(plan['force_recompute'])
+    from aiida_empa_orca.native_logs import output_policy
+    b.native_output_policy = orm.Dict(dict=output_policy(plan.get('native_output_policy')))
     s = plan['settings']
     b.metadata.label = f'CASCI charge {s["charge"]:+d}, multiplicity {s["multiplicity"]}, {s["nroots"]} roots'
     return b

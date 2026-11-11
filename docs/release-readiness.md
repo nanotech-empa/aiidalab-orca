@@ -81,8 +81,15 @@ and full-resolution cubes. Computer/code setup belongs to `aiidalab-empa-setup`;
 the application must use compatible configured codes without machine-specific
 or scheduler/transport allowlists.
 
-The native `aiida.out` retrieval in CASCI, CASSCF and other calculation classes
-is not yet uniformly size bounded. Before release, extract and validate compact
+The compact-output candidate addresses new CASCI logs/GBWs and Dyson CI exports:
+it retrieves bounded summaries/manifests and requires explicit remote/stash
+retention. The configured `orca-tools` runtime must support `compact_output.py`;
+source implementation is not deployment qualification. Historical full-output
+records remain readable without migration.
+
+Native `aiida.out` retrieval in CASSCF, geometry/SCF, common-orbital preparation,
+correlation and other calculation classes is not yet uniformly size bounded.
+Before release, extract and validate compact
 results on the calculation computer, preserve large originals through the
 reviewed remote/stash policy, and update consumers that currently parse the
 retrieved full log. Existing streaming fixes address memory use but do not close

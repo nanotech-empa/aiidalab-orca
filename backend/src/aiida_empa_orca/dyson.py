@@ -7,10 +7,11 @@ from pathlib import PurePosixPath
 from aiida import common, engine, orm
 from aiida.parsers import Parser
 
-from .artifacts import remote_files, resolve_electronic, stash_options, storage_policy
+from .artifacts import remote_files, resolve_electronic, stash_options
 from .dyson_data import selection, blend_options
 from .orbitals import cube_parameters, validate_cube_outputs
 from .rendering import calcjob_options
+from .native_logs import output_policy
 
 EXPORT_PROCESS = 'aiida.workflows:empa_orca.dyson_export'
 DYSON_PROCESS = 'aiida.workflows:empa_orca.dyson'
@@ -82,8 +83,38 @@ def stage(info, source, location, target):
         info.remote_copy_list.append((source.computer.uuid,location['path'],target))
 
 
+def native_log_location(calc):
+    """Resolve new full-log manifests; a compact summary is never a CI source."""
+    if 'native_output_manifest' in calc.outputs:
+        from .native_logs import DIRECTORY, validate_manifest
+        record = validate_manifest(calc.outputs.native_output_manifest.get_dict())
+        original = next(item for item in record['files'] if item['name'] == 'aiida.out')
+        locations = []
+        if 'remote_stash' in calc.outputs:
+            stash = calc.outputs.remote_stash
+            locations.append((stash.computer, str(PurePosixPath(stash.target_basepath)/DIRECTORY)))
+        if 'remote_folder' in calc.outputs:
+            remote = calc.outputs.remote_folder
+            locations.append((remote.computer, str(PurePosixPath(remote.get_remote_path())/DIRECTORY)))
+        for computer, base in locations:
+            try:
+                remote_files(computer, base, names=['aiida.out'],
+                             expected={'aiida.out': original['size_bytes']})
+            except FileNotFoundError:
+                continue
+            return {'computer_uuid': str(computer.uuid), 'path': str(PurePosixPath(base)/'aiida.out'),
+                    'sha256': original['sha256']}
+        raise FileNotFoundError('The full CI log is unavailable remotely and in its stash. '
+                                'Stored state energies remain readable, but the compact summary cannot supply CI vectors.')
+    return None  # Historical calculations retained their full output in AiiDA.
+
+
 def stage_native_output(info, calc):
-    """Copy the original log remotely when present; verify its repository hash."""
+    """Stage the original log and verify its checksum in the export worker."""
+    location = native_log_location(calc)
+    if location:
+        info.remote_copy_list.append((location['computer_uuid'], location['path'], 'aiida.out'))
+        return location['sha256']
     retrieved = calc.outputs.retrieved
     digest = hashlib.sha256()
     with retrieved.base.repository.open('aiida.out', mode='rb') as handle:
@@ -125,6 +156,8 @@ class StateExportCalculation(engine.CalcJob):
         for key,typ in {'state_energies':orm.Dict,'helper_code':orm.AbstractCode,'location':orm.Dict,
                         'source':orm.Data,'storage_policy':orm.Dict}.items():
             spec.input(key,valid_type=typ)
+        spec.input('retention_policy', valid_type=orm.Dict,
+                   default=lambda: orm.Dict(dict={'mode': 'remote'}))
         spec.input('metadata.options.parser_name',default='empa_orca.dyson_export')
         spec.input('metadata.options.withmpi',default=False)
         spec.output('artifact',valid_type=orm.Dict)
@@ -150,22 +183,24 @@ class StateExportCalculation(engine.CalcJob):
             base = PurePosixPath(source.target_basepath)/'electronic' if location['kind'] == 'stash' else PurePosixPath(source.get_remote_path())
             path = str(base/'aiida.gbw')
         stage(info,source,dict(location,path=path),'aiida.gbw')
-        policy = storage_policy(self.inputs.storage_policy.get_dict())
-        expected_stash = stash_options(policy['stash_directory'],'exports')
-        if dict(self.inputs.metadata.options.stash) != expected_stash:
+        retention = output_policy(self.inputs.retention_policy.get_dict())
+        expected_stash = (stash_options(retention['stash_directory'], 'exports')
+                          if retention['mode'] == 'stash' else {})
+        if dict(self.inputs.metadata.options.get('stash', {})) != expected_stash:
             raise ValueError('Export stash does not match its preservation policy')
         with folder.open('orca.json.conf','w') as handle:
             json.dump({'MOCoefficients':True,'Basisset':True,'1elIntegrals':['S'],'JSONFormats':['json']},handle)
         request = {'identity':self.inputs.state_energies.get_dict(),'state_uuid':str(self.inputs.state_energies.uuid),
-                   'file':item,'threshold_mb':policy['threshold_mb'],
+                   'file':item,'threshold_mb':0,
                    'source_output_sha256':output_sha256,
                    'positions':calc.inputs.structure.get_ase().positions.tolist(),
                    'atomic_numbers':calc.inputs.structure.get_ase().numbers.tolist()}
+        request['retention_policy'] = retention
         script(folder,'export_dyson.py',request)
         info.codes_info = [run_code(self.inputs.code.uuid,['aiida.gbw','-json'],'export.log'),
                            run_code(self.inputs.helper_code.uuid,['export_dyson.py'],'driver.log')]
         info.codes_run_mode = common.CodeRunMode.SERIAL
-        info.retrieve_list = ['artifact.json','retrieved_exports','export.log','driver.log']
+        info.retrieve_list = ['artifact.json','export.log','driver.log']
         return info
 
 
@@ -182,7 +217,11 @@ class StateExportParser(Parser):
                     raise ValueError('Exported CI output checksum differs from the staged request')
             if data['size_bytes'] < 1 or len(data['sha256']) != 64 or not data['ci_norms']:
                 raise ValueError('Incomplete export metadata')
-            if 'remote_stash' not in self.node.outputs:
+            retention = (output_policy(self.node.inputs.retention_policy.get_dict())
+                         if 'retention_policy' in self.node.inputs else None)
+            if retention and (data.get('retention_policy') != retention or data.get('retrieved_copy') is not False):
+                raise ValueError('Native export did not respect the reviewed full-file retention')
+            if (retention is None or retention['mode'] == 'stash') and 'remote_stash' not in self.node.outputs:
                 raise ValueError('Native export stash is missing')
             self.out('artifact',orm.Dict(dict=data))
         except (OSError,KeyError,ValueError) as exc:
@@ -194,6 +233,8 @@ class StateExportWorkChain(engine.WorkChain):
     @classmethod
     def define(cls,spec):
         super().define(spec)
+        spec.input('retention_policy', valid_type=orm.Dict,
+                   default=lambda: orm.Dict(dict={'mode': 'remote'}))
         for key,typ in {'state_energies':orm.Dict,'code':orm.AbstractCode,'helper_code':orm.AbstractCode,
                         'storage_policy':orm.Dict}.items():
             spec.input(key,valid_type=typ)
@@ -207,12 +248,13 @@ class StateExportWorkChain(engine.WorkChain):
         self.ctx.reuse_uuid = None
         try:
             calc = state_source(self.inputs.state_energies)
-            storage_policy(self.inputs.storage_policy.get_dict())
+            output_policy(self.inputs.retention_policy.get_dict())
             if not self.inputs.force_recompute.value:
                 self.ctx.reuse_uuid = existing_export(self.inputs.state_energies,self.inputs.code,self.inputs.helper_code)
             if self.ctx.reuse_uuid:
                 self.report('Reusing preserved wavefunction export '+self.ctx.reuse_uuid)
                 return
+            native_log_location(calc)
             self.ctx.location = resolve_electronic(calc.outputs.remote_folder,names=['aiida.gbw'])
         except (ValueError,KeyError,OSError,RuntimeError) as exc:
             self.report(str(exc)+'; restore the original export/GBW or explicitly recompute this CASCI sector.')
@@ -228,7 +270,10 @@ class StateExportWorkChain(engine.WorkChain):
                                                                 self.inputs.helper_code,self.inputs.storage_policy)
         b.source,b.location = orm.load_node(self.ctx.location['uuid']),orm.Dict(dict=self.ctx.location)
         b.metadata.options = calcjob_options(calc.outputs.remote_folder,seconds=1800)
-        b.metadata.options.stash = stash_options(storage_policy(self.inputs.storage_policy.get_dict())['stash_directory'],'exports')
+        retention = output_policy(self.inputs.retention_policy.get_dict())
+        b.retention_policy = orm.Dict(dict=retention)
+        if retention['mode'] == 'stash':
+            b.metadata.options.stash = stash_options(retention['stash_directory'], 'exports')
         b.metadata.disable_cache = True
         return engine.ToContext(export=self.submit(b))
 
@@ -333,6 +378,8 @@ class DysonWorkChain(engine.WorkChain):
     @classmethod
     def define(cls,spec):
         super().define(spec)
+        spec.input('retention_policy', valid_type=orm.Dict,
+                   default=lambda: orm.Dict(dict={'mode': 'remote'}))
         spec.input('initial',valid_type=orm.Dict)
         spec.input_namespace('finals',dynamic=True,valid_type=orm.Dict)
         for key,typ in {'selection':orm.Dict,'code':orm.AbstractCode,'export_code':orm.AbstractCode,
@@ -352,7 +399,7 @@ class DysonWorkChain(engine.WorkChain):
             self.ctx.selected = checked_request(self.inputs)
             if self.inputs.export_code.computer.uuid != self.inputs.code.computer.uuid:
                 raise ValueError('ORCA export and Dyson tools must use the same computer')
-            storage_policy(self.inputs.storage_policy.get_dict())
+            output_policy(self.inputs.retention_policy.get_dict())
             if not self.inputs.force_recompute.value:
                 for uuid in previous(self.inputs.initial.uuid,'initial',DYSON_PROCESS):
                     old = orm.load_node(uuid)
@@ -364,6 +411,7 @@ class DysonWorkChain(engine.WorkChain):
             # Check every dependency before submitting any new export job.
             for state in [self.inputs.initial,*self.inputs.finals.values()]:
                 if not existing_export(state,self.inputs.export_code,self.inputs.code):
+                    native_log_location(state_source(state))
                     resolve_electronic(state_source(state).outputs.remote_folder,names=['aiida.gbw'])
         except (ValueError,KeyError,OSError,RuntimeError) as exc:
             self.report(str(exc))
@@ -377,6 +425,7 @@ class DysonWorkChain(engine.WorkChain):
         for key,state in {'initial':self.inputs.initial,**dict(self.inputs.finals)}.items():
             b = StateExportWorkChain.get_builder()
             b.state_energies,b.code,b.helper_code,b.storage_policy = (state,self.inputs.export_code,self.inputs.code,self.inputs.storage_policy)
+            b.retention_policy = self.inputs.retention_policy
             pending['export_'+key] = self.submit(b)
         return engine.ToContext(**pending)
 

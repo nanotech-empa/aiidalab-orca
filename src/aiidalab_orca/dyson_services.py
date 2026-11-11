@@ -8,6 +8,7 @@ from aiida_empa_orca import dyson as backend
 from aiida_empa_orca.dyson_data import selection
 from aiida_empa_orca.artifacts import resolve_electronic
 from aiida_empa_orca.orbitals import cube_parameters
+from aiida_empa_orca.native_logs import output_policy
 from .inspection_services import codes as inspection_codes,common_node
 from .casci_services import progress  # re-export short-lived monitoring
 
@@ -44,12 +45,13 @@ def builder(plan):
     b.selection = orm.Dict(dict=plan['selection'])
     b.code,b.export_code = orm.load_code(plan['codes']['dyson']),orm.load_code(plan['codes']['export'])
     b.storage_policy = common.inputs.storage_policy
+    b.retention_policy = orm.Dict(dict=output_policy(plan.get('retention_policy')))
     b.force_recompute = orm.Bool(plan.get('force',False))
     b.metadata.label = 'CASCI Dyson transitions and spectral weights'
     return b
 
 
-def review(common_uuid,initial,finals,selected_codes,loss=1e-5,force=False):
+def review(common_uuid,initial,finals,selected_codes,loss=1e-5,force=False, *, retention_policy=None):
     if not initial or not finals:
         raise ValueError('Choose an initial state and at least one compatible final state')
     if any(not selected_codes.get(key) for key in ('dyson','export')):
@@ -63,7 +65,8 @@ def review(common_uuid,initial,finals,selected_codes,loss=1e-5,force=False):
                           'max_missing_ci_norm':loss},initial_node.get_dict(),
                          {key:orm.load_node(uuid).get_dict() for key,uuid in mapping.items()})
     plan = {'common_uuid':common_uuid,'initial_uuid':initial[0],'finals':mapping,'selection':selected,
-            'codes':selected_codes,'force':force,'action':'compute','exports':[]}
+            'codes':selected_codes,'force':force,'action':'compute','exports':[],
+            'retention_policy':output_policy(retention_policy)}
     b = builder(plan)
     if not force:
         for uuid in backend.previous(initial_node.uuid,'initial',backend.DYSON_PROCESS):
@@ -77,6 +80,7 @@ def review(common_uuid,initial,finals,selected_codes,loss=1e-5,force=False):
         if old:
             status = 'Reuse preserved wavefunction export'
         else:
+            backend.native_log_location(backend.state_source(state))
             location = resolve_electronic(backend.state_source(state).outputs.remote_folder,names=['aiida.gbw'])
             status = 'Export existing CASCI wavefunction from '+location['kind']
         first = state.get_dict()['states'][0]

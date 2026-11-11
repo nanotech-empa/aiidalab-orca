@@ -47,7 +47,8 @@ def sector_requests(reference, electrons, norb, charges, multiplicities, roots):
     return space, rows
 
 
-def prepare_batch(reference_uuid, electrons, norb, charges, multiplicities, values, force=False):
+def prepare_batch(reference_uuid, electrons, norb, charges, multiplicities, values, force=False,
+                  *, native_output_policy=None):
     from . import casci_services as service
     reference = service.reference_data(reference_uuid)
     space, rows = sector_requests(reference,electrons,norb,charges,multiplicities,values['nroots'])
@@ -69,7 +70,8 @@ def prepare_batch(reference_uuid, electrons, norb, charges, multiplicities, valu
             if current:
                 row.update(status='running',uuid=current['uuid'])
                 continue
-            plan = service.prepare_casci(reference_uuid,electrons,norb,settings,force)
+            options = {'native_output_policy': native_output_policy} if native_output_policy is not None else {}
+            plan = service.prepare_casci(reference_uuid,electrons,norb,settings,force,**options)
             row.update(status=plan['action'],plan=plan)
             if plan['action'] == 'reuse':
                 row['uuid'] = plan['reuse_uuid']
@@ -77,6 +79,7 @@ def prepare_batch(reference_uuid, electrons, norb, charges, multiplicities, valu
             row.update(status='blocked',reason=str(exc))
     return {'kind':'casci-batch','reference_uuid':reference_uuid,'active_space':space,'rows':rows,
             'resources':{name:values[name] for name in ('nprocs','memory_mb','wallclock_seconds')},
+            'native_output_policy': native_output_policy,
             'ready':any(row['status'] in ('compute','reuse','running') for row in rows) and
                     not any(row['status'] == 'blocked' for row in rows)}
 
@@ -100,6 +103,13 @@ def review_html(plan, execution=None):
         for row in rows if 'plan' in row)
     target = (f'<p><b>Execution target:</b> {html.escape(execution["code"])}@'
               f'{html.escape(execution["computer"])} — inherited from the orbital reference.</p>' if execution else '')
+    policy = plan.get('native_output_policy')
+    retention = ''
+    if policy:
+        retention = ('Stash full logs and wavefunctions at ' + html.escape(policy['stash_directory'])
+                     if policy['mode'] == 'stash' else 'Leave full logs and wavefunctions on the calculation computer')
+        retention = ('<p><b>Full files for new calculations:</b> '+retention+
+                     '. Only compact results are retrieved. Reused/running results keep their recorded retention.</p>')
     return (f'<p><b>{count} new calculations; {reuse} reused; {running} already running; '
             f'{skipped} incompatible combinations skipped.</b></p>'
             +target+
@@ -107,4 +117,4 @@ def review_html(plan, execution=None):
             f'{resources["wallclock_seconds"]//60} minutes wall time. New calculations may run concurrently. '
             'All use the same fixed geometry and spatial-orbital reference. '
             'Review any reduction in the number of states before submitting.</p>'
-            +table+previews)
+            +retention+table+previews)

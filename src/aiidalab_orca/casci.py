@@ -67,6 +67,8 @@ class CasciStates(ipw.VBox):
         self.threshold = ipw.FloatText(value=1e-6,description='CI print threshold',style=style)
         self.force = ipw.Checkbox(value=False,description='Recompute requested CASCI sectors',layout=ipw.Layout(width='auto'))
         self.space_info = ipw.HTML()
+        from .retention import FullFileRetention
+        self.full_files = FullFileRetention()
         advanced = ipw.Accordion(children=[ipw.VBox([self.aux,self.threshold,self.nprocs,self.memory,self.walltime,self.force])],selected_index=None)
         advanced.set_title(0,'CASCI resources and advanced settings')
         self.review = ipw.Button(description='Review charge / spin combinations',icon='list',button_style='primary',layout=ipw.Layout(width='auto'))
@@ -130,7 +132,7 @@ class CasciStates(ipw.VBox):
                 '<b>2</b> also requests the next state, and so on. '
                 'This count applies to each allowed sector and is separate from the number of active orbitals. '
                 'If fewer states exist, the review table explicitly shows the available count.</p>'),
-            advanced,self.review,self.batch_review,self.submit,self.batch_status])
+            self.full_files,advanced,self.review,self.batch_review,self.submit,self.batch_status])
         self.calculation = ComputePanel('Prepare orbitals / add CASCI states…',
                                         [self.common_preparation,self.sector_preparation])
         self.states_view = ipw.VBox([self.status,self.empty,self.diagram_box,self.history,
@@ -144,6 +146,7 @@ class CasciStates(ipw.VBox):
         for control in (self.electrons,self.norb,self.charge,self.mult,self.roots,self.aux,self.threshold,
                         self.nprocs,self.memory,self.walltime,self.force,self.common_force):
             control.observe(self._invalidate,names='value')
+        self.full_files.observe(self._invalidate, names='revision')
         self.electrons.observe(self._refresh_diagram,names='value')
         self.norb.observe(self._refresh_diagram,names='value')
         self.aux.observe(self._refresh_diagram,names='value')
@@ -275,6 +278,8 @@ class CasciStates(ipw.VBox):
         try:
             context = service.execution_details(self.reference.value or self.source_uuid)
             self._execution_context = context
+            if not self.full_files.directory.value:
+                self.full_files.directory.value = context.get('stash_directory', '')
             self.execution_info.value = (explanation+f'<p><b>Inherited preparation settings:</b> '
                 f'{html.escape(context["code"])}@{html.escape(context["computer"])}; '
                 f'{context["nprocs"]} processes, {memory_label(context["memory_mb"])} total memory, '
@@ -357,7 +362,7 @@ class CasciStates(ipw.VBox):
             charges = casci_batch.parse_integer_list(self.charge.value,'charges')
             multiplicities = casci_batch.parse_integer_list(self.mult.value,'multiplicities',positive=True)
             self.plan = casci_batch.prepare_batch(self.reference.value,self.electrons.value,self.norb.value,
-                charges,multiplicities,values,self.force.value)
+                charges,multiplicities,values,self.force.value,native_output_policy=self.full_files.values())
             self.batch_review.value = casci_batch.review_html(self.plan,self._execution_context)
             self.submit.disabled = self._running or not self.plan['ready']
         except Exception as exc:

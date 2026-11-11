@@ -94,6 +94,8 @@ def main():
                 'sha256':sha,'size_bytes':size,'source_gbw_sha256':digest,
                 'ci_norms':{key:r['norm'] for key,r in roots.items()},'retrieved_copy':retrieved,
                 'basis_available':True,'format':'orca_json_and_printed_ci_gzip_v1'}
+    if 'retention_policy' in request:
+        artifact['retention_policy'] = request['retention_policy']
     if output_sha256 is not None:
         artifact['source_output_sha256'] = output_sha256
     Path('artifact.json').write_text(json.dumps(artifact,indent=2,allow_nan=False))

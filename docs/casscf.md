@@ -35,8 +35,23 @@ with all final orbital subspaces held unchanged. Acceptance requires native
 orbital-gradient convergence, all requested CI roots, the original electron and
 active-space partition, and agreement of every readback energy within
 `1e-7 Hartree`. Energy-only termination or normal termination alone does not pass.
-Failures retain their output for diagnosis and cannot become selectable successful
-references. Wavefunction storage inherits the selected reference's policy.
+Failures retain their original output on the calculation computer for diagnosis
+and cannot become selectable successful references.
+
+**Full files** chooses **Leave on the calculation computer** or **Stash on the
+calculation computer**, with an explicit destination for the latter. New jobs
+retrieve only two validation summaries (at most 2 MiB each), two diagnostic
+tails (64 KiB each), and a size/checksum manifest. Both full native logs and
+property files remain in `native_output/`; the optimized GBW remains remotely,
+or is stashed without retrieval. The native inputs, state weights, convergence
+checks and `1e-7 Hartree` readback tolerance are unchanged. Changing retention
+requires review again. Reusing a result keeps its recorded retention, and old
+full-output records remain readable without migration.
+
+The configured `orca-tools` runtime must support `compact_output.py`. This is
+an application/backend deployment requirement, not a new Python selector or
+computer installation performed by the app. Remote originals remain subject
+to the calculation computer's cleanup policy.
 
 **Run again even if a matching result exists** forces a new execution of the
 same request. Leave it unchecked for normal reuse. Editing the state objective,

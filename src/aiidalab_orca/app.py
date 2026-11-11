@@ -128,9 +128,11 @@ class OrcaApp(ipw.VBox):
         for i, title in enumerate(["New calculation", "Search calculations", "Results"]):
             self.pages.set_title(i, title)
         self.pages.observe(self._page_changed, names="selected_index")
+        from .qpu_credentials import credentials_panel
+        self.qpu_credentials = credentials_panel()
         super().__init__([
             ipw.HTML(_APP_STYLE + "<div style='border-left:5px solid #237b98;padding:10px 20px;background:#f5f7fa'><h2 style='margin:0'>ORCA · Molecular analysis</h2><p>Geometry, orbitals, electronic states and vibrational spectroscopy with AiiDA provenance.</p></div>"),
-            self.error, self.pages,
+            self.error, self.pages, self.qpu_credentials,
         ], layout=ipw.Layout(max_width="1100px"))
         self.add_class("aiidalab-orca-app")
         self.structure.observe(self._structure_changed, names="revision")

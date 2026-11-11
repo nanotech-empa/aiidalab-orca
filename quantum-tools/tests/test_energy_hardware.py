@@ -10,6 +10,30 @@ from quantum_orbital_tools.energy_hardware import (
 from quantum_orbital_tools.ibm_ledger import JobLedger, LedgerError
 
 
+def test_connection_uses_selected_worker_account_and_environment_precedence(tmp_path, monkeypatch):
+    import json
+    from pathlib import Path
+    runtime = pytest.importorskip('qiskit_ibm_runtime')
+    from quantum_orbital_tools.energy_hardware import connect
+
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    monkeypatch.delenv('QUANTUM_ENERGY_ACCOUNT', raising=False)
+    calls = []
+    monkeypatch.setattr(runtime, 'QiskitRuntimeService', lambda **kwargs: calls.append(kwargs) or kwargs)
+    with pytest.raises(ValueError, match='Configure QPU credentials'):
+        connect()
+    assert not calls
+    settings = tmp_path / '.config/aiidalab-orca/qpu.json'
+    account = tmp_path / '.qiskit/qiskit-ibm.json'
+    for path, data in [(settings, {'ibm_account': 'project'}), (account, {})]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data))
+        path.chmod(0o600)
+    assert connect() == {'name': 'project', 'filename': str(account)}
+    monkeypatch.setenv('QUANTUM_ENERGY_ACCOUNT', 'admin-configured')
+    assert connect() == {'name': 'admin-configured'}
+
+
 def setup_case(tmp_path):
     qiskit = pytest.importorskip("qiskit")
     pytest.importorskip("qiskit_ibm_runtime")

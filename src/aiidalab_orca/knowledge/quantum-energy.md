@@ -188,6 +188,14 @@ preparation, and review of depth, two-qubit gates, shots and budget. Preparation
 submits no QPU job. Actual execution requires explicit hardware authorization.
 Localhost ideal-simulator validation is not real-device or tigu validation.
 Credentials belong in the worker's saved account, never chat or AiiDA inputs.
+Use the collapsed **QPU credentials** panel below the app tabs to save/select
+a local IBM account with its explicit instance CRN. Its masked key field is
+transient and excluded from notebook state. Saving submits nothing; checking
+the connection is a separate read-only action. A remote worker needs its own
+credentials. `QUANTUM_ENERGY_ACCOUNT` configured on the worker takes precedence
+over the locally selected account. Existing IBM Open research pilots retain
+their separate key-file setup. Wait for assigned project/provider details
+before configuring Phoenix; project access is not implied by an Open account.
 
 After a timeout or lost provider response, retrieve the existing request using
 its recorded identity/ledger; never suggest blind resubmission. A disconnected

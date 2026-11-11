@@ -139,9 +139,23 @@ in a durable per-host ledger and resumes that request on later retrievals. A
 lost provider response blocks blind resubmission. Preparation and execution use
 the same immutable Code/host so that they share the ledger.
 
-Credentials remain in the worker's saved Qiskit Runtime account. Only the
-account name is configured through `QUANTUM_ENERGY_ACCOUNT`; tokens do not
+The collapsed **QPU credentials** panel below the app tabs initializes named
+IBM Quantum accounts on the AiiDAlab server. Supply the API key in its masked
+field and the explicit instance CRN provided by IBM or the project. Saving
+uses the native Qiskit account format, owner-only files, and an explicit
+replacement action. Other saved accounts are preserved. The key travels in
+a transient widget message; it is never a synchronized widget attribute or
+notebook cell. The field clears on submission. **Check connection (no QPU job)**
+is a separate read-only action; opening the panel or saving submits nothing.
+
+Credentials remain in the worker's saved Qiskit Runtime account. The selected
+local account name is stored in `~/.config/aiidalab-orca/qpu.json`. An explicit
+`QUANTUM_ENERGY_ACCOUNT` on the worker retains precedence. Remote workers need
+their own configuration; keys are never transferred via AiiDA. Tokens do not
 belong in AiiDA inputs, notebooks, agent conversations, plans or receipts.
+The legacy IBM Open research pilots retain their separate local key-file
+configuration. Phoenix access must use the assigned provider/instance details
+when granted; this panel does not establish that allocation or select a device.
 
 ## Classical analysis and the diagram
 

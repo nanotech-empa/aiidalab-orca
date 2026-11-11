@@ -10,18 +10,25 @@ from . import kondo_services as service
 from .guidance import kondo_preparation_guide
 from .orbitals import CubeDisplayMixin
 from .property_services import property_result, default_stash_directory
+from .helper_budget import HelperBudget
 
 
 class KondoChannels(CubeDisplayMixin, ipw.VBox):
     def __init__(self, transitions_uuid, code_uuid, cubehandler_uuid):
         self.transitions_uuid, self.code_uuid = str(transitions_uuid), code_uuid
         self.cubehandler_uuid = cubehandler_uuid
-        self.plan, self.record = None, None
+        self.plan, self.cube_plan, self.record = None, None, None
         self._task, self._cube_view, self.render_panel, self.map_panel = None, None, None, None
         self.process_uuid = None
         style = {'description_width': '170px'}
         wide = ipw.Layout(width='95%')
         self.mu = ipw.FloatText(value=0., description='Chemical potential μ (eV)', style=style)
+        self.channel_budget,self.reference_budget,self.cube_budget=HelperBudget(),HelperBudget(),HelperBudget()
+        self.channel_resources=ipw.Accordion(children=[self.channel_budget],selected_index=None)
+        self.channel_resources.set_title(0,'Kondo channel resources · serial')
+        self.cube_resources=ipw.Accordion(children=[self.reference_budget,self.cube_budget],selected_index=None)
+        self.cube_resources.set_title(0,'Native reference cubes · serial')
+        self.cube_resources.set_title(1,'Channel cubes and reduction · serial')
         self.review = ipw.Button(description='Review Kondo orbitals', icon='list', button_style='primary', layout=ipw.Layout(width='auto'))
         self.submit = ipw.Button(description='Compute Kondo orbitals', icon='play', button_style='success', disabled=True, layout=ipw.Layout(width='auto'))
         self.review.on_click(self._review)
@@ -35,10 +42,13 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
         self.retention = ipw.Dropdown(options=[('Leave full cubes in calculation directory', 'leave'),
             ('Stash full-resolution cubes', 'stash'), ('Delete full cubes after preview validation', 'delete')],
             value='leave', description='Full cubes', style=style, layout=wide)
-        self.stash = ipw.Text(value=default_stash_directory(), description='Cube stash directory', style=style, layout=wide)
+        self.stash = ipw.Text(value=default_stash_directory(), description='Cube stash directory', style=style, layout=ipw.Layout(width='95%'))
         self.stash.layout.display = 'none'
         self.retention.observe(lambda _: setattr(self.stash.layout, 'display', '' if self.retention.value == 'stash' else 'none'), names='value')
-        self.generate = ipw.Button(description='Generate selected channel cubes', icon='cube', layout=ipw.Layout(width='auto'))
+        self.cube_review=ipw.Button(description='Review Kondo cubes',icon='list',layout=ipw.Layout(width='auto'))
+        self.cube_review.on_click(self._review_cubes)
+        self.cube_message=ipw.HTML()
+        self.generate = ipw.Button(description='Generate selected channel cubes', icon='cube',disabled=True, layout=ipw.Layout(width='auto'))
         self.generate.on_click(self._generate)
         self.cube_previous = ipw.Dropdown(description='Cube results', style=style, layout=wide)
         self.cube_previous.observe(self._open_cubes, names='value')
@@ -52,7 +62,7 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
         self.cube_controls = ComputePanel('Generate Kondo orbital previews…', [self.channels, self.grid,
             ipw.HTML('<p>Use signed native ORCA orbital grids from the exact initial CASCI wavefunction. '
                      'Reference grids are retained for reuse across chemical potentials; cubehandler reduces the previews.</p>'),
-            self.retention, self.stash, self.generate])
+            self.retention, self.stash, self.cube_resources,self.cube_review,self.cube_message,self.generate])
         self.result_box = ipw.VBox([self.summary, self.cube_previous, self.cube_controls, self.map_box, self.view])
         self.result_box.layout.display = 'none'
         self.guide = kondo_preparation_guide()
@@ -61,7 +71,10 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
             'The exchange matrix uses signed Dyson amplitudes, charged-state energies and Clebsch–Gordan factors.</p>'
             '<p>μ follows ε = E + (N−N₀)μ: increasing μ lowers the removal cost and raises the addition cost. '
             'Both costs must stay positive. No substrate alignment is inferred automatically.</p>'),
-            self.guide, self.previous, self.mu, ipw.HBox([self.review, self.submit]), self.message, self.result_box])
+            self.guide, self.previous, self.mu,self.channel_resources, ipw.HBox([self.review, self.submit]), self.message, self.result_box])
+        self.channel_budget.observe(self._invalidate,names='revision')
+        for budget in (self.reference_budget,self.cube_budget):budget.observe(self._invalidate_cubes,names='revision')
+        for control in (self.channels,self.grid,self.retention,self.stash):control.observe(self._invalidate_cubes,names='value')
         self._refresh()
 
     def _invalidate(self, _=None):
@@ -72,26 +85,30 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
         self.message.value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
 
     def _review(self, _=None):
+        if self._task:return
         self._invalidate()
         try:
-            self.plan = service.prepare(self.transitions_uuid, self.mu.value, self.code_uuid)
+            self.plan = service.prepare(self.transitions_uuid, self.mu.value, self.code_uuid,resources=self.channel_budget.values())
             lo, hi = self.plan['stability_interval_ev']
             self.message.value = f'<p>Selected roots require {lo:.3f} &lt; μ &lt; {hi:.3f} eV. '
             self.message.value += 'Submit an independent exchange CalcJob; no SCF, CASCI or Dyson calculation is repeated.</p>'
+            self.message.value += '<p>'+self.channel_budget.summary()+'.</p>'
             self.message.value += ''.join('<p>'+html.escape(w)+'</p>' for w in self.plan['warnings'])
             self.submit.disabled = self._task is not None
         except Exception as exc:
             self._error(exc)
 
     def _submit(self, _=None):
-        if self.plan and not self.submit.disabled:
+        if self.plan and not self.submit.disabled and not self._task:
+            plan=self.plan
+            self._invalidate()
             try:
-                self._start(service.submit_channels(self.plan), 'channels')
+                self._start(service.submit_channels(plan), 'channels')
             except Exception as exc:
                 self._error(exc)
 
     def _start(self, uuid, kind):
-        self.submit.disabled = self.generate.disabled = True
+        self.submit.disabled = self.generate.disabled = self.review.disabled = self.cube_review.disabled = True
         self.message.value = '<p>Submitted '+kind+' · <code>'+str(uuid)+'</code></p>'
         if self._task:
             self._task.cancel()
@@ -114,7 +131,8 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
             self._error(exc)
         finally:
             self._task = None
-            self.generate.disabled = False
+            self.review.disabled = self.cube_review.disabled = False
+            self.generate.disabled = self.cube_plan is None
             self.submit.disabled = self.plan is None
 
     def _refresh(self, selected=None):
@@ -132,6 +150,7 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
                 self._start(change['new'], 'channels')
                 return
             self.record = service.result(change['new'])
+            self._invalidate_cubes()
             data = self.record['data']
             self.mu.value = data['parameters']['chemical_potential_ev']
             rows = data['channels']
@@ -150,15 +169,39 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
         except Exception as exc:
             self._error(exc)
 
-    def _generate(self, _=None):
+    def _invalidate_cubes(self,_=None):
+        self.cube_plan,self.generate.disabled=None,True
+        self.cube_message.value=''
+
+    def _review_cubes(self,_=None):
+        if self._task:return
+        self._invalidate_cubes()
         try:
             if not self.record or not self.channels.value:
                 raise ValueError('Select Kondo channels')
             p = dict(orbitals=[[0, i] for i in self.channels.value], spin_density=False,
                      grid_points=self.grid.value, retention=self.retention.value, stash_directory=self.stash.value)
-            self._start(service.submit_cubes(self.record['channels_uuid'], p, self.code_uuid, self.cubehandler_uuid), 'cubes')
+            self.cube_plan=service.prepare_cubes(self.record['channels_uuid'],p,self.code_uuid,self.cubehandler_uuid,
+                resources=self.cube_budget.values(),reference_resources=self.reference_budget.values())
+            indices=', '.join(map(str,self.cube_plan['reference_orbitals']))
+            self.cube_message.value=('<p><b>At most two CalcJobs, strictly one after the other.</b> '
+                'Native initial-CASCI reference cubes (orbitals '+indices+'): '+self.reference_budget.summary()+'. '
+                'Matching reference grids may be reused; full reference grids stay in their calculation directory.</p>'
+                '<p>Then '+str(len(p['orbitals']))+' selected channel cube(s) and cubehandler reduction: '+self.cube_budget.summary()+'. '
+                'Grid '+str(p['grid_points'])+' points/axis; full channel cubes: '+html.escape(self.retention.label)+'. '
+                'Only reduced previews and compact manifests/logs are retrieved.</p>')
+            self.generate.disabled=False
         except Exception as exc:
-            self._error(exc)
+            self.cube_message.value='<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
+
+    def _generate(self, _=None):
+        if not self.cube_plan or self.generate.disabled or self._task:return
+        plan=self.cube_plan
+        self._invalidate_cubes()
+        try:
+            self._start(service.submit_reviewed_cubes(plan),'cubes')
+        except Exception as exc:
+            self.cube_message.value='<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
 
     def _refresh_cubes(self, selected=None):
         rows = service.cube_history(self.record['channels_uuid'])

@@ -130,6 +130,25 @@ singlet–triplet Kondo mechanism needs a different model. For degenerate
 eigenvalues the individual orbital shapes are basis-dependent; only the
 degenerate subspace is invariant, and this warning accompanies their maps.
 
+## Reviewed execution resources
+
+**Kondo channel resources · serial** sets memory and wall time for the exchange
+CalcJob. Cube generation has a separate **Review Kondo cubes** step and budgets
+for **Native reference cubes · serial** and **Channel cubes and reduction ·
+serial**. Each defaults to one process, 2 GiB and ten minutes. The selected
+limits are stored in workflow inputs and propagated to every native CalcJob.
+The initial-state native grids finish successfully before the channel-combination
+job starts; matching preserved grids may be reused. A failed reference stops
+the pipeline. Full reference grids remain in their calculation directory; full
+channel grids follow the reviewed Leave/Stash/Delete choice.
+
+Changing a resource or cube setting invalidates its review. Each submission
+consumes the review before contacting AiiDA, and a durable busy check prevents
+another Dyson/Kondo stage for the same orbital reference while one is active.
+Numerical maps and figures retain their separate reviewed resource controls.
+These execution controls do not change exchange factors, CI tolerances or
+channel normalization.
+
 ## What the images mean
 
 Each map is the squared amplitude of one unit-normalized Kondo orbital,

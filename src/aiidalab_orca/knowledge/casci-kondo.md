@@ -432,3 +432,12 @@ submission for the same orbital reference, including after reopening the page.
 The CI/norm-loss tolerance is scientific validation, not an execution budget:
 never relax it to make a resource or export failure pass. Follow L08 in the full
 GUI guide and stop before L09 unless separately authorized.
+
+For authorized Kondo execution, use **Kondo channel resources · serial** and
+**Review Kondo cubes**. Cube review includes two separate serial budgets:
+**Native reference cubes · serial**, then **Channel cubes and reduction · serial**.
+Each starts at 1 process / 2 GiB / 10 minutes; limits reach every native job.
+The reference-grid step must pass before channel cubes start. Resource/cube
+edits invalidate review, each submit consumes it, and the shared reference busy
+guard also covers Kondo maps/figures across reopened GUIs. Follow L09 for the
+bounded browser test; do not change scientific checks to bypass a resource block.

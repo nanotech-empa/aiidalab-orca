@@ -294,10 +294,22 @@ initial state. **Submits:** exchange channels and limited cube/map/render stages
    limits and convention. If no valid interval can be established in the UI,
    stop and report BLOCKED/FAIL as appropriate; do not assume μ=0 or alignment
    to a substrate. A chosen midpoint is a model parameter, not an experimental fit.
-3. Review and **Compute Kondo orbitals**. Inspect eigenvalues, units, AFM/FM signs
-   and channel identities.
-4. Generate at most two channel previews, keeping full grids external. Compute
-   one constant-height channel map/figure with the same plane convention as L08.
+3. Under **Kondo channel resources · serial**, set **2 GiB / 10 minutes**.
+   Review must show **1 process**. Change the wall time to 9 minutes: review
+   must become invalid and Submit disabled. Restore 10, review again and submit
+   **Compute Kondo orbitals** once. Inspect eigenvalues, units, AFM/FM signs
+   and channel identities after completion.
+4. Select at most two channel previews, **grid 80**, full cubes **Leave**.
+   Set both **Native reference cubes · serial** and **Channel cubes and
+   reduction · serial** to **2 GiB / 10 minutes**. **Review Kondo cubes** must
+   describe up to two serial CalcJobs: matching initial-state reference grids
+   are reused or generated first, then the selected channel cubes and reduction.
+   A budget edit must invalidate review and disable Generate. Restore/review,
+   submit once, and wait. A failed reference step must not launch channel cubes.
+5. Compute one constant-height channel map/figure with the same plane convention
+   as L08. Set **Map resources** and **Figure resources** to **2 GiB / 10
+   minutes**, review each stage and submit one at a time. The busy guard must
+   also reject another stage for this orbital reference after reopening the app.
 
 **PASS:** positive charging costs are enforced, channel identities connect to
 their maps, and no singlet/local-moment or NRG/resonance-width claim is invented.

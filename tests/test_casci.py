@@ -1,6 +1,7 @@
 """CASCI root energies, shared-orbital provenance, reuse, and diagram signs."""
 
 import io
+from itertools import chain, repeat
 from copy import deepcopy
 
 import pytest
@@ -90,6 +91,36 @@ def test_parser_rejects_ci_warning_despite_solved_marker_and_normal_termination(
     assert 'ORCA TERMINATED NORMALLY' in text and 'CI-PROBLEM SOLVED' in text
     with pytest.raises(ValueError,match='CI iterations did not converge'):
         casci.parse_states(text,ref,space,settings)
+
+
+def test_streamed_state_summary_preserves_results_without_reading_ci_body():
+    ref = reference_data()
+    space = {'electrons':3,'orbitals':[6,7]}
+    settings = casci.casci_settings({'nroots':2},ref,space)
+    prefix, footer = output().split('Spin-Determinant CI Printing')
+    # A one-pass iterator has no read() method and creates no large input string.
+    lines = chain(io.StringIO(prefix+'Spin-Determinant CI Printing\n'),
+                  repeat(' 0.0123456789  [001122aabb]\n',100_000),io.StringIO(footer))
+    summary = casci.read_state_summary(lines)
+    assert len(summary) < 2048
+    assert casci.parse_states(summary,ref,space,settings) == casci.parse_states(output(),ref,space,settings)
+
+
+@pytest.mark.parametrize('late', [
+    'warning: CI-ITERATIONS NOT CONVERGED!\n',
+    'CAS-SCF STATES FOR BLOCK 1 MULT= 2 NROOTS= 2\n',
+    'Number of active electrons ... 2\n',
+    'Active 5 - 6 ( 2 orbitals)\n',
+])
+def test_streamed_summary_keeps_late_validation_failures(late):
+    ref = reference_data()
+    space = {'electrons':3,'orbitals':[6,7]}
+    settings = casci.casci_settings({'nroots':2},ref,space)
+    text = output()+late
+    summary = casci.read_state_summary(io.StringIO(text))
+    for candidate in (text,summary):
+        with pytest.raises(ValueError):
+            casci.parse_states(candidate,ref,space,settings)
 
 
 def dataset(charge, mult, energies):

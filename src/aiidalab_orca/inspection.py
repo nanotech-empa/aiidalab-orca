@@ -11,6 +11,7 @@ from .casci_services import progress
 from .orbitals import CubeDisplayMixin
 from .orbital_selection import OrbitalIndexInput
 from . import property_services
+from .resources import MemoryInput, memory_label
 
 
 class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
@@ -19,6 +20,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self.active_indices = list(active_indices)
         self.apply_window = apply_window
         self.catalog_record, self.plan, self.process_uuid = None,None,None
+        self.catalog_plan = None
         self._cube_view, self.render_panel, self._poll_task = None,None,None
         self._job_uuid, self._job_kind, self._displayed_uuid = None,None,None
         style = {'description_width':'140px'}
@@ -26,7 +28,16 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         choices = service.codes(self.common_uuid)
         self.export_code = ipw.Dropdown(options=choices['export'],description='ORCA export',style=style,layout=wide)
         self.force = ipw.Checkbox(description='Read metadata again',value=False,layout=ipw.Layout(width='auto'))
-        self.read = ipw.Button(description='Read orbital information',icon='list',button_style='primary',layout=ipw.Layout(width='auto'))
+        self.catalog_memory = MemoryInput(value=2048, style={'description_width': 'initial'})
+        self.catalog_wallclock = ipw.BoundedIntText(value=10, min=1, max=10080,
+            description='Catalog wall time (minutes)', style={'description_width': 'initial'})
+        self.catalog_resources = ipw.Accordion(children=[ipw.VBox([
+            self.catalog_memory, self.catalog_wallclock, self.export_code, self.force])], selected_index=None)
+        self.catalog_resources.set_title(0, 'Catalog resources and export code')
+        self.catalog_review = ipw.Button(description='Review orbital information', icon='list', layout=ipw.Layout(width='auto'))
+        self.catalog_review.on_click(self._review_catalog)
+        self.catalog_message = ipw.HTML()
+        self.read = ipw.Button(description='Read orbital information',icon='play',button_style='success',disabled=True,layout=ipw.Layout(width='auto'))
         self.read.on_click(self._read)
         self.kind = ipw.Dropdown(description='Orbital set',style=style,layout=wide)
         self.kind.observe(self._kind_changed,names='value')
@@ -48,7 +59,12 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self.retention.observe(self._retention_changed,names='value')
         self.plot_code = ipw.Dropdown(options=choices['plot'],description='ORCA plot',style=style,layout=wide)
         self.cubehandler_code = ipw.Dropdown(options=choices['cubehandler'],description='Cubehandler',style=style,layout=wide)
-        advanced = ipw.Accordion(children=[ipw.VBox([self.grid,self.export_code,self.plot_code,self.cubehandler_code,self.force])],selected_index=None)
+        self.preview_memory = MemoryInput(value=2048, style={'description_width': 'initial'})
+        self.preview_wallclock = ipw.BoundedIntText(value=10, min=1, max=10080,
+            description='Preview wall time (minutes)', style={'description_width': 'initial'})
+        self.preview_resources = ipw.Accordion(children=[ipw.VBox([self.preview_memory, self.preview_wallclock])], selected_index=None)
+        self.preview_resources.set_title(0, 'Preview resources')
+        advanced = ipw.Accordion(children=[ipw.VBox([self.grid,self.plot_code,self.cubehandler_code])],selected_index=None)
         advanced.set_title(0,'Inspection grid and codes')
         self.review = ipw.Button(description='Review orbital visualization',icon='list',layout=ipw.Layout(width='auto'))
         self.review.on_click(self._review)
@@ -61,20 +77,24 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
         self.cube.observe(self._show_cube,names='value')
         self.download, self.cube_box = ipw.HTML(),ipw.VBox()
         from .presentation import ComputePanel
-        self.calculation = ComputePanel('Preview settings and file storage…', [self.retention,self.stash,advanced])
+        self.calculation = ComputePanel('Preview settings and file storage…', [self.retention,self.stash,self.preview_resources,advanced])
         super().__init__([ipw.HTML('<p><b>To see the orbital shapes:</b> read orbital information, '
             'select orbitals in the list, review their visualization, then generate the previews. '
             'Once complete, choose an <b>Orbital to display</b> in the 3D viewer below. '
             'Preview generation is separate from CASCI.</p>'),
-            self.read,self.status,self.message,self.kind,self.info,self.occupations,self.metadata_download,self.table,
+            self.catalog_resources,ipw.HBox([self.catalog_review,self.read],layout=ipw.Layout(flex_flow='row wrap')),
+            self.catalog_message,self.status,self.message,self.kind,self.info,self.occupations,self.metadata_download,self.table,
             character_panel,self.selection_input,self.orbitals,
             ipw.HBox([self.review,self.submit],layout=ipw.Layout(flex_flow='row wrap')),self.calculation,
             self.previous,self.result_info,self.cube,self.download,self.cube_box,
             self.use_window,self.window_message])
         self.selection_input.observe(self._selection_changed,names='valid')
         self.orbitals.observe(self._selection_changed,names='value')
-        for widget in (self.grid,self.retention,self.stash,self.plot_code,self.cubehandler_code):
+        for widget in (self.grid,self.retention,self.stash,self.plot_code,self.cubehandler_code,
+                       self.preview_memory,self.preview_wallclock):
             widget.observe(self._invalidate,names='value')
+        for widget in (self.catalog_memory,self.catalog_wallclock,self.export_code,self.force):
+            widget.observe(self._invalidate_catalog, names='value')
         self._refresh_catalog()
         self._retention_changed()
 
@@ -107,8 +127,8 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
             self.pdos.select_kind(kind)
         data = self.catalog_record['data']
         record = data['sets'][kind]
-        self.review.disabled = False
-        self.use_window.disabled = kind == 'UNO' or self.apply_window is None
+        self.review.disabled = bool(self._job_uuid)
+        self.use_window.disabled = bool(self._job_uuid) or kind == 'UNO' or self.apply_window is None
         self.use_window.description = ('Use selected orbital window for CASCI' if kind in ('restricted', 'CASSCF') else
                                        'Use selected QRO window for CASCI')
         description = ('Fractional occupations diagonalize the source SCF spin-summed density matrix. '
@@ -195,7 +215,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
     def _selection_changed(self,_=None):
         self._invalidate()
         self.window_message.value = ''
-        ready = bool(self.catalog_record and self.kind.value and
+        ready = bool(not self._job_uuid and self.catalog_record and self.kind.value and
                      self.selection_input.valid and self.orbitals.value)
         self.review.disabled = not ready
         self.use_window.disabled = not (ready and self.kind.value != 'UNO' and self.apply_window)
@@ -203,38 +223,77 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
     def _retention_changed(self,_=None):
         self.stash.layout.display = '' if self.retention.value == 'stash' else 'none'
 
-    def _read(self,_=None):
+    def _invalidate_catalog(self, _=None):
+        self.catalog_plan = None
+        self.read.disabled = True
+        self.catalog_message.value = ''
+
+    def _review_catalog(self, _=None):
+        if self._job_uuid:
+            return
+        self._invalidate_catalog()
         try:
-            uuid = service.submit_catalog(self.common_uuid,self.export_code.value,self.force.value)
+            self.catalog_plan = service.review_catalog(self.common_uuid, self.export_code.value, self.force.value,
+                resources={'memory_mb': self.catalog_memory.value,
+                           'wallclock_seconds': self.catalog_wallclock.value * 60})
+            plan = self.catalog_plan
+            text = ('Reuse saved orbital information; no new CalcJob.' if plan['action'] == 'reuse' else
+                f"Read {', '.join(plan['sets'])} in one serial catalog CalcJob: "
+                f"1 process, {memory_label(plan['resources']['memory_mb'])}, "
+                f"up to {plan['resources']['wallclock_seconds'] / 60:g} minutes. "
+                'Any required file preservation runs beforehand with the same budget.')
+            self.catalog_message.value = '<p><b>' + html.escape(text) + '</b> ' + html.escape(plan['code_label']) + '</p>'
+            self.catalog_message.value += ''.join('<p class="orca-notice">' + html.escape(w) + '</p>' for w in plan['warnings'])
+            self.read.disabled = False
+        except Exception as exc:
+            self.catalog_message.value = '<p style="color:#a02020">' + html.escape(str(exc)) + '</p>'
+
+    def _read(self,_=None):
+        if not self.catalog_plan or self.read.disabled or self._job_uuid:
+            return
+        plan = self.catalog_plan
+        self._invalidate_catalog()
+        try:
+            uuid = service.submit_catalog_plan(plan)
             self._start(uuid,'catalog')
         except Exception as exc:
-            self.message.value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
+            self.catalog_message.value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
 
     def _review(self,_=None):
+        if self._job_uuid:
+            return
         self._invalidate()
         try:
             self.plan = service.review_cubes(self.common_uuid,self.catalog_record['uuid'],self.kind.value,
                 {'orbitals':[[0,index] for index in self.selection_input.selected_indices()],'spin_density':False,'grid_points':self.grid.value,
                  'retention':self.retention.value,'stash_directory':self.stash.value.strip()},
-                {'plot':self.plot_code.value,'cubehandler':self.cubehandler_code.value})
+                {'plot':self.plot_code.value,'cubehandler':self.cubehandler_code.value},
+                resources={'memory_mb': self.preview_memory.value, 'wallclock_seconds': self.preview_wallclock.value * 60})
             action = 'Reuse verified inspection cubes.' if self.plan['action'] == 'reuse' else 'Generate selected orbital cubes and reduce them with cubehandler.'
-            self.message.value = '<p><b>'+action+'</b> Full cubes: '+html.escape(self.retention.label)+'.</p>'
+            budget = self.plan['resources']
+            resources = ('' if self.plan['action'] == 'reuse' else
+                f" 1 process, {memory_label(budget['memory_mb'])}, up to {budget['wallclock_seconds'] / 60:g} minutes; "
+                'any required file preservation uses the same budget before generation.')
+            self.message.value = '<p><b>'+action+'</b>'+resources+' Full cubes: '+html.escape(self.retention.label)+'.</p>'
             self.submit.disabled = self._job_uuid is not None
         except Exception as exc:
             self.message.value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
 
     def _submit(self,_=None):
-        if self.plan and not self.submit.disabled:
+        if self.plan and not self.submit.disabled and not self._job_uuid:
+            plan = self.plan
+            self._invalidate()
             try:
-                uuid = service.submit_cubes(self.plan)
-                self._invalidate()
+                uuid = service.submit_cubes(plan)
                 self._start(uuid,'cubes')
             except Exception as exc:
                 self.message.value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
 
     def _start(self,uuid,kind):
         self._job_uuid,self._job_kind = str(uuid),kind
-        self.read.disabled,self.submit.disabled = True,True
+        self._invalidate_catalog()
+        self._invalidate()
+        self.catalog_review.disabled,self.review.disabled,self.use_window.disabled = True,True,True
         self.status.value = '<p>Submitted '+kind+' workflow · <code>'+str(uuid)+'</code></p>'
         if self._poll_task:
             self._poll_task.cancel()
@@ -248,7 +307,7 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
                 if data['finished']:
                     uuid,kind = self._job_uuid,self._job_kind
                     self._job_uuid = None
-                    self.read.disabled = False
+                    self.catalog_review.disabled = False
                     if data['success']:
                         if kind == 'catalog':
                             self._refresh_catalog()
@@ -258,13 +317,14 @@ class OrbitalInspection(CubeDisplayMixin, ipw.VBox):
                             self._show_result()
                     else:
                         self.message.value = '<p style="color:#a02020">'+html.escape(data['message']+'; '.join(data['reports']))+'</p>'
+                    self._selection_changed()
                     return
                 await asyncio.sleep(3)
         except asyncio.CancelledError:
             pass
         except Exception as exc:
             self._job_uuid = None
-            self.read.disabled = False
+            self.catalog_review.disabled = False
             self.message.value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
 
     def _refresh_runs(self):

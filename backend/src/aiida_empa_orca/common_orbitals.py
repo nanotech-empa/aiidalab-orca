@@ -200,7 +200,10 @@ class CommonOrbitalsWorkChain(OrbitalCharacterMixin, engine.WorkChain):
         cls.character_spec(spec)
         spec.outline(cls.setup, engine.if_(cls.needs_preparation)(cls.prepare, cls.inspect,
                      engine.if_(cls.should_stash)(cls.preserve, cls.inspect_storage)), cls.results,
-                     cls.run_orbital_character, cls.inspect_orbital_character)
+                     cls.run_orbital_character,
+                     engine.while_(cls.has_pending_orbital_character)(
+                         cls.inspect_serial_orbital_character, cls.run_next_orbital_character),
+                     cls.inspect_orbital_character)
         spec.exit_code(400, 'ERROR_SOURCE', message='The source orbitals or provenance are unavailable; see report.')
         spec.exit_code(401, 'ERROR_PREPARATION', message='Common spatial-orbital preparation failed.')
         spec.exit_code(402, 'ERROR_STORAGE', message='Common-orbital preservation failed.')
@@ -261,6 +264,11 @@ class CommonOrbitalsWorkChain(OrbitalCharacterMixin, engine.WorkChain):
         b = storage_builder(node.outputs.remote_folder, self.inputs.storage_code,
                             {'threshold_mb': 0, 'stash_directory': self.ctx.retention['stash_directory']},
                             names=[filename,'aiida.uno'] if filename.endswith('qro') else [filename])
+        from .rendering import calcjob_options
+        seconds = self.inputs.character_wallclock_seconds.value if 'character_wallclock_seconds' in self.inputs else 1800
+        for key, value in calcjob_options(node.outputs.remote_folder, seconds=seconds,
+                memory_mb=self.inputs.character_memory_gib.value * 1024).items():
+            b.metadata.options[key] = value
         return engine.ToContext(storage=self.submit(b))
 
     def should_stash(self):

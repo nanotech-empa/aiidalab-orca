@@ -28,7 +28,11 @@ preparation, then prepare or reuse the common spatial-orbital reference.
 Preparation reads the saved wavefunction without SCF iterations. It
 inherits the SCF calculation's ORCA code, computer and resource
 limits; its execution summary shows these settings. Remote/stashed wavefunctions
-are accessed on that computer. Subsequent CASCI keeps the orbital reference's
+are accessed on that computer. **Prepared-orbital PDOS resources** separately
+controls memory and wall time for automatic orbital-character analysis
+(initially 2 GiB and 10 minutes per serial CalcJob). For unrestricted references,
+QRO analysis completes before UNO analysis starts. The preparation review
+shows those limits; budget edits require a new review. Subsequent CASCI keeps the orbital reference's
 computer, while its processes, memory and wall time are editable under
 **CASCI resources and advanced settings**.
 
@@ -40,7 +44,8 @@ the next stage provides its orbital list and visualizations.
 
 ## 2. Inspect and confirm the active space
 
-Choose **2. Inspect / confirm active space**. **Read orbital information**
+Choose **2. Inspect / confirm active space**. Set the catalog memory and wall
+time, then **Review orbital information → Read orbital information**
 explicitly submits a metadata-export job when no reusable catalog exists.
 Inspect orbital occupations and, when useful, request orbital-shape previews.
 See [the inspection guide](orbital-inspection.md) for those controls.

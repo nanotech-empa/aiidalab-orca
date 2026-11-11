@@ -4,6 +4,11 @@ This is the GitHub entry point for agents assisting with the ORCA app. The
 maintained instructions are Markdown resources in the application package,
 also readable here on GitHub. Do not maintain a separate copy for each model.
 
+For an observed browser test, follow [the full GUI acceptance guide](../testing/README.md)
+and [browser-agent handoff](../testing/agent-handoff.md). Humans and agents use
+the same case IDs, evidence and stop rules. Localhost is the default; optional
+Remote CPU, Remote QPU and connected-export scopes need separate authorization.
+
 | Read in this order | Installed guide ID | Markdown source |
 | --- | --- | --- |
 | App orientation, geometry/SCF, step-by-step routes and official references | `orca.app` | [Start here](../../src/aiidalab_orca/knowledge/orca.md) |

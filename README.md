@@ -5,6 +5,11 @@ and inspect results with AiiDA provenance. Each analysis has its own reviewed
 inputs, resource settings and reusable results. Choose the calculations needed
 for a scientific goal; no single workflow runs every property.
 
+To test an installation through the browser, follow the
+[full GUI acceptance guide](docs/testing/README.md). It provides a localhost
+route for users and agents, optional Remote CPU/Remote QPU tests, and a report
+template. Start with L00–L01 and inspect the result before continuing.
+
 This is a development-stage application. The CASSCF and correlation-energy
 stage is implemented and tested in [ORCA #39](https://github.com/nanotech-empa/aiidalab-orca/pull/39)
 and [#40](https://github.com/nanotech-empa/aiidalab-orca/pull/40). Implementation,

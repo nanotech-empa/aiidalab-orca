@@ -1,5 +1,12 @@
 # ORCA app: an agent's route from a molecule to results
 
+For a systematic browser acceptance campaign, use the repository's
+[full GUI test guide](../../../docs/testing/README.md) and
+[agent handoff](../../../docs/testing/agent-handoff.md). Localhost is the
+default; Remote CPU, Remote QPU and connected publication are separately
+authorized optional scopes. An in-app chat without browser tools can guide
+the user but must not claim to have executed a Chrome acceptance case.
+
 Guide ID: `orca.app`. Read this first, then `orca.casci-kondo` for electronic
 analysis or `orca.vibrations` for IR/Raman. These are application-owned guides,
 versioned with [the ORCA app](https://github.com/nanotech-empa/aiidalab-orca).

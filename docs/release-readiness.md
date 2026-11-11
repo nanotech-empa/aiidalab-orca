@@ -1,5 +1,11 @@
 # CASSCF and correlation stage: validation and remaining gates
 
+The [full GUI acceptance guide](testing/README.md) defines the reproducible
+human/agent browser campaign, with localhost as the default and separately
+authorized Remote CPU, Remote QPU and connected-export sections. Its blank
+report is not evidence that the browser cases passed. Automated/native evidence
+below and actual browser acceptance must remain distinguishable.
+
 This record describes the development stage reviewed on 8 November 2026.
 It distinguishes available code, native small-system checks and release
 acceptance. It is not a statement of accuracy for an arbitrary molecule.

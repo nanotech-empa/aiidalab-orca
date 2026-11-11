@@ -1,5 +1,12 @@
 # ORCA application guidance for agents
 
+For browser acceptance testing, start with [the full GUI test guide](docs/testing/README.md)
+and [agent handoff](docs/testing/agent-handoff.md). Follow the user's authorized
+case IDs and scope. Localhost is the default; Remote CPU, real QPU execution
+and connected publication are separate optional permissions. Do not replace
+GUI actions with backend/API submissions or mark unobserved cases passed.
+Preserve research calculations and report missing GUI routes explicitly.
+
 For user-facing help, start at [the agent guide index](docs/agents/README.md).
 Read the app-owned guides supplied by the installed AiiDAlab chat and inspect
 its current tools, selected calculation and visible form before giving steps.

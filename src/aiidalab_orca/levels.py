@@ -55,10 +55,11 @@ class EnergyLevels(ipw.VBox):
             svg.append(f'<path d="M80 {yy} H600" stroke="#dce2e8"/><text x="70" y="{yy+4}" text-anchor="end" font-size="12">{energy:.2f}</text>')
         svg.append('<text x="15" y="195" transform="rotate(-90 15 195)" font-size="13">Orbital energy (eV)</text>')
         rows = []
+        cell = ' style="padding:.25em .75em;text-align:right;white-space:nowrap"'
         for spin, channel in enumerate(self.levels['channels']):
             color = ('#2563b7', '#d7473f')[spin]
             x = 140+260*spin if self.levels['spin_polarized'] else 270
-            label = ('α · spin up', 'β · spin down')[spin] if self.levels['spin_polarized'] else 'Restricted (α + β)'
+            label = ('α', 'β')[spin] if self.levels['spin_polarized'] else 'Restricted (α + β)'
             svg.append(f'<text x="{x+55}" y="400" text-anchor="middle" fill="{color}" font-size="15">{label}</text>')
             for group in visible_groups(channel, lo, hi):
                 energy = sum(v['energy_ev'] for v in group)/len(group)
@@ -70,7 +71,7 @@ class EnergyLevels(ipw.VBox):
                 if len(group)>1:
                     svg.append(f'<text x="{x+120}" y="{yy+4}" fill="{color}" font-size="13">{len(group)}</text>')
                 svg.append('</g>')
-                rows.extend(f"<tr><td>{label}</td><td>{v['index']}</td><td>{v['energy_ev']:.4f}</td><td>{v['occupation']:g}</td></tr>" for v in group)
+                rows.extend(f"<tr><td{cell}>{label}</td><td{cell}>{v['index']}</td><td{cell}>{v['energy_ev']:.4f}</td><td{cell}>{v['occupation']:g}</td></tr>" for v in group)
         for name in ('homo', 'lumo'):
             energy = self.levels[name+'_ev']
             if lo <= energy <= hi:
@@ -78,4 +79,5 @@ class EnergyLevels(ipw.VBox):
         svg.append('</svg>')
         self.plot.value = ''.join(svg)
         self.details.value = ('<details><summary>Visible orbital indices and occupations</summary><p>ORCA orbital numbers start at 0.</p>'
-                              '<table><tr><th>Spin</th><th>MO</th><th>Energy (eV)</th><th>Occupation</th></tr>' + ''.join(rows)+'</table></details>')
+                              '<table><tr>' + ''.join(f'<th{cell}>{name}</th>' for name in
+                              ('Spin', 'MO', 'Energy (eV)', 'Occupation')) + '</tr>' + ''.join(rows)+'</table></details>')

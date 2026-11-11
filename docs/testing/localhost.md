@@ -456,6 +456,15 @@ This generated geometry is an integration example, not the exact pyridine benchm
 3. If the singlet-reference triplet-response option is exposed, make a separate
    three-root request and inspect its family/root identities. Triplet NTO generation
    is unqualified in the current app and must remain blocked.
+4. If a reviewed response stops on energy change without a verified residual,
+   stop; do not mark native normal termination as PASS. For an authorized retry,
+   open **Resources and advanced settings → Set response tolerances explicitly**.
+   Set **ETol (Ha) = 1e-12**, **RTol (residual) = 2.5e-7**, leaving the reviewed
+   method, families, geometry, 100 iterations and local resource limits unchanged.
+   Confirm both values in review and `%tddft`, and check that editing either value
+   invalidates review even after restoring it. The retry creates a separate
+   calculation. Each family still needs verified residual convergence; the failed
+   entry retains its original settings and status. No automatic retry is authorized.
 
 **PASS:** methods/families are distinct, forbidden NTO requests are not silently
 relabelled singlets, and no CASCI/Dyson state-vector route is inferred from these results.

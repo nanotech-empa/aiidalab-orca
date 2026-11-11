@@ -433,13 +433,21 @@ class OpticalExcitations(ipw.VBox):
         self.memory = MemoryInput(value=1024, style=STYLE)
         self.wall = ipw.BoundedIntText(value=10, min=1, max=100000, description='Wall time (minutes)', style=STYLE)
         self.iterations = ipw.BoundedIntText(value=100, min=1, max=1000, description='Maximum response iterations', style=STYLE)
+        self.explicit_tolerances = ipw.Checkbox(description='Set response tolerances explicitly', value=False,
+                                               indent=False, layout=ipw.Layout(width='auto'))
+        self.etol = ipw.FloatText(value=1e-12, description='ETol (Ha)', disabled=True, style=STYLE)
+        self.rtol = ipw.FloatText(value=2.5e-7, description='RTol (residual)', disabled=True, style=STYLE)
         self.force = ipw.Checkbox(description='Run again even if a matching result exists', value=False, indent=False, layout=ipw.Layout(width='auto'))
         from .retention import FullFileRetention
         from .property_services import default_stash_directory
         self.full_files = FullFileRetention(directory=default_stash_directory())
         self.review = ipw.Button(description='Review optical calculation', icon='list', button_style='primary', layout=ipw.Layout(width='auto'))
         self.submit = ipw.Button(description='Submit reviewed calculation', icon='play', disabled=True, layout=ipw.Layout(width='auto'))
-        advanced = ipw.Accordion(children=[ipw.VBox([self.nto_states, self.nprocs, self.memory, self.wall, self.iterations, self.force])], selected_index=None)
+        advanced = ipw.Accordion(children=[ipw.VBox([self.nto_states, self.nprocs, self.memory, self.wall, self.iterations,
+            self.explicit_tolerances, self.etol, self.rtol,
+            ipw.HTML('<p>ETol controls the change in excitation energies (Ha); RTol controls the residual norm. '
+                     'Every family must satisfy the residual check. Unchecked: use native ORCA tolerances; no automatic retry.</p>'),
+            self.force])], selected_index=None)
         advanced.set_title(0, 'Resources and advanced settings')
         self.compute = ComputePanel('Compute / extend optical excitations…', [self.method, self.roots, self.triplets, self.nto, self.full_files, advanced,
             ipw.HBox([self.review, self.submit], layout=ipw.Layout(flex_flow='row wrap')), self.review_text])
@@ -451,8 +459,10 @@ class OpticalExcitations(ipw.VBox):
         self.refresh.on_click(self._refresh)
         self.review.on_click(self._review)
         self.submit.on_click(self._submit)
-        for control in (self.method, self.roots, self.triplets, self.nto, self.nto_states, self.nprocs, self.memory, self.wall, self.iterations, self.force):
+        for control in (self.method, self.roots, self.triplets, self.nto, self.nto_states, self.nprocs, self.memory, self.wall,
+                        self.iterations, self.force, self.explicit_tolerances, self.etol, self.rtol):
             control.observe(self._invalidate, names='value')
+        self.explicit_tolerances.observe(self._toggle_tolerances, names='value')
         self.full_files.observe(self._invalidate, names='revision')
         try:
             default = service.defaults(source_uuid)
@@ -468,6 +478,9 @@ class OpticalExcitations(ipw.VBox):
         self.submit.disabled = True
         self.review_text.value = ''
 
+    def _toggle_tolerances(self, _=None):
+        self.etol.disabled = self.rtol.disabled = not self.explicit_tolerances.value
+
     def _review(self, _=None):
         self._invalidate()
         try:
@@ -475,11 +488,20 @@ class OpticalExcitations(ipw.VBox):
             self.plan = service.review(self.source_uuid, {'method': self.method.value, 'nroots': self.roots.value,
                 'triplets': self.triplets.value, 'nto': self.nto.value, 'nto_states': roots,
                 'maxiter': self.iterations.value, 'nprocs': self.nprocs.value, 'memory_mb': self.memory.value,
+                'etol': self.etol.value if self.explicit_tolerances.value else None,
+                'rtol': self.rtol.value if self.explicit_tolerances.value else None,
                 'wallclock_seconds': self.wall.value*60}, self.force.value,
                 native_output_policy=self.full_files.values())
+            effective = self.plan['settings']
+            convergence = (f'Explicit response tolerances: ETol = {effective["etol"]:.6g} Ha; '
+                           f'RTol = {effective["rtol"]:.6g}.' if 'etol' in effective else
+                           'Response tolerances: native ORCA defaults; no overrides.')
             self.review_text.value = ('<p><b>' + ('Reuse matching optical calculation' if self.plan['reuse_uuid'] else 'Compute vertical optical excitations') +
                 '</b> · ' + html.escape(self.plan['execution']) + '</p><p>Full files: ' +
-                html.escape(retention_description(self.plan['native_output_policy'])) + '. Reused results keep their recorded storage policy.</p><p>Geometry, charge, DFT functional, basis and grids follow this reference. '
+                html.escape(retention_description(self.plan['native_output_policy'])) + '. Reused results keep their recorded storage policy.</p><p>' +
+                html.escape(convergence) + ' Residual convergence is required for every family.</p>' +
+                f'<p>Resources: {effective["nprocs"]} processes; total memory {effective["memory_mb"]/1024:g} GiB; '
+                f'up to {effective["wallclock_seconds"]/60:g} minutes.</p><p>Geometry, charge, DFT functional, basis and grids follow this reference. '
                 'SCF is continued from its saved orbitals and its energy must agree within 10⁻⁷ Hartree. No excited-state geometry optimization, SOC, spin flip or automatic scientific remedy is added.</p>'
                 '<details><summary>Native ORCA input</summary><pre>' + html.escape(self.plan['input']) + '</pre></details>')
             self.submit.disabled = False

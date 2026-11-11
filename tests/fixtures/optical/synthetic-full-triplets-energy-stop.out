@@ -1,0 +1,42 @@
+SYNTHETIC PARSER FIXTURE: fabricated values; not a scientific calculation.
+Program Version 6.1.1
+Total Charge Charge .... 0
+Multiplicity Mult .... 1
+Number of Electrons NEL .... 2
+SCF CONVERGED AFTER 5 CYCLES
+Total Energy : -10.0 Eh
+Tamm-Dancoff approximation ... deactivated
+Number of roots to be determined ... 3
+Convergence tolerance for the residual ... 1.000e-06
+Convergence tolerance for the energies ... 1.000e-06
+****Iteration 0****
+Maximum Energy change : 0.001
+Maximum residual norm : 0.00000001
+*** CONVERGENCE OF RESIDUAL NORM REACHED ***
+TD-DFT EXCITED STATES (SINGLETS)
+STATE 1: E= 0.110000 au 2.993 eV <S**2> = 0.000000 Mult 1
+STATE 2: E= 0.210000 au 5.714 eV <S**2> = 0.000000 Mult 1
+STATE 3: E= 0.310000 au 8.436 eV <S**2> = 0.000000 Mult 1
+Number of roots to be determined ... 3
+Convergence tolerance for the residual ... 1.000e-06
+Convergence tolerance for the energies ... 1.000e-06
+****Iteration 0****
+Maximum Energy change : 0.001
+Maximum residual norm : 0.000003
+****Iteration 1****
+Maximum Energy change : 0.0000005
+*** CONVERGENCE OF ENERGIES REACHED ***
+TD-DFT EXCITED STATES (TRIPLETS)
+STATE 1: E= 0.120000 au 3.265 eV <S**2> = 2.000000 Mult 3
+STATE 2: E= 0.220000 au 5.987 eV <S**2> = 2.000000 Mult 3
+STATE 3: E= 0.320000 au 8.708 eV <S**2> = 2.000000 Mult 3
+ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS
+0-1A -> 1-1A 2.993252 10000 414.2 0.01 0 0 0 0
+0-1A -> 2-1A 5.714391 10000 217.0 0.01 0 0 0 0
+0-1A -> 3-1A 8.435530 10000 147.0 0.01 0 0 0 0
+0-1A -> 1-3A 3.265366 10000 379.7 0 0 0 0 0
+0-1A -> 2-3A 5.986505 10000 207.1 0 0 0 0 0
+0-1A -> 3-3A 8.707644 10000 142.4 0 0 0 0 0
+ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS
+ORCA-CIS/TD-DFT FINISHED WITHOUT ERROR
+ORCA TERMINATED NORMALLY

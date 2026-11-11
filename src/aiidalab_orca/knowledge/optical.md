@@ -24,7 +24,7 @@ HF/CIS/RPA, double hybrids, composite methods, spin flip and SOC are outside
 this first route. ECP electron counting is not qualified here.
 
 TDDFT excited roots start at 1, distinct from zero-based CASCI roots. ORCA MO
-indices start at 0 and viewer atom indices at 1. Preserve the global native
+indices start at 0 and viewer atom indices at 1. Preserve the printed native
 state index separately from the family root: triplet state listings and optical
 tables use different numbering. UKS response is spin conserving, not a general
 spin-pure multiplicity ladder. Report native spin expectations without asserting

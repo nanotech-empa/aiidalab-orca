@@ -8,10 +8,13 @@ import numpy as np
 from aiida import common, engine, orm
 from aiida.parsers import Parser
 
-from .calculation import MolecularCalculation
+from .calculation import CompactMolecularCalculation
 from .common_orbitals import options, validate_source
 from .reference import reference_settings, single_point_parameters
 from .parser import reference_summary
+from .native_logs import output_policy
+from .native_output import read_manifest
+from .artifacts import stash_options
 
 PROCESS_TYPE = 'aiida.workflows:empa_orca.vibrations'
 OUTPUTS = {'vibrational_data': orm.ArrayData, 'summary': orm.Dict,
@@ -195,8 +198,9 @@ def parse_vibrations(text, hessian_text, atoms, raman):
     return arrays, summary
 
 
-class VibrationsCalculation(MolecularCalculation):
+class VibrationsCalculation(CompactMolecularCalculation):
     _PARSER = 'empa_orca.vibrations'
+    _COMPACT_PROTOCOL = 'vibrations-v1'
 
     @classmethod
     def define(cls, spec):
@@ -207,16 +211,12 @@ class VibrationsCalculation(MolecularCalculation):
                 spec.output(name, valid_type=kind)
         spec.exit_code(310, 'ERROR_VIBRATIONS', message='Invalid or incomplete vibrational output; inspect aiida.out and the report.')
 
-    def prepare_for_submission(self, folder):
-        info = super().prepare_for_submission(folder)
-        info.retrieve_list = ['aiida.out', 'aiida.hess']
-        return info
-
 
 class VibrationsParser(Parser):
     def parse(self, **kwargs):
         try:
             repository = self.retrieved.base.repository
+            manifest = read_manifest(self.node, repository, 'vibrations-v1')
             arrays, summary = parse_vibrations(repository.get_object_content('aiida.out'),
                 repository.get_object_content('aiida.hess'), self.node.inputs.structure.get_ase(),
                 self.node.inputs.raman.value)
@@ -225,6 +225,8 @@ class VibrationsParser(Parser):
                 data.set_array(name, values)
             self.out('vibrational_data', data)
             self.out('summary', orm.Dict(dict=summary))
+            if manifest is not None:
+                self.out('native_output_manifest', orm.Dict(dict=manifest))
             with repository.open('aiida.hess', mode='rb') as handle:
                 self.out('hessian', orm.SinglefileData(file=handle, filename='aiida.hess'))
         except (OSError, ValueError, KeyError, IndexError) as exc:
@@ -238,6 +240,7 @@ def validate_result(node):
     for name, kind in OUTPUTS.items():
         if name not in node.outputs or not isinstance(node.outputs[name], kind):
             raise ValueError(f'Missing {name}')
+    read_manifest(node.outputs.retrieved.creator, node.outputs.retrieved.base.repository, 'vibrations-v1')
     with node.outputs.hessian.open(mode='rb') as handle:
         content = handle.read()
     if not content:
@@ -257,6 +260,10 @@ class VibrationsWorkChain(engine.WorkChain):
         spec.input('settings', valid_type=orm.Dict)
         spec.input('source_retrieved', valid_type=orm.FolderData)
         spec.input('code', valid_type=orm.AbstractCode)
+        spec.input('compact_code', valid_type=orm.AbstractCode, required=False)
+        spec.input('native_output_policy', valid_type=orm.Dict, default=lambda: orm.Dict(dict={'mode': 'remote'}))
+        spec.output('native_output_manifest', valid_type=orm.Dict, required=False)
+        spec.input('reuse.native_output_manifest', valid_type=orm.Dict, required=False)
         spec.input('raman', valid_type=orm.Bool, default=lambda: orm.Bool(True))
         spec.input('reuse_uuid', valid_type=orm.Str, required=False)
         for name, kind in OUTPUTS.items():
@@ -269,6 +276,9 @@ class VibrationsWorkChain(engine.WorkChain):
 
     def setup(self):
         try:
+            output_policy(self.inputs.native_output_policy.get_dict())
+            if 'reuse_uuid' not in self.inputs and 'compact_code' not in self.inputs:
+                raise ValueError('Select a configured ORCA tools code for compact vibrational output')
             optimized_source(self.inputs.structure, self.inputs.settings.get_dict(), self.inputs.code, self.inputs.source_retrieved)
             if 'reuse_uuid' in self.inputs:
                 previous = orm.load_node(self.inputs.reuse_uuid.value)
@@ -291,9 +301,14 @@ class VibrationsWorkChain(engine.WorkChain):
         builder = VibrationsCalculation.get_builder()
         builder.structure, builder.code = self.inputs.structure, self.inputs.code
         builder.raman = self.inputs.raman
+        builder.compact_code = self.inputs.compact_code
+        builder.native_output_policy = self.inputs.native_output_policy
         builder.parameters = orm.Dict(dict=frequency_parameters(settings, self.inputs.raman.value))
         builder.maxcore_mb = orm.Int(int(.75 * settings['memory_mb'] / settings['nprocs']))
         builder.metadata.options = options(settings)
+        policy = output_policy(self.inputs.native_output_policy.get_dict())
+        if policy['mode'] == 'stash':
+            builder.metadata.options.stash = stash_options(policy['stash_directory'], 'native_output')
         # Explicit provenance reuse owns this step; a vanished remote file must
         # never be hidden by an AiiDA cache hit.
         builder.metadata.disable_cache = True
@@ -307,3 +322,5 @@ class VibrationsWorkChain(engine.WorkChain):
         outputs = self.ctx.calculation.outputs if self.needs_calculation() else self.inputs.reuse
         for name in OUTPUTS:
             self.out(name, outputs[name])
+        if 'native_output_manifest' in outputs:
+            self.out('native_output_manifest', outputs['native_output_manifest'])

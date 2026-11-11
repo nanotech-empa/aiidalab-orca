@@ -9,6 +9,8 @@ from aiida_empa_orca.vibrations import (
     optimized_source, signature, validate_result, compatible,
 )
 from .property_services import source_node
+from .property_services import helper_code
+from aiida_empa_orca.native_logs import output_policy
 
 
 def runs(source_uuid):
@@ -20,11 +22,12 @@ def runs(source_uuid):
             for uuid, label, date, state in rows.order_by({'run': {'ctime': 'desc'}}).all()]
 
 
-def prepare(source_uuid, *, raman=True, force_recompute=False):
+def prepare(source_uuid, *, raman=True, force_recompute=False, native_output_policy=None):
     source = source_node(source_uuid)
     structure, settings, code = source.outputs.structure, source.inputs.settings.get_dict(), source.inputs.code
     optimized_source(structure, settings, code, source.outputs.retrieved)
     plan = {'source_uuid': str(source_uuid), 'raman': bool(raman), 'reuse_uuid': None,
+            'native_output_policy': output_policy(native_output_policy),
             'signature': signature(structure, settings, code.uuid, raman), 'warnings': []}
     if settings.get('constraints'):
         plan['warnings'].append('The reference was optimized with constraints. Free-molecule frequencies may contain imaginary modes or describe a nonstationary geometry.')
@@ -50,10 +53,7 @@ def prepare(source_uuid, *, raman=True, force_recompute=False):
     return plan
 
 
-def submit_plan(plan):
-    from aiida.engine.daemon.client import get_daemon_client
-    if not get_daemon_client().is_daemon_running:
-        raise ValueError('Start the AiiDA daemon before submitting')
+def builder(plan):
     source = source_node(plan['source_uuid'])
     if signature(source.outputs.structure, source.inputs.settings.get_dict(), source.inputs.code.uuid,
                  plan['raman']) != plan['signature']:
@@ -62,15 +62,29 @@ def submit_plan(plan):
     builder.structure, builder.settings = source.outputs.structure, source.inputs.settings
     builder.source_retrieved, builder.code = source.outputs.retrieved, source.inputs.code
     builder.raman = orm.Bool(plan['raman'])
+    builder.native_output_policy = orm.Dict(dict=output_policy(plan.get('native_output_policy')))
     if plan['reuse_uuid']:
         previous = orm.load_node(plan['reuse_uuid'])
         validate_result(previous)
         builder.reuse_uuid = orm.Str(plan['reuse_uuid'])
         for name in OUTPUTS:
             builder.reuse[name] = previous.outputs[name]
+        if 'native_output_manifest' in previous.outputs:
+            builder.reuse.native_output_manifest = previous.outputs.native_output_manifest
+    else:
+        builder.compact_code = orm.load_code(helper_code(source.inputs.code.computer.uuid))
     builder.metadata.label = source.outputs.structure.get_formula() + (' · IR and Raman' if plan['raman'] else ' · IR')
-    node = submit(builder)
-    node.base.extras.set('aiidalab_orca', {'version': '0.1.0', 'view': 'vibrations', 'source_uuid': str(source.uuid)})
+    return builder
+
+
+def submit_plan(plan):
+    from aiida.engine.daemon.client import get_daemon_client
+    if not get_daemon_client().is_daemon_running:
+        raise ValueError('Start the AiiDA daemon before submitting')
+    prepared = builder(plan)
+    source_uuid = plan['source_uuid']
+    node = submit(prepared)
+    node.base.extras.set('aiidalab_orca', {'version': '0.1.0', 'view': 'vibrations', 'source_uuid': str(source_uuid)})
     return str(node.uuid)
 
 

@@ -89,8 +89,8 @@ class OrbitalCubesCalculation(engine.CalcJob):
             source = self.inputs[keys[0]]
             if source.computer.uuid != computer.uuid:
                 raise ValueError('Remote electronic files must be on the computation computer')
-            base = (PurePosixPath(source.target_basepath)/'electronic' if keys[0]=='source_stash'
-                    else PurePosixPath(source.get_remote_path()))
+            from .artifacts import electronic_base
+            base = electronic_base(source, names)
             info.remote_copy_list = [(computer.uuid,str(base/filename),target(filename)) for filename in names]
         request = {'parameters':p, 'files':self.inputs.electronic_manifest.get_dict()['files'],
                    'plot_executable':str(self.inputs.plot_code.filepath_executable),

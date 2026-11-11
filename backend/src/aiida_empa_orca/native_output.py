@@ -54,6 +54,8 @@ def prepare_compact(info, inputs, folder, protocol):
         info.retrieve_list.append('scf_results.json')
     if protocol == 'optimization-v1':
         info.retrieve_list.extend(['aiida.xyz', 'aiida_trj.xyz'])
+    if protocol == 'vibrations-v1':
+        info.retrieve_list.append('aiida.hess')
     return info
 
 

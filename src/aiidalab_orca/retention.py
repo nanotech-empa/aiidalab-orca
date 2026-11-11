@@ -6,6 +6,12 @@ import traitlets as tl
 from aiida_empa_orca.native_logs import output_policy
 
 
+def description(policy):
+    policy = output_policy(policy)
+    return ('Leave on the calculation computer' if policy['mode'] == 'remote' else
+            'Stash on the calculation computer: ' + policy['stash_directory'])
+
+
 class FullFileRetention(ipw.VBox):
     revision = tl.Int()
 

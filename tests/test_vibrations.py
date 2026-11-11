@@ -130,6 +130,7 @@ def test_frequency_submission_does_not_optimize_or_retrieve_wfn(aiida_profile, a
     builder = backend.VibrationsCalculation.get_builder()
     builder.structure = orm.StructureData(ase=ase.io.read(FIXTURE/'h2co.xyz'))
     builder.code, builder.maxcore_mb = code, orm.Int(768)
+    builder.compact_code = code
     builder.parameters = orm.Dict(dict=backend.frequency_parameters(settings))
     builder.metadata.options.resources = {'num_machines': 1, 'num_mpiprocs_per_machine': 2}
     process = instantiate_process(aiida_manager.get_runner(), builder)
@@ -138,7 +139,8 @@ def test_frequency_submission_does_not_optimize_or_retrieve_wfn(aiida_profile, a
             info = process.prepare_for_submission(folder)
             text = Path(folder.get_abs_path('aiida.inp')).read_text()
             assert 'AnFreq' in text and 'Polar 1' in text and 'Opt' not in text
-            assert info.retrieve_list == ['aiida.out', 'aiida.hess']
+            assert 'aiida.hess' in info.retrieve_list and 'native_output.json' in info.retrieve_list
+            assert info.codes_info[0].stdout_name == 'native_output/aiida.out'
     finally:
         process.close()
 

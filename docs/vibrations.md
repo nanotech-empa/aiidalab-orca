@@ -27,11 +27,17 @@ Outputs include:
   vectors, vibrational mode indices, masses, the Cartesian Hessian, IR
   intensities and transition dipoles, and optional polarizability derivatives,
   Raman tensors, activities and depolarization ratios.
-- `hessian`: the original `.hess` file as a durable `SinglefileData`.
+- `hessian`: native numeric sections used by the vibration parser, as a durable
+  `SinglefileData`. Unused sections, comments and redundant whitespace are
+  omitted without rounding or transforming any retained number. The compact
+  file is bounded at 16 MiB; oversized data fail collection explicitly.
 - `summary`: units, mode count, linear/nonlinear classification, the actual
   frequency scale, coordinate-origin offset, and significant imaginary modes.
-- `retrieved`: the original ORCA output and Hessian. Electronic checkpoint
-  files and cubes are not retrieved by this step.
+- `retrieved`: bounded native validation text, compact Hessian, diagnostic tail
+  and checksum manifest. Complete original Hessian, log, property files and
+  electronic checkpoints remain on the calculation computer or in its explicitly
+  selected stash. Review **Full files** before submission. No wavefunction or
+  full cube is retrieved.
 
 ORCA centres the Hessian coordinates. The parser checks that they differ from
 the selected optimized geometry only by a translation; it does not guess a
@@ -43,8 +49,9 @@ minimum-validity warning; zero/negative modes are excluded from the positive
 frequency optical-spectrum viewer, while remaining in the stored data.
 
 Reuse compares the actual geometry, code and effective scientific inputs and
-checks the retained Hessian and numerical arrays against the original ORCA
-output. A completed IR+Raman calculation also satisfies an IR-only request.
+checks the retained Hessian and numerical arrays against the native validation
+text. New compact files are checksum-verified before parsing. A completed
+IR+Raman calculation also satisfies an IR-only request.
 Unavailable results are reported before recomputation. AiiDA caching is not the
 reuse mechanism: newly requested CalcJobs explicitly bypass it. Scratch deletion
 does not prevent inspection or reuse of the retained vibrational data.

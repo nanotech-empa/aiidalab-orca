@@ -8,6 +8,7 @@ import ipywidgets as ipw
 
 from . import vibration_services as service
 from .casci_services import progress
+from .retention import description as retention_description
 
 
 class VibrationalSpectroscopy(ipw.VBox):
@@ -18,6 +19,9 @@ class VibrationalSpectroscopy(ipw.VBox):
                                  layout=ipw.Layout(width='auto'))
         self.force = ipw.Checkbox(description='Recompute even if compatible vibrational data are available', indent=False,
                                  layout=ipw.Layout(width='auto'))
+        from .retention import FullFileRetention
+        from .property_services import default_stash_directory
+        self.full_files = FullFileRetention(directory=default_stash_directory())
         self.review = ipw.Button(description='Review vibrational calculation', icon='list', button_style='primary', layout=ipw.Layout(width='auto'))
         self.submit = ipw.Button(description='Compute vibrations', icon='play', button_style='success', disabled=True, layout=ipw.Layout(width='auto'))
         self.refresh = ipw.Button(description='Refresh calculations', icon='refresh', layout=ipw.Layout(width='auto'))
@@ -30,12 +34,13 @@ class VibrationalSpectroscopy(ipw.VBox):
         self.previous.observe(self._open, names='value')
         for control in (self.raman, self.force):
             control.observe(self._invalidate, names='value')
+        self.full_files.observe(self._invalidate, names='revision')
         from .presentation import ComputePanel
         self.calculation = ComputePanel('Compute / extend vibrational spectroscopy…', [
             ipw.HTML('<p>Compute harmonic normal modes and IR intensities at this optimized geometry, '
             'optionally with Raman activities. Method, basis, charge, multiplicity and resources are inherited from the reference. '
-            'The Hessian and derivatives are retained in AiiDA.</p>'),
-            self.raman, self.force, self.review, self.submit])
+            'The compact Hessian sections and derivatives are retained in AiiDA.</p>'),
+            self.raman, self.full_files, self.force, self.review, self.submit])
         self.empty = ipw.HTML()
         self._active = True
         super().__init__([ipw.HTML('<h3>Vibrational spectroscopy</h3><p>Normal modes, IR and Raman. '
@@ -56,11 +61,12 @@ class VibrationalSpectroscopy(ipw.VBox):
     def _review(self, event=None):
         self._invalidate()
         try:
-            self.plan = service.prepare(self.source_uuid, raman=self.raman.value, force_recompute=self.force.value)
+            self.plan = service.prepare(self.source_uuid, raman=self.raman.value, force_recompute=self.force.value,
+                                        native_output_policy=self.full_files.values())
             action = ('Reuse verified vibrational data; no ORCA calculation is needed.' if self.plan['reuse_uuid'] else
                       'Submit an independent ORCA analytical-frequency calculation at the selected optimized geometry.')
             warnings = ''.join('<p style="color:#a02020">'+html.escape(w)+'</p>' for w in self.plan['warnings'])
-            self.message.value = '<p><b>'+action+'</b></p>'+warnings+'<details><summary>ORCA input</summary><pre>'+html.escape(self.plan['input_preview'])+'</pre></details>'
+            self.message.value = '<p><b>'+action+'</b></p><p>Full files: '+html.escape(retention_description(self.plan['native_output_policy']))+'. Reused results keep their recorded storage policy.</p>'+warnings+'<details><summary>ORCA input</summary><pre>'+html.escape(self.plan['input_preview'])+'</pre></details>'
             self.submit.disabled = self._running_uuid is not None
         except Exception as exc:
             self._error(exc)

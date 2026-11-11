@@ -103,9 +103,36 @@ def storage_nodes(remote):
         project=['uuid']).order_by({'store': {'ctime': 'desc'}}).all(flat=True)
 
 
+def electronic_base(source, names):
+    """Resolve only the declared subdirectory of a producing native bundle."""
+    stashed = isinstance(source, orm.RemoteStashFolderData)
+    root = PurePosixPath(source.target_basepath if stashed else source.get_remote_path())
+    producer = source.creator
+    if producer is not None and 'native_output_manifest' in producer.outputs:
+        from .native_logs import validate_manifest
+        manifest = validate_manifest(producer.outputs.native_output_manifest.get_dict())
+        if set(names).issubset({item['name'] for item in manifest['files']}):
+            return root / manifest['directory']
+    return root / 'electronic' if stashed else root
+
+
 def resolve_electronic(remote, names=ELECTRONIC_FILES):
     """Prefer validated durable copies; retain only plain identifiers in callers."""
     from .reference import check_wavefunction, ArtifactUnavailable
+    producer = remote.creator
+    if producer is not None and 'native_output_manifest' in producer.outputs:
+        from .native_logs import validate_manifest
+        manifest = validate_manifest(producer.outputs.native_output_manifest.get_dict())
+        selected = [item for item in manifest['files'] if item['name'] in names]
+        if set(names) == {item['name'] for item in selected}:
+            stashed = manifest['policy']['mode'] == 'stash'
+            location = producer.outputs.remote_stash if stashed else remote
+            base = location.target_basepath if stashed else location.get_remote_path()
+            path = str(PurePosixPath(base) / manifest['directory'])
+            remote_files(location.computer, path, names=names,
+                         expected={item['name']: item['size_bytes'] for item in selected})
+            return {'kind': 'stash' if stashed else 'remote', 'uuid': str(location.uuid),
+                    'path': path, 'files': selected}
     unavailable = None
     for uuid in storage_nodes(remote):
         try:

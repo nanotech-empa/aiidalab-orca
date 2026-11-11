@@ -53,6 +53,7 @@ def seed(aiida_profile_clean, aiida_localhost, tmp_path):
 def test_every_new_reference_workflow_enables_character_by_default(aiida_profile, cls):
     assert cls.spec().inputs['character_enabled'].default().value is True
     assert cls.spec().inputs['character_memory_gib'].default().value == 8
+    assert cls.spec().inputs['character_wallclock_seconds'].default().value == 1800
 
 
 @pytest.mark.parametrize('disabled,reuse,state', [(True, False, 'disabled'), (False, True, 'reused_reference')])
@@ -81,7 +82,7 @@ def test_failed_export_is_a_child_and_does_not_fail_electronic_reference(seed, a
     export = orm.InstalledCode(computer=aiida_localhost, filepath_executable='/bin/false').store()
     helper = orm.InstalledCode(computer=aiida_localhost, filepath_executable='/bin/true').store()
     outputs, node = engine.run_get_node(CharacterHarness, **seed,
-        character_export_code=export, character_helper_code=helper)
+        character_export_code=export, character_helper_code=helper, character_wallclock_seconds=orm.Int(600))
     assert node.is_finished_ok
     report = outputs['pdos_status'].get_dict()
     assert report['sets']['SCF']['state'] == 'failed'
@@ -90,6 +91,7 @@ def test_failed_export_is_a_child_and_does_not_fail_electronic_reference(seed, a
     assert child.inputs.identity['source_uuid'] == str(node.uuid)
     assert child.inputs.structure.uuid == outputs['structure'].uuid
     assert child.get_option('resources')['num_mpiprocs_per_machine'] == 1
+    assert child.get_option('max_wallclock_seconds') == 600
     assert outputs['retrieved'].uuid == seed['retrieved'].uuid
 
 
@@ -103,11 +105,26 @@ def test_code_discovery_filters_computer_and_hidden_workers(aiida_profile_clean,
     plan = workflow.default_plan(aiida_localhost.uuid)
     assert plan['ready'] and plan['export_uuid'] == str(export.uuid) and plan['helper_uuid'] == str(helper.uuid)
     assert plan['memory_gib'] == 8
+    assert plan['wallclock_seconds'] == 1800
     b = ReferenceWorkChain.get_builder()
     workflow.configure(b, plan)
     assert b.character_enabled.value and b.character_export_code.uuid == export.uuid
+    short = workflow.default_plan(aiida_localhost.uuid, wallclock_seconds=600)
+    workflow.configure(b, short)
+    assert b.character_wallclock_seconds.value == 600
 
 
 def test_invalid_analysis_memory_is_rejected_before_submission():
     with pytest.raises(ValueError, match='memory'):
         workflow.default_plan('unused', enabled=False, memory_gib=0)
+
+
+@pytest.mark.parametrize('seconds', [0, 59, 604801, True, 600.0, '600'])
+def test_invalid_analysis_walltime_is_rejected_before_submission(seconds):
+    with pytest.raises(ValueError, match='wall time'):
+        workflow.default_plan('unused', enabled=False, wallclock_seconds=seconds)
+
+
+@pytest.mark.parametrize('seconds', [60, 600, 604800])
+def test_analysis_walltime_has_an_editable_one_minute_lower_bound(seconds):
+    assert workflow.default_plan('unused', enabled=False, wallclock_seconds=seconds)['wallclock_seconds'] == seconds

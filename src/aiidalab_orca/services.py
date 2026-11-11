@@ -47,7 +47,7 @@ def validate_configuration(atoms, settings, optimize):
 
 
 def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *, atoms=None, imported=None,
-            storage=None, pdos=True, pdos_memory_gib=8):
+            storage=None, pdos=True, pdos_memory_gib=8, pdos_wallclock_seconds=1800):
     if atoms is not None:
         structure = orm.StructureData(ase=atoms)
     elif source_uuid.strip():
@@ -78,7 +78,8 @@ def prepare(xyz, source_uuid, settings, code_uuid, optimize, force_recompute, *,
         from .property_services import helper_code
         storage['code_uuid'] = helper_code(code.computer.uuid)
     from aiida_empa_orca.pdos_workflow import default_plan
-    character = default_plan(code.computer.uuid, enabled=pdos, memory_gib=pdos_memory_gib)
+    character = default_plan(code.computer.uuid, enabled=pdos, memory_gib=pdos_memory_gib,
+                             wallclock_seconds=pdos_wallclock_seconds)
     if atoms is not None:
         from .structure_io import store_reviewed_structure
         structure = orm.load_node(store_reviewed_structure(atoms, source_uuid, imported))

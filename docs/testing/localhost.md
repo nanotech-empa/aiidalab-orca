@@ -38,7 +38,9 @@ to install packages or configure computers from this test.
    multiplicity **2**. Leave constraints empty. Confirm settings.
 4. In Step 3 choose the local ORCA code, **2 processes**, **2 GiB**, **10 minutes**.
    Keep **Compute PDOS / orbital character** enabled; set **PDOS resources** to
-   **2 GiB**. Review full-file retention and the 5 MiB output threshold.
+   **2 GiB** and **PDOS wall time (minutes) = 10**. Review must show a ten-minute
+   limit for ORCA and a separate ten-minute limit for PDOS. Review full-file
+   retention and the 5 MiB output threshold.
 5. Set label `<prefix>-L01 allyl geometry + PDOS`. Enable **Recompute even if a
    compatible result is available** for this first submission, so an old result
    cannot replace the new-code test.

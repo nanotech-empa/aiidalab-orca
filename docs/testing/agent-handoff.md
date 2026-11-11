@@ -23,6 +23,11 @@ guess an internal URL or operate a different installation.
 > and submit this one L01 workflow; do not request the same authorization again
 > unless the actual plan exceeds these limits.
 >
+> Set **PDOS resources → PDOS wall time (minutes) = 10** as well as the main
+> ORCA wall time. Check both values in review. An older app exposing only PDOS
+> memory cannot meet this handoff; preserve its draft and open an updated app
+> session from the homepage rather than submitting the old thirty-minute plan.
+>
 > Do not execute Remote CPU, Remote QPU, openBIS publication or XPS. Do not alter
 > installations, source, profiles, credentials or existing research jobs. Preserve
 > other browser drafts. If the UI differs, a prerequisite is missing, validation

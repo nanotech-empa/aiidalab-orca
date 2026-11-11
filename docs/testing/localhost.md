@@ -242,7 +242,12 @@ many-electron energies, not KS orbital energies. No Hamiltonian export is needed
 1. Open **4. Dyson spectrum** for the original L06/L07 orbital branch. Select
    neutral doublet **root 0**, **Removal and addition**, and all computed
    compatible final singlet/triplet states from L07. Check shared reference IDs.
-2. Review and **Compute Dyson transitions** with the existing norm-loss tolerance.
+2. Under **Dyson validation, resources and codes**, set **Dyson processes = 1**,
+   2 GiB and 10 minutes. Set **State-export resources · serial** to 2 GiB and
+   10 minutes too. Keep **Leave full files / maxsizeoutput 5 MiB** and the
+   existing norm-loss tolerance **1e−5**. Review must show exports running one
+   at a time, followed by the Dyson evaluation, with these per-job budgets.
+   Review and **Compute Dyson transitions** once. Wait for the whole workflow.
    Do not change a failed export/CI tolerance to make it pass.
 3. Inspect the transition table, spectrum and default **Spin averaged ·
    unpolarized** convention. Switch to the stored highest-spin component if
@@ -252,15 +257,26 @@ many-electron energies, not KS orbital energies. No Hamiltonian export is needed
    is independent of the energy-diagram zero. Counts/line merging must not lose
    individual transition identities.
 5. Generate amplitude cubes for **one removal and one addition transition**,
-   80 grid points/axis, full cubes **Leave**. Inspect both reduced previews.
+   80 grid points/axis, full cubes **Leave**. Under **Cube resources**, set
+   2 GiB and 10 minutes; verify 1 process in the review. Inspect both reduced
+   previews after completion.
 6. For one chosen spectral maximum use **Prepare spectral map at this peak**.
    Inspect the complete contributing transition set before requesting any
    additional cubes. Retain full cubes needed by the map; submit stages serially.
-7. Keep the default observation plane **1.5 Å above the highest atomic z**, normal
-   to +z, if exposed; otherwise set and record that plane through the slice/map
-   controls. This convention is molecular and does not establish a real surface.
-8. Compute the map, then use **Figure appearance / export → Render shared-scale
-   figure** and inspect **Stored figures**. Record numerical-map and figure UUIDs.
+7. Use the source plane **1.5 Å above the highest atomic z**, normal to +z,
+   through the reset or slice controls. For this first map set **Observation
+   heights (Å) = 1.5** too: these heights are measured from the same highest-z
+   reference, not added above the source slice. The GUI normally starts with
+   observation heights 5 and 7 Å. Record the chosen plane; this convention is
+   molecular and does not establish a real surface.
+8. Set **Map resources** to 2 GiB / 10 minutes; review, then compute one map.
+   After it finishes, use **Figure appearance / export → Figure resources**
+   with the same budget, **Review shared-scale figure → Render shared-scale
+   figure**, and inspect **Stored figures**. Both jobs are serial, 1 process.
+   Changing memory/wall time must invalidate the corresponding review; repeated
+   Submit must not duplicate a job. A second stage for the same orbital
+   reference is blocked while one remains active, also after reopening the GUI.
+   Record numerical-map and figure UUIDs.
 
 **PASS:** transitions obey the displayed single-electron spin compatibility,
 weights/conventions remain explicit, and plots/maps use the selected endpoints

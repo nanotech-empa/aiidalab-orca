@@ -12,6 +12,7 @@ import io
 from aiida_empa_orca.maps_data import default_plane, plane_basis
 from . import map_services as service
 from .property_services import preview_content
+from .helper_budget import HelperBudget
 
 
 class DysonMaps(ipw.VBox):
@@ -19,6 +20,12 @@ class DysonMaps(ipw.VBox):
         self.cube_uuid, self.spectrum, self.code_uuid = str(cube_uuid), spectrum, code_uuid
         self.viewer, self.plan, self.map_uuid = None, None, None
         self._task, self._disposed, self._plane_controls = None, False, []
+        self.figure_plan=None
+        self.map_budget,self.figure_budget=HelperBudget(),HelperBudget()
+        self.map_resources=ipw.Accordion(children=[self.map_budget],selected_index=None)
+        self.map_resources.set_title(0,'Map resources')
+        self.figure_resources=ipw.Accordion(children=[self.figure_budget],selected_index=None)
+        self.figure_resources.set_title(0,'Figure resources')
         self.source = service.source_data(cube_uuid)
         self.kondo = self.source.get('table_input') == 'channels'
         amplitudes = [c for c in self.source['manifest']['cubes'] if c['kind'] == ('kondo' if self.kondo else 'dyson')]
@@ -54,7 +61,9 @@ class DysonMaps(ipw.VBox):
         self.rotation = ipw.Dropdown(options=[0, 90, 180, 270], description='Panel rotation (°)', style=style)
         self.range_button = ipw.Button(description='Use full map range (shared)', icon='arrows-v', layout=ipw.Layout(width='auto'))
         self.range_button.on_click(self._range)
-        self.render = ipw.Button(description='Render shared-scale figure', icon='image', button_style='primary', layout=ipw.Layout(width='auto'))
+        self.figure_review=ipw.Button(description='Review shared-scale figure',icon='list',layout=ipw.Layout(width='auto'))
+        self.figure_review.on_click(self._review_figure)
+        self.render = ipw.Button(description='Render shared-scale figure', icon='image', button_style='primary',disabled=True, layout=ipw.Layout(width='auto'))
         self.render.on_click(self._render)
         self.figures = ipw.Dropdown(description='Stored figures', style=style, layout=ipw.Layout(width='95%'))
         self.figures.observe(self._open_figure, names='value')
@@ -64,7 +73,7 @@ class DysonMaps(ipw.VBox):
         self.appearance = ComputePanel('Figure appearance / export…', [
             ipw.HBox([self.vmin, self.vmax], layout=ipw.Layout(flex_flow='row wrap')),
             self.range_button, ipw.HBox([self.cmap, self.rotation], layout=ipw.Layout(flex_flow='row wrap')),
-            ipw.HBox([self.dpi, self.bar], layout=ipw.Layout(flex_flow='row wrap')), self.render])
+            ipw.HBox([self.dpi, self.bar], layout=ipw.Layout(flex_flow='row wrap')), self.figure_resources,self.figure_review,self.render])
         self.figure_box = ipw.VBox([self.figures, ipw.HTML('<p><b>Shared intensity scale</b> · every panel uses the same explicit limits. '
             'Numerical intensities are preserved without normalization. Change the limits to reveal faint features; '
             'all panels change together.</p>'), self.download, self.image, self.appearance, self.load_settings, self.details])
@@ -77,11 +86,14 @@ class DysonMaps(ipw.VBox):
             self.selection, self.kind, self.heights, ipw.HBox([self.kappa, self.padding], layout=ipw.Layout(flex_flow='row wrap')),
             ipw.HTML('<p>Each map shows one normalized Kondo eigenchannel. Exchange couplings identify AFM/FM channels; they are not spectral intensities. No NRG-based combined map is inferred.</p>' if self.kondo else '<p>Blends use the energy/window, broadening and spin convention selected in the spectral viewer. '
                      'Individual maps use its spin convention. The model produces STM-like intensities, without absolute current calibration.</p>'),
-            self.review, self.compute])
+            self.map_resources,self.review, self.compute])
         self.empty = ipw.HTML()
         super().__init__([self.previous,self.empty,self.figure_box,self.calculation,self.message])
         for w in (self.selection, self.kind, self.heights, self.kappa, self.padding):
             w.observe(self.invalidate, names='value')
+        self.map_budget.observe(self.invalidate,names='revision')
+        self.figure_budget.observe(self._invalidate_figure,names='revision')
+        for field in (self.vmin,self.vmax,self.cmap,self.rotation,self.dpi,self.bar):field.observe(self._invalidate_figure,names='value')
         self.bind_viewer(viewer, preserve=False)
         self._refresh()
 
@@ -143,28 +155,31 @@ class DysonMaps(ipw.VBox):
         self.message.value = '<p style="color:#a02020">'+html.escape(str(exc))+'</p>'
 
     def _review(self, _=None):
+        if self._task:return
         self.invalidate()
         try:
-            self.plan = service.prepare_maps(self.cube_uuid, self._parameters(), self.code_uuid)
+            self.plan = service.prepare_maps(self.cube_uuid, self._parameters(), self.code_uuid,resources=self.map_budget.values())
             self.message.value = ('<p><b>Reuse stored numerical maps.</b></p>' if self.plan['action'] == 'reuse' else
                 '<p><b>Submit numerical maps from full-resolution amplitude cubes.</b> No SCF, CASCI or Dyson coefficients are recomputed. '
-                'The numerical arrays and complete settings will be stored in AiiDA.</p>')
+                'The numerical arrays and complete settings will be stored in AiiDA. '+self.map_budget.summary()+'.</p>')
             self.compute.disabled = self._task is not None
         except Exception as exc:
             self._error(exc)
 
     def _submit(self, _=None):
-        if not self.plan or self.compute.disabled:
+        if not self.plan or self.compute.disabled or self._task:
             return
+        plan=self.plan
+        self.invalidate()
         try:
-            uuid = service.submit_maps(self.plan)
-            self.invalidate()
+            uuid = service.submit_maps(plan)
             self._start(uuid, 'maps')
         except Exception as exc:
             self._error(exc)
 
     def _start(self, uuid, kind):
         self.compute.disabled = self.render.disabled = self.review.disabled = True
+        self.figure_review.disabled=True
         if kind == 'figure':
             self.image.value, self.download.value = b'', ''
             self.image.layout.display = 'none'
@@ -191,7 +206,8 @@ class DysonMaps(ipw.VBox):
             self._error(exc)
         finally:
             self._task = None
-            self.render.disabled = self.review.disabled = False
+            self.review.disabled = self.figure_review.disabled = False
+            self.render.disabled = self.figure_plan is None
             self.compute.disabled = self.plan is None
 
     def _refresh(self, selected=None):
@@ -210,6 +226,7 @@ class DysonMaps(ipw.VBox):
                 if not self._task:
                     self._start(change['new'], 'maps')
                 return
+            self._invalidate_figure()
             self.map_uuid = str(change['new'])
             result = service.map_result(self.map_uuid)
             self.map_metadata = result['metadata']
@@ -246,16 +263,30 @@ class DysonMaps(ipw.VBox):
             self.spectrum.eta.value, self.spectrum.shift.value = b['eta_ev'], b['shift_ev']
         self.invalidate()
 
-    def _render(self, _=None):
-        if not self.map_uuid or self._task:
-            return
+    def _invalidate_figure(self,_=None):
+        self.figure_plan=None
+        self.render.disabled=True
+
+    def _review_figure(self,_=None):
+        if not self.map_uuid or self._task:return
+        self._invalidate_figure()
         try:
-            settings = dict(vmin=self.vmin.value, vmax=self.vmax.value, cmap=self.cmap.value, dpi=self.dpi.value,
-                            scale_bar_angstrom=self.bar.value, rotation=self.rotation.value)
-            uuid = service.submit_figure(self.map_uuid, settings, self.code_uuid)
-            self._start(uuid, 'figure')
-        except Exception as exc:
-            self._error(exc)
+            settings=dict(vmin=self.vmin.value,vmax=self.vmax.value,cmap=self.cmap.value,dpi=self.dpi.value,
+                          scale_bar_angstrom=self.bar.value,rotation=self.rotation.value)
+            self.figure_plan=service.prepare_figure(self.map_uuid,settings,self.code_uuid,resources=self.figure_budget.values())
+            action='Reuse stored figure.' if self.figure_plan['action']=='reuse' else 'Render shared-scale figure: '+self.figure_budget.summary()+'.'
+            self.message.value='<p><b>'+html.escape(action)+'</b></p>'
+            self.render.disabled=False
+        except Exception as exc:self._error(exc)
+
+    def _render(self, _=None):
+        if not self.map_uuid or self._task or not self.figure_plan or self.render.disabled:return
+        plan=self.figure_plan
+        self._invalidate_figure()
+        try:
+            uuid=service.submit_figure_plan(plan)
+            self._start(uuid,'figure')
+        except Exception as exc:self._error(exc)
 
     def _refresh_figures(self, selected=None):
         result = service.map_result(self.map_uuid)

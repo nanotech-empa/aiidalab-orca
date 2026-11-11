@@ -200,3 +200,21 @@ reopened their results in the shared EMPA viewer, switched both spin conventions
 changed broadening, and reviewed explicit reuse. App-discovery audits and
 `pip check` pass. This is execution and internal-consistency evidence, not a
 converged NO spectrum or reproduction of the pentacene publication.
+
+
+## Execution budgets
+
+Dyson evaluation, state exports and amplitude cubes have separate reviewed
+memory/wall-time controls. New GUI budgets start at 2 GiB and 10 minutes, with
+one Dyson process. State exports run one at a time in the parent AiiDA workflow,
+then Dyson evaluation begins only after all exports succeed. Closing the GUI
+does not interrupt this queue. Any failed export stops the pipeline; it never
+repeats SCF/CASCI or loosens CI/norm-loss checks automatically.
+
+Numerical maps and shared-scale figures have their own resource controls and
+reviews. Each helper CalcJob is serial. Budget edits invalidate its review;
+submissions consume reviews before sending them. A source-reference busy check
+prevents overlapping Dyson/export/cube/map/figure stages, including from a new
+GUI session. Stored results can still be inspected without submitting a stage.
+These controls change execution only; retained data and scientific conventions
+remain as documented above.

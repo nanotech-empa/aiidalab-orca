@@ -421,3 +421,14 @@ energy value. The export boundary is data already stored in AiiDA: remote/stash
 references do not include external file contents. Do not retrieve or regenerate
 files to make an export appear complete. Future schema changes must update the
 normative openBIS document and its code/models before any reviewed deployment.
+
+
+For Dyson execution, review the main and **State-export resources · serial**
+budgets separately. Exports form a daemon-owned serial queue before Dyson
+processing. Cube, map and figure helpers have separate resource controls and
+reviews, initially 2 GiB / 10 minutes. Use one process for the localhost GUI test.
+A budget edit invalidates review; a still-active analysis stage blocks another
+submission for the same orbital reference, including after reopening the page.
+The CI/norm-loss tolerance is scientific validation, not an execution budget:
+never relax it to make a resource or export failure pass. Follow L08 in the full
+GUI guide and stop before L09 unless separately authorized.

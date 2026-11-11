@@ -32,6 +32,14 @@ guess an internal URL or operate a different installation.
 > Record observed settings, submitted UUID, result and useful screenshot/download
 > references in a private report. Wait using the app's refresh controls. After
 > L01, stop and show me the result before continuing.
+>
+> At the end of each completed case, record how to reopen its results in the
+> existing report or chat, then close browser tabs belonging only to that case,
+> including temporary image/export views and superseded ORCA sessions. Verify
+> the remaining tabs before continuing. Keep tabs needed for active tests,
+> unsaved drafts, job monitoring or pending user review, and preserve unrelated
+> tabs. State why any completed-test tab is retained. Do not cancel jobs or
+> shut down kernels as part of tab cleanup.
 
 ## Continue later
 

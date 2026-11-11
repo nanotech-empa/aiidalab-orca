@@ -82,6 +82,8 @@ or a reason. Add separate rows for subcases and individual remote requests.
 - Screenshot/download references (private):
 - Separate maintainer read-only verification, if performed:
 - Outcome and dependent cases stopped:
+- How to reopen results (entry point and UUIDs):
+- Completed-test tabs closed; any retained test tabs and why:
 
 ## Handoff / release assessment
 

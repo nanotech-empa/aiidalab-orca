@@ -9,6 +9,17 @@ authorize every calculation it describes.
 The first observed Desktop/Chrome run should execute **L00 and L01 only**, then
 stop for review. Use [the agent handoff](agent-handoff.md) to start it.
 
+## Close completed-test tabs
+
+After each completed case, record its outcome, UUIDs and how to reopen it in
+the existing report or chat, then close browser tabs belonging only to that
+case. Include temporary image/export tabs and superseded ORCA sessions. Reuse
+the current session for the next case when appropriate. Keep tabs needed by
+active tests, unsaved drafts, job monitoring or pending user review; preserve
+unrelated tabs. Check the remaining tabs before continuing and state why any
+completed-test tab is retained. Closing a tab must not cancel a job or shut
+down a kernel. This housekeeping does not require creating another report.
+
 ## Choose the scope
 
 | Section | Default? | Execution and authorization |

@@ -56,6 +56,12 @@ def workflow_guides():
         'source': 'aiidalab_orca/knowledge/correlation.md',
         'text': files('aiidalab_orca').joinpath('knowledge/correlation.md').read_text(),
     }, {
+        'id': 'orca.dmrg',
+        'title': 'Native Block2 DMRG: singlets, convergence and checkpoints',
+        'topics': ['orca', 'dmrg', 'block2', 'fcidump', 'checkpoint', 'bond dimension', 'mps'],
+        'source': 'aiidalab_orca/knowledge/dmrg.md',
+        'text': files('aiidalab_orca').joinpath('knowledge/dmrg.md').read_text(),
+    }, {
         'id': 'orca.vibrations',
         'title': 'ORCA harmonic IR/Raman geometry selection',
         'topics': ['orca', 'ir', 'raman', 'vibrations', 'frequencies', 'hessian'],

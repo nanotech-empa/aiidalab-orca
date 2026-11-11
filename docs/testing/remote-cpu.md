@@ -64,10 +64,8 @@ renew expired authentication instead of changing SSH identities.
 
 ## R04 — DMRG and further remote methods
 
-The standard GUI currently has no general DMRG submission route. Record this
-as **BLOCKED** if remote DMRG browser acceptance is requested. Terminal-submitted
-WorkChains are separate evidence; see [DMRG rules](../dmrg.md). Preserve active
-research jobs and do not play historical jobs with full-MPS retrieval plans.
-
-Other local cases may be repeated remotely only when their IDs, helpers and
-budgets have been explicitly authorized. This section grants no blanket HPC run.
+The native DMRG workspace can select a configured Block2 computer, but the
+current local campaign authorizes only the [localhost cases](dmrg-localhost.md).
+Remote DMRG requires a separately named computer, resources and cases. Never
+move a local failure to HPC implicitly. Preserve old research checkpoints;
+[restart rules](../dmrg.md) remain applicable.

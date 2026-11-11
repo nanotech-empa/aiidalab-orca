@@ -62,7 +62,11 @@ or a reason. Add separate rows for subcases and individual remote requests.
 | L16 TDDFT/triplet controls | NOT RUN | | |
 | L17 Water/MP2 core controls | NOT RUN | | |
 | L18 Ideal simulator/energy comparison | NOT RUN | | |
-| L18-DMRG GUI coverage | NOT RUN | | |
+| L20A DMRG entry/guards | NOT RUN | | |
+| L20B DMRG analytic ground | NOT RUN | | |
+| L20C DMRG singlet roots | NOT RUN | | |
+| L20D DMRG restart/summary | NOT RUN | | |
+| L21 DMRG molecular export | NOT RUN | | |
 | L19 Output policy/reopening | NOT RUN | | |
 | L19-STASH optional local stash | NOT RUN | | |
 | R01–R04, separate rows if authorized | NOT RUN | | |

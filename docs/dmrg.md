@@ -6,6 +6,18 @@ and one or three roots. It does not optimize the orbitals. Hamiltonian identity,
 root densities, saved-state expectations and individual-root sweep convergence
 are checked independently of convergence with bond dimension.
 
+## Browser entry and local qualification
+
+Use **Native DMRG** in the main app, or **Choose energy solver → Native DMRG**
+after confirming a supported molecular active space. The form accepts an explicit
+FCIDUMP upload/data UUID or a completed validated exported-model UUID. New
+external Hamiltonians use the shared immutable descriptor/staging contract;
+integrals stay outside the AiiDA repository. Historical SinglefileData callers
+remain supported. Review/submission and each continuation are separate actions.
+See [the GUI guide and scientific checks](testing/dmrg-localhost.md) and the
+packaged `orca.dmrg` assistant guide. The analytic control does not establish
+large-system convergence. Runtime installation/registration belongs to setup.
+
 ## Storage and restart
 
 New jobs leave full MPS checkpoints and the complete native output in their
@@ -48,3 +60,13 @@ and expectation checks, no MPS files in retrieved, and a same-computer remote
 copy in the continuation. An explicit forced-summary control also checks the
 output-size policy. Sweep convergence at fixed M is required before increasing
 M; exhausting the extension budget stops with the retained checkpoint.
+
+## Native runtime helper
+
+Run `python scripts/check_dmrg_runtime.py` with the intended Block2 interpreter
+(or provide `--executable` for its exact launcher). It reads distribution metadata
+and hashes the owned launcher without importing Block2, running a calculation,
+opening an AiiDA profile or installing/registering anything. `METADATA_OK` is
+only a packaging prerequisite. Record the official wheel/tag checksum separately;
+a matching version string does not establish artifact identity, ABI compatibility
+or a successful native run. Actual L20/L21 browser results supply that evidence.

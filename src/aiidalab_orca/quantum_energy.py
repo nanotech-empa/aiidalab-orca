@@ -8,6 +8,8 @@ import ipywidgets as ipw
 
 from . import casci_services, energy_services as service
 from .energy_route import assess_space, STAGE_LABELS
+from .retention import FullFileRetention, description as retention_description
+from .property_services import default_stash_directory
 
 
 def text_control(label, value):
@@ -85,6 +87,7 @@ class QuantumEnergy(ipw.VBox):
             if basis in ("def2-SVP", "def2-TZVP", "def2-TZVPP")
             else "AutoAux",
         )
+        self.full_files = FullFileRetention(directory=default_stash_directory())
         self.times = text_control("Evolution times (Hartree⁻¹)", "1.0")
         self.initial_alpha = text_control(
             "Initial α occupied orbitals (ORCA indices)", ""
@@ -245,6 +248,7 @@ class QuantumEnergy(ipw.VBox):
                         ),
                     ],
                 ),
+                self.full_files,
                 action("Review Hamiltonian export", "export"),
                 self.model,
                 ipw.HTML(
@@ -369,6 +373,7 @@ class QuantumEnergy(ipw.VBox):
             self.minutes,
         ):
             control.observe(self._invalidate, names="value")
+        self.full_files.observe(self._invalidate, names='revision')
         self.code.observe(self._review_current, names="value")
         self.mode.observe(
             lambda _: setattr(
@@ -467,6 +472,7 @@ class QuantumEnergy(ipw.VBox):
                         "wallclock_seconds": resources["wallclock_seconds"],
                     },
                     self.code.value,
+                    native_output_policy=self.full_files.values(),
                 )
             else:
                 if not self.model.value:
@@ -605,6 +611,14 @@ class QuantumEnergy(ipw.VBox):
                 + rows
                 + "</table>"
             )
+            if self._operation == 'export':
+                self.review.value += '<p>Full files: ' + html.escape(retention_description(self._plan['native_output_policy'])) + '.</p>'
+            transfer = self._plan.get('hamiltonian_transfer')
+            if transfer:
+                self.review.value += ('<p>The Hamiltonian stays outside the AiiDA repository. ' +
+                    ('A temporary transfer from ' + html.escape(transfer['source_computer']) +
+                     f" to this worker needs {transfer['size_bytes'] / 1024**2:.2f} MiB of local staging space."
+                     if transfer['temporary_relay'] else 'It is copied directly on this calculation computer.') + '</p>')
             if self._plan.get("model_description"):
                 model = self._plan["model_description"]
                 self.review.value += (

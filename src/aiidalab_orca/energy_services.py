@@ -9,6 +9,9 @@ from aiida_empa_orca.energy import (
     worker_manifest,
 )
 from . import casci_services
+from .property_services import helper_code
+from aiida_empa_orca.native_logs import output_policy
+from aiida_empa_orca.energy_storage import hamiltonian_location
 from .energy_route import (
     review_budget,
     STAGE_LABELS,
@@ -54,7 +57,7 @@ def resources(operation):
     )
 
 
-def prepare_export(reference_uuid, space, values, worker_uuid):
+def prepare_export(reference_uuid, space, values, worker_uuid, *, native_output_policy=None):
     node = orm.load_node(reference_uuid)
     reference = casci_services.reference_data(reference_uuid)
     space = casci.active_space(space, reference)
@@ -72,6 +75,8 @@ def prepare_export(reference_uuid, space, values, worker_uuid):
     common_orbitals.reference_location(node)
     return {
         "operation": "export",
+        "native_output_policy": output_policy(native_output_policy),
+        "helper_uuid": helper_code(node.inputs.code.computer.uuid),
         "reference_uuid": str(reference_uuid),
         "space": space,
         "settings": settings,
@@ -130,7 +135,7 @@ def stages(model_uuid, operation, sector=None):
     ids = (
         orm.QueryBuilder()
         .append(
-            orm.SinglefileData,
+            orm.Data,
             filters={"uuid": str(model.outputs.hamiltonian.uuid)},
             tag="model",
         )
@@ -201,6 +206,13 @@ def prepare_stage(
             "Review positive CPU resources and at least 256 MiB per process"
         )
     native = model.outputs.native_export.get_dict()
+    transfer = None
+    if isinstance(model.outputs.hamiltonian, orm.Dict):
+        location = hamiltonian_location(model.outputs.hamiltonian)
+        remote = orm.load_node(location['uuid'])
+        transfer = {'temporary_relay': remote.computer.uuid != code.computer.uuid,
+                    'size_bytes': model.outputs.hamiltonian.get_dict()['size_bytes'],
+                    'source_computer': remote.computer.label}
     sector = dict(
         sector or {"charge": native["charge"], "ms2": native["multiplicity"] - 1}
     )
@@ -259,6 +271,7 @@ def prepare_stage(
         hardware_review = prepared.outputs.result.get_dict()["hardware_plan"]
     return {
         "operation": operation,
+        "hamiltonian_transfer": transfer,
         "model_uuid": str(model_uuid),
         "settings": dict(settings),
         "code_uuid": str(code_uuid),
@@ -282,7 +295,8 @@ def prepare_stage(
 def builder(plan):
     if plan["operation"] == "export":
         checked = prepare_export(
-            plan["reference_uuid"], plan["space"], plan["settings"], plan["worker_uuid"]
+            plan["reference_uuid"], plan["space"], plan["settings"], plan["worker_uuid"],
+            native_output_policy=plan.get('native_output_policy')
         )
         if checked != plan:
             raise ValueError("Export context changed; review it again")
@@ -300,6 +314,8 @@ def builder(plan):
             node.inputs.code,
             orm.load_code(plan["worker_uuid"]),
         )
+        result.compact_code = orm.load_code(plan['helper_uuid'])
+        result.native_output_policy = orm.Dict(dict=plan['native_output_policy'])
         result.metadata.label = "Active-space Hamiltonian export · no full CASCI"
         return result
     checked = prepare_stage(

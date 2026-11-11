@@ -74,6 +74,18 @@ recorded separately. The native inactive/nuclear scalar is included once.
 Native energy reconstruction must pass before use. Keep a suitable correlation
 auxiliary basis and the same RI/core convention when comparing with ORCA.
 
+Review **Full files** before export: leave full files on the calculation
+computer, or stash them there. New Hamiltonian outputs are external-file
+descriptors with checksums, not retrieved integral files. Old repository-backed
+Hamiltonians remain usable. Subsequent worker stages copy the same file locally
+on its Computer or use a checksum-verified temporary relay between Computers;
+the relay is excluded from the AiiDA input repository. Review shows the size
+when local staging is needed. Missing/altered files and insufficient temporary
+space block the stage without changing the Hamiltonian or restarting ORCA.
+Use stash/durable remote storage before real-hardware work: even later request
+retrieval needs its Hamiltonian. Restore missing files; never resubmit a QPU job
+merely to work around storage loss.
+
 **Charge and spin.** Choose these at stage 2; changing them reuses the same
 fixed-orbital Hamiltonian and selects compatible circuits/samples. The minimum
 multiplicity sets Ms through 2Ms = multiplicity − 1. It does not constrain every

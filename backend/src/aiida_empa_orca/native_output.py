@@ -17,7 +17,7 @@ def compact_spec(spec):
     spec.output('native_output_manifest', valid_type=orm.Dict, required=False)
 
 
-def prepare_compact(info, inputs, folder, protocol):
+def prepare_compact(info, inputs, folder, protocol, *, extra_request=None):
     """Keep executable arguments/inputs intact; redirect stdout before collection."""
     if 'compact_code' not in inputs:
         raise ValueError('Configure the ORCA tools runtime before submitting compact native output')
@@ -34,12 +34,15 @@ def prepare_compact(info, inputs, folder, protocol):
         raise ValueError('Native executable outputs differ from the collection protocol')
     folder.get_subfolder(DIRECTORY, create=True)
     with folder.open('native_output_request.json', 'w') as handle:
-        json.dump({'protocol': protocol, 'policy': policy}, handle)
+        json.dump({**(extra_request or {}), 'protocol': protocol, 'policy': policy}, handle)
     with folder.open('compact_output.py', 'w') as handle:
         handle.write(files('aiida_empa_orca').joinpath('native_logs.py').read_text())
     if protocol in ('scf-v1', 'optimization-v1'):
         with folder.open('compact_scf.py', 'w') as handle:
             handle.write(files('aiida_empa_orca').joinpath('compact_scf.py').read_text())
+    if protocol == 'energy-export-v1':
+        with folder.open('compact_energy.py', 'w') as handle:
+            handle.write(files('aiida_empa_orca').joinpath('energy_files.py').read_text())
     for code in info.codes_info:
         code.stdout_name = DIRECTORY + '/' + code.stdout_name
     compact = common.CodeInfo()

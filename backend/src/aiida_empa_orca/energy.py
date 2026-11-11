@@ -14,59 +14,13 @@ from aiida.parsers import Parser
 from aiida_orca.calculations.orca_orca import OrcaCalculation
 
 from . import casci, common_orbitals
+from .energy_files import portable_fcidump
+from .native_output import compact_spec, prepare_compact, read_manifest
+from .native_logs import output_policy
+from .artifacts import stash_options
+from .energy_storage import hamiltonian_identity, stage_hamiltonian
 
 PROTOCOL = "quantum-energy/v1"
-
-
-def portable_fcidump(raw, electrons, multiplicity):
-    """Keep all integral records verbatim; explicitly declare the target Ms.
-
-    ORCA 6.1.1's tested DumpActInts output writes MS2=0 for open shells too.
-    The target sector comes from the checked export input/output, never from
-    the spin used to generate the starting orbitals. The raw file is retained.
-    """
-    header_end = re.search(rb"(?im)^\s*(?:&END|/)\s*$", raw)
-    if header_end is None:
-        raise ValueError("The native FCIDUMP header is incomplete")
-    header = raw[: header_end.end()]
-
-    def number(key):
-        values = re.findall(rb"\b" + key + rb"\s*=\s*([+-]?\d+)", header, re.I)
-        if len(values) != 1:
-            raise ValueError("Missing or ambiguous native header " + key.decode())
-        return int(values[0])
-
-    if number(b"NELEC") != electrons:
-        raise ValueError(
-            "Native FCIDUMP electron count differs from the checked export"
-        )
-    norb, original = number(b"NORB"), number(b"MS2")
-    unpaired = multiplicity - 1
-    if (
-        type(electrons) is not int
-        or type(multiplicity) is not int
-        or multiplicity < 1
-        or (electrons - unpaired) % 2
-        or unpaired > min(electrons, 2 * norb - electrons)
-        or original not in (0, unpaired)
-    ):
-        raise ValueError("Native/target electron and spin sectors are inconsistent")
-    corrected = re.sub(
-        rb"(\bMS2\s*=\s*)[+-]?\d+",
-        lambda match: match[1] + str(unpaired).encode(),
-        header,
-        count=1,
-        flags=re.I,
-    )
-    portable = corrected + raw[header_end.end() :]
-    return portable, {
-        "raw_ms2": original,
-        "target_ms2": unpaired,
-        "alpha_electrons": (electrons + unpaired) // 2,
-        "beta_electrons": (electrons - unpaired) // 2,
-        "integral_records_changed": False,
-        "spin_header_changed": original != unpaired,
-    }
 
 
 def export_input(reference, space, settings):
@@ -113,6 +67,7 @@ class EnergyHamiltonianCalculation(engine.CalcJob):
     @classmethod
     def define(cls, spec):
         super().define(spec)
+        compact_spec(spec)
         spec.input("structure", valid_type=orm.StructureData)
         spec.input("orbital_reference", valid_type=orm.Dict)
         spec.input("active_space", valid_type=orm.Dict)
@@ -122,7 +77,7 @@ class EnergyHamiltonianCalculation(engine.CalcJob):
             "metadata.options.parser_name", default="empa_orca.energy_hamiltonian"
         )
         spec.input("metadata.options.withmpi", default=False)
-        spec.output("hamiltonian", valid_type=orm.SinglefileData)
+        spec.output("hamiltonian", valid_type=(orm.SinglefileData, orm.Dict))
         spec.output("native_export", valid_type=orm.Dict)
         spec.exit_code(
             310,
@@ -167,13 +122,16 @@ class EnergyHamiltonianCalculation(engine.CalcJob):
         code.cmdline_params = ["aiida.inp"]
         code.stdout_name, code.join_files, code.withmpi = "aiida.out", True, False
         info.codes_info = [code]
-        info.retrieve_list = ["aiida.out", "aiida.fcidump"]
-        return info
+        settings = casci.casci_settings(self.inputs.settings.get_dict(), reference, self.inputs.active_space.get_dict())
+        electrons = self.inputs.active_space.get_dict()['electrons'] - settings['charge'] + reference['charge']
+        return prepare_compact(info, self.inputs, folder, 'energy-export-v1',
+                               extra_request={'energy_export': {'electrons': electrons, 'multiplicity': settings['multiplicity']}})
 
 
 class EnergyHamiltonianParser(Parser):
     def parse(self, **kwargs):
         try:
+            manifest = read_manifest(self.node, self.retrieved.base.repository, 'energy-export-v1')
             text = self.retrieved.base.repository.get_object_content("aiida.out")
             reference = self.node.inputs.orbital_reference.get_dict()
             space = self.node.inputs.active_space.get_dict()
@@ -203,18 +161,25 @@ class EnergyHamiltonianParser(Parser):
                 )
             parsed = casci.parse_states(text, reference, space, settings)
             version = re.search(r"Program Version\s+(\S+)", text)
-            with self.retrieved.base.repository.open("aiida.fcidump", "rb") as stream:
-                raw = stream.read()
-            portable, sector = portable_fcidump(
-                raw, parsed["active_electrons"], settings["multiplicity"]
-            )
-            sha = hashlib.sha256(portable).hexdigest()
-            self.out(
-                "hamiltonian",
-                orm.SinglefileData(
-                    file=io.BytesIO(portable), filename="hamiltonian.fcidump"
-                ),
-            )
+            if manifest is None:
+                with self.retrieved.base.repository.open("aiida.fcidump", "rb") as stream:
+                    raw = stream.read()
+                portable, sector = portable_fcidump(raw, parsed["active_electrons"], settings["multiplicity"])
+                sha, raw_sha = hashlib.sha256(portable).hexdigest(), hashlib.sha256(raw).hexdigest()
+                hamiltonian = orm.SinglefileData(file=io.BytesIO(portable), filename="hamiltonian.fcidump")
+            else:
+                files = {item['name']: item for item in manifest['files']}
+                raw_sha, sha = files['aiida.fcidump']['sha256'], files['hamiltonian.fcidump']['sha256']
+                sector = manifest['portable_sector']
+                unpaired, electrons = settings['multiplicity'] - 1, parsed['active_electrons']
+                if (sector['target_ms2'] != unpaired or sector['raw_ms2'] not in (0, unpaired)
+                        or sector['alpha_electrons'] != (electrons + unpaired) // 2
+                        or sector['beta_electrons'] != (electrons - unpaired) // 2
+                        or sector['integral_records_changed'] is not False
+                        or sector['spin_header_changed'] != (sector['raw_ms2'] != unpaired)):
+                    raise ValueError('Portable FCIDUMP sector differs from the checked native export')
+                hamiltonian = orm.Dict(dict={'schema': 'orca_energy_hamiltonian_v1', **files['hamiltonian.fcidump']})
+            self.out('hamiltonian', hamiltonian)
             record = {
                 "native_csfs": 1,
                 "not_a_correlated_CASCI_state": True,
@@ -231,11 +196,13 @@ class EnergyHamiltonianParser(Parser):
                 "integral_transform": "RI",
                 "diagnostic_energy_hartree": parsed["states"][0]["energy_hartree"],
                 "hamiltonian_sha256": sha,
-                "raw_fcidump_sha256": hashlib.sha256(raw).hexdigest(),
+                "raw_fcidump_sha256": raw_sha,
                 "sector": sector,
                 "full_casci_computed": False,
             }
             self.out("native_export", orm.Dict(dict=record))
+            if manifest is not None:
+                self.out('native_output_manifest', orm.Dict(dict=manifest))
         except (ValueError, OSError, KeyError) as exc:
             self.logger.error(str(exc))
             return self.exit_codes.ERROR_EXPORT
@@ -245,7 +212,7 @@ class EnergyStageCalculation(engine.CalcJob):
     @classmethod
     def define(cls, spec):
         super().define(spec)
-        spec.input("hamiltonian", valid_type=orm.SinglefileData)
+        spec.input("hamiltonian", valid_type=(orm.SinglefileData, orm.Dict))
         spec.input("native_export", valid_type=orm.Dict)
         spec.input("operation", valid_type=orm.Str)
         spec.input("sector", valid_type=orm.Dict, required=False)
@@ -277,8 +244,7 @@ class EnergyStageCalculation(engine.CalcJob):
         ):
             raise ValueError("Unsupported energy operation")
         native = self.inputs.native_export.get_dict()
-        with self.inputs.hamiltonian.open(mode="rb") as stream:
-            sha = hashlib.file_digest(stream, "sha256").hexdigest()
+        sha = hamiltonian_identity(self.inputs.hamiltonian)
         if sha != native["hamiltonian_sha256"]:
             raise ValueError("Hamiltonian and native export manifest differ")
         creator = self.inputs.hamiltonian.creator
@@ -301,13 +267,8 @@ class EnergyStageCalculation(engine.CalcJob):
             else None,
         }
         info = common.CalcInfo()
-        info.local_copy_list = [
-            (
-                self.inputs.hamiltonian.uuid,
-                self.inputs.hamiltonian.filename,
-                "hamiltonian.fcidump",
-            )
-        ]
+        info.local_copy_list = []
+        stage_hamiltonian(info, self.inputs.hamiltonian, self.inputs.code.computer, folder)
         if operation in ("sample-simulator", "prepare-hardware"):
             manifest = self.inputs.circuit_manifest.get_dict()
             producer = self.inputs.circuits.creator
@@ -455,6 +416,9 @@ class EnergyExportWorkChain(engine.WorkChain):
     @classmethod
     def define(cls, spec):
         super().define(spec)
+        spec.input('compact_code', valid_type=orm.AbstractCode, required=False)
+        spec.input('native_output_policy', valid_type=orm.Dict, default=lambda: orm.Dict(dict={'mode': 'remote'}))
+        spec.output('native_output_manifest', valid_type=orm.Dict, required=False)
         for key, typ in {
             "orbital_reference": orm.Dict,
             "source_remote": orm.RemoteData,
@@ -464,7 +428,7 @@ class EnergyExportWorkChain(engine.WorkChain):
             "worker_code": orm.AbstractCode,
         }.items():
             spec.input(key, valid_type=typ)
-        spec.output("hamiltonian", valid_type=orm.SinglefileData)
+        spec.output("hamiltonian", valid_type=(orm.SinglefileData, orm.Dict))
         spec.output("native_export", valid_type=orm.Dict)
         spec.output("validation", valid_type=orm.Dict)
         spec.outline(cls.export, cls.inspect_export, cls.validate, cls.results)
@@ -496,8 +460,15 @@ class EnergyExportWorkChain(engine.WorkChain):
             )
             builder.structure = orm.load_node(reference["structure_uuid"])
             builder.settings, builder.code = self.inputs.settings, self.inputs.orca_code
+            if 'compact_code' not in self.inputs:
+                raise ValueError('Select a configured ORCA tools code for native Hamiltonian collection')
+            builder.compact_code, builder.native_output_policy = self.inputs.compact_code, self.inputs.native_output_policy
             common_orbitals.attach_orbital(builder, location, reference["filename"])
             builder.metadata.options = common_orbitals.options(settings)
+            builder.metadata.disable_cache = True
+            policy = output_policy(self.inputs.native_output_policy.get_dict())
+            if policy['mode'] == 'stash':
+                builder.metadata.options.stash = stash_options(policy['stash_directory'], 'native_output')
             builder.metadata.label = "Export fixed-orbital Hamiltonian · no full CASCI"
             return engine.ToContext(pending=self.submit(builder))
         except (ValueError, KeyError, OSError) as exc:
@@ -536,4 +507,6 @@ class EnergyExportWorkChain(engine.WorkChain):
         native = orm.load_node(self.ctx.export_uuid)
         self.out("hamiltonian", native.outputs.hamiltonian)
         self.out("native_export", native.outputs.native_export)
+        if 'native_output_manifest' in native.outputs:
+            self.out('native_output_manifest', native.outputs.native_output_manifest)
         self.out("validation", self.ctx.pending.outputs.result)

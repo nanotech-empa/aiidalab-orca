@@ -111,7 +111,7 @@ def prepare_figure(map_uuid, settings, code_uuid, *, resources=None):
           'resources':helper_resources(resources)}
     for _, uuid in history(node.outputs.maps.uuid, 'maps', FIGURE_PROCESS):
         old = orm.load_node(uuid)
-        if old.is_finished_ok and old.inputs.settings.get_dict() == p and str(old.inputs.code.uuid) == str(code_uuid):
+        if old.is_finished_ok and stored_values(figure_style(old.inputs.settings.get_dict())) == p and str(old.inputs.code.uuid) == str(code_uuid):
             for key in ('png', 'pdf'):
                 with old.outputs[key].open(mode='rb') as handle:
                     if not handle.read(8):raise ValueError('Empty stored figure')
@@ -130,7 +130,7 @@ def figure_builder(plan):
     budget=helper_resources(plan.get('resources'))
     b.metadata.options=calcjob_options(node.outputs.remote_folder,seconds=budget['wallclock_seconds'],memory_mb=budget['memory_mb'])
     b.metadata.disable_cache=True
-    b.metadata.label='Molecular maps · shared intensity scale'
+    b.metadata.label='Molecular maps · '+('shared intensity scale' if plan['settings']['normalization'] == 'shared' else 'per-panel display normalization')
     return b
 
 

@@ -7,8 +7,8 @@ code on the full-cube computer. There is no generic Python-code selector.
 
 ## Plane and height reference
 
-The initial reference point is the molecular bounding-box centre in x/y and
-the **topmost atomic z coordinate** in z. The source slice starts **1.5 Å along
+The Dyson-map initial reference point is the molecular **centre of mass**,
+using the atomic masses in the cube. The source slice starts **1.5 Å along
 +z above that point**. Its initial footprint occupies 90% of the preview grid's
 in-plane span; the full cube is checked before sampling. This is a starting
 view, not an inferred experimental surface orientation.
@@ -17,13 +17,15 @@ The shared slice viewer's **Center**, **Normal**, **Offset**, **Width**, **Heigh
 and resolution override those defaults. Center is the reference point; Offset
 is the source-slice height measured along the normalized normal. The GUI also
 shows the resulting Cartesian centre of the source plane. The reset button
-explicitly restores 1.5 Å above the top atom along +z. Camera rotation does not
+explicitly restores 1.5 Å above the centre of mass along +z. Camera rotation does not
 change the physical source plane.
 
-Observation heights default to **5 and 7 Å** along the selected normal from
+Observation heights default to **6 and 8 Å** along the selected normal from
 the same reference point. They must be at or beyond the source slice. For
-example, the default source plane is `z_top + 1.5 Å`; the default observation
-planes are `z_top + 5 Å` and `z_top + 7 Å`. After a user moves Center or Normal,
+example, the default source plane is `z_COM + 1.5 Å`; the default observation
+planes are `z_COM + 6 Å` and `z_COM + 8 Å`. These defaults match Gonçalo's
+reference notebooks. Kondo channel maps retain their existing top-atom reference
+and 5/7 Å observation heights. After a user moves Center or Normal,
 the displayed reference and direction determine these heights. The app does
 not silently refit or realign the molecule.
 
@@ -56,9 +58,18 @@ sampling of the molecular cube.
 Each transition is extrapolated separately, **then squared**. Individual maps
 include the selected spin-multiplet factor. A spectral blend sums the squared
 amplitudes with the existing energy/window Lorentzian and spin weights.
+For initial-state mixtures, each contribution also carries its explicit
+population, applied once. Different states retain their actual transition energies.
 Unnormalized Dyson amplitudes already contain their pole strength, which is
 not multiplied in again. An existing three-dimensional intensity-blend cube
 cannot substitute for the constituent amplitudes in this step.
+
+The default spectral blend includes **all computed transitions**, including
+off-resonant Lorentzian tails. Review rejects an incomplete amplitude-cube set;
+generate the missing cubes from the saved coefficients first. A selected-subset
+blend is available by disabling the complete-sum checkbox. Blends stream one
+3D cube at a time and do not have the 32-transition individual-panel limit.
+This includes every transition in the selected Dyson result, not uncomputed roots.
 
 Map amplitudes are converted to Å^(-3/2), following meqpy; individual/window
 intensities are in Å^(-3), and energy-resolved intensities additionally carry
@@ -84,9 +95,12 @@ remain connected through the two CalcJobs to the cubes and electronic states.
 They can be reopened from the app and downloaded. The selected map's settings
 can also be restored into the viewer for another calculation.
 
-Figures use **one fixed intensity range across all panels and heights**.
+Figures default to **one fixed intensity range across all panels and heights**.
 The initial range spans all the numerical maps; subsequent edits apply to
-every panel. There is no independent per-panel normalization. The raw arrays
+every panel. Optional **per-panel display normalization** divides each finished
+image by its own maximum; an all-zero image remains zero. It helps compare
+shapes but removes brightness comparisons between panels and heights. It never
+normalizes constituent orbitals before combining them. The raw arrays
 are never normalized, clipped or overwritten when the display range changes.
 The source-amplitude viewer's colour limits are separate from this intensity
 scale. When assembling separate figures externally, use the same limits and

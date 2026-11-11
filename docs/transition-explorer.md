@@ -70,7 +70,7 @@ applying the spin factor a second time.
   covered by a narrow drag. The same window is used by the existing blend
   controls.
 - Use the selection list to inspect one member of an unresolved peak.
-- **Use selection for cubes / maps** transfers the selected transition IDs to
+- **Inspect selected transition orbitals / maps** transfers the selected transition IDs to
   the existing property controls. Missing amplitude cubes are reported; they
   are generated only through the normal reviewed CalcJob submission.
 

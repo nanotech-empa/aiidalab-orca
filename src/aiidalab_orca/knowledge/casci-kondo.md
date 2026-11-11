@@ -193,9 +193,11 @@ the review proposes all available states; the user must see this before
 submission. Do not silently replace a requested spin or misclassify missing
 files/resource errors as forbidden combinations. Those errors block the batch.
 
-**Submit reviewed calculations** starts independent WorkChains for valid new
-pairs; matching saved/running requests are reused. The table shows job count,
-per-job resources and each ORCA input. Jobs may run concurrently. A submission
+**Submit reviewed calculations** submits one persistent batch that starts
+sector WorkChains in sequence for valid new pairs; matching saved/running requests are reused. The table shows job count,
+per-job resources and each ORCA input. The reviewed sectors run sequentially in a persistent AiiDA batch, one at a time.
+Each waits for the previous workflow and its CalcJobs to terminate, including
+failed sectors; the queue continues after closing the browser. A submission
 error stops subsequent requests and retains accepted UUIDs. Closing the GUI
 does not stop submitted calculations. **Available charge** filters the saved
 calculation selector without altering the submission lists or active-space

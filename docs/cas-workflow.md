@@ -92,8 +92,12 @@ absolute molecular charges. Set **Electronic states** per allowed sector.
 requested/available states, new/reused/running action and any skip/block reason.
 Impossible spin pairs are skipped; execution errors block submission. A smaller
 valid sector proposes its available state count explicitly. Read the inputs and
-per-job resources, then **Submit reviewed calculations**. Each allowed pair is
-independent and keeps the same orbital reference and active orbital partition.
+per-job resources, then **Submit reviewed calculations**. Each allowed pair keeps the same orbital reference and active orbital partition.
+The reviewed requests run sequentially in a persistent AiiDA batch: every sector
+waits for the previous workflow and its CalcJobs to terminate, including failures.
+Closing the browser does not interrupt the queue. A submission error stops the
+remaining queue without automatic retries. Reopening and reviewing an active
+batch follows it and blocks another submission for that orbital reference.
 The energy diagram shows all compatible completed sectors. **Calculation
 history and status** is collapsed below it; its charge/calculation selectors
 inspect individual runs without filtering the diagram, changing its energy

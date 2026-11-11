@@ -36,6 +36,14 @@ remain outside the AiiDA repository; only bounded validation text, a diagnostic
 tail and manifests are retrieved. Existing stored `SinglefileData` Hamiltonians
 remain valid inputs without migration.
 
+Hamiltonian export has two sequential jobs: native ORCA export, then one CPU
+validation worker. Both use the reviewed memory and wall time. The validation
+worker reserves the reviewed CPU budget and sets OMP, OpenBLAS and MKL thread
+limits accordingly; it does not use an independent hidden allocation. Review
+shows both stages. Budget edits invalidate review. A new export used as a
+resource-control test leaves existing models and their downstream results
+unchanged; compare the Hamiltonian SHA before reusing earlier scientific results.
+
 Worker stages consume the exact portable file. On the same AiiDA Computer it
 is copied directly; across Computers it is temporarily relayed through the
 AiiDAlab host and checksum-verified. AiiDA's `provenance_exclude_list` uploads

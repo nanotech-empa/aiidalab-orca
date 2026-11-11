@@ -412,6 +412,14 @@ class EnergyStageParser(Parser):
             return self.exit_codes.ERROR_STAGE
 
 
+def export_validation_options(settings):
+    """Use the reviewed allocation for the serial worker and its CPU threads."""
+    return common_orbitals.options(settings) | {
+        'environment_variables': {key: str(settings['nprocs'])
+            for key in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS')},
+    }
+
+
 class EnergyExportWorkChain(engine.WorkChain):
     @classmethod
     def define(cls, spec):
@@ -490,12 +498,12 @@ class EnergyExportWorkChain(engine.WorkChain):
             native.outputs.native_export,
         )
         builder.operation, builder.settings = orm.Str("validate"), orm.Dict(dict={})
-        builder.metadata.options = {
-            "resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1},
-            "withmpi": False,
-            "max_memory_kb": 4 * 1024**2,
-            "max_wallclock_seconds": 600,
-        }
+        # Copy the native child's effective allocation, including inherited defaults.
+        builder.metadata.options = export_validation_options({
+            'nprocs': native.get_option('resources')['num_mpiprocs_per_machine'],
+            'memory_mb': native.get_option('max_memory_kb') // 1024,
+            'wallclock_seconds': native.get_option('max_wallclock_seconds'),
+        })
         return engine.ToContext(pending=self.submit(builder))
 
     def results(self):

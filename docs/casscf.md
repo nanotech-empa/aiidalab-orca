@@ -80,6 +80,17 @@ The scientific input convention follows the [ORCA 6.1 CASSCF manual](https://www
 The current general active-space preparation still defines its supported
 orbital partition; this feature does not add implicit orbital permutations.
 
+## Reviewed resources
+
+The main memory/process/wall-time controls apply to one CalcJob containing the
+optimization and independent frozen readback in sequence. Both executions share
+that job's wall-time allocation. **PDOS resources · serial** separately controls
+the automatic orbital-character CalcJob that follows successful verification,
+initially one process, 2 GiB and ten minutes. Review lists both budgets; a PDOS
+resource edit invalidates review. Missing analysis tools are reported without
+discarding an otherwise verified electronic reference. No readback tolerance,
+state objective or ORCA input changes when this postprocessing budget changes.
+
 ## openBIS companion
 
 The shared adapter in

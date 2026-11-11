@@ -132,6 +132,7 @@ def test_open_review_edit_and_submit_are_distinct(monkeypatch):
     def review(uid, space, values, **kwargs):
         calls.append(('review', deepcopy(values)))
         return {'action': 'compute', 'execution': 'orca@test', 'settings': casscf.casscf_settings(values, reference_data(), space),
+                'pdos': kwargs['pdos_resources'] | {'ready':True},
                 'input': 'native input', 'readback_input': 'readback input'}
     monkeypatch.setattr(gui.service, 'review', review)
     monkeypatch.setattr(gui.service, 'submit', lambda p: calls.append(('submit', p)))
@@ -142,6 +143,14 @@ def test_open_review_edit_and_submit_are_distinct(monkeypatch):
         assert 'continue with CASCI' in panel.intent.value
         panel.review.click()
         assert len(calls) == 1 and not panel.submit.disabled
+        assert 'Then automatic PDOS: 1 process, 2 GiB, up to 10 minutes' in panel.review_text.value
+        panel.pdos_wall.value=9
+        assert panel.plan is None and panel.submit.disabled
+        panel.pdos_wall.value=10
+        assert panel.plan is None and panel.submit.disabled
+        panel.review.click();panel.pdos_memory.value=3
+        assert panel.plan is None and panel.submit.disabled
+        panel.pdos_memory.value=2;panel.review.click()
         panel.full_files.mode.value = 'stash'
         assert panel.submit.disabled and panel.plan is None
         panel.full_files.directory.value = '/user/stash'
@@ -172,3 +181,23 @@ def test_dyson_goal_offers_shared_casscf_but_not_quantum_state_vectors():
         assert calls == ['casscf']
     finally:
         panel.close()
+
+
+def test_uncertain_submission_consumes_review_before_contacting_service(monkeypatch):
+    from aiidalab_orca import casscf as gui
+    monkeypatch.setattr(gui,'reference_data',lambda _:reference_data())
+    monkeypatch.setattr(gui.service,'history',lambda *a:[])
+    monkeypatch.setattr(gui.service,'review',lambda uid,space,values,**kw:{
+        'action':'compute','execution':'test','settings':casscf.casscf_settings(values,reference_data(),space),
+        'pdos':kw['pdos_resources']|{'ready':True},'input':'native','readback_input':'readback'})
+    calls=[]
+    def uncertain(plan):
+        calls.append(plan)
+        raise RuntimeError('Uncertain response; inspect process history before retrying')
+    monkeypatch.setattr(gui.service,'submit',uncertain)
+    panel=gui.CasscfOrbitals('ref',SPACE,lambda _:None)
+    try:
+        panel.review.click();panel.submit.click();panel.submit.click()
+        assert len(calls)==1 and panel.plan is None and panel.submit.disabled
+        assert 'inspect process history' in panel.message.value
+    finally:panel.close()

@@ -49,6 +49,11 @@ class CasscfOrbitals(ipw.VBox):
         self.full_files = FullFileRetention()
         resources = ipw.Accordion(children=[ipw.VBox([self.nprocs, self.memory, self.wall, self.steps, self.aux, self.force])], selected_index=None)
         resources.set_title(0, 'Resources and convergence')
+        self.pdos_memory=ipw.BoundedIntText(value=2,min=1,max=64,description='PDOS memory (GiB)',style=style)
+        self.pdos_wall=ipw.BoundedIntText(value=10,min=1,max=10080,description='PDOS wall time (minutes)',style=style)
+        self.pdos_resources=ipw.Accordion(children=[ipw.VBox([self.pdos_memory,self.pdos_wall,
+            ipw.HTML('<p>After optimization and readback pass, one serial CalcJob computes compact orbital character and PDOS.</p>')])],selected_index=None)
+        self.pdos_resources.set_title(0,'PDOS resources · serial')
         self.review = ipw.Button(description='Review CASSCF', icon='list', button_style='primary')
         self.submit = ipw.Button(description='Submit reviewed CASSCF', icon='play', disabled=True,
                                   layout=ipw.Layout(width='auto'))
@@ -70,14 +75,14 @@ class CasscfOrbitals(ipw.VBox):
             'orbital set for the states you select; their individual energies remain separate.</p>'
             '<p>These are <b>orbital-optimization weights</b>, not thermal populations, '
             'Clebsch–Gordan factors or spectral intensities. Existing results retain their original orbitals.</p>'),
-            self.mode, self.single, self.average, self.intent, self.full_files, resources,
+            self.mode, self.single, self.average, self.intent, self.full_files, resources,self.pdos_resources,
             ipw.HBox([self.review, self.submit], layout=ipw.Layout(flex_flow='row wrap')),
             self.review_text, self.message, self.saved, self.refresh, self.status, self.levels, self.inspect,
             ipw.HTML('<p>After successful optimization and saved-orbital readback, inspect and confirm the '
                 'new reference. Use it for fixed-orbital CASCI in all required charge/spin sectors before '
                 'Dyson/Kondo, or export its Hamiltonian for quantum-assisted energies. '
                 'Independently optimized charge states cannot be mixed in the shared-orbital Dyson route.</p>')])
-        for control in (self.mode, self.mult, self.root, self.nprocs, self.memory, self.wall, self.steps, self.aux, self.force):
+        for control in (self.mode, self.mult, self.root, self.nprocs, self.memory, self.wall, self.steps, self.aux, self.force,self.pdos_memory,self.pdos_wall):
             control.observe(self._invalidate, names='value')
         self.mode.observe(self._mode_changed, names='value')
         self.full_files.observe(self._invalidate, names='revision')
@@ -149,7 +154,8 @@ class CasscfOrbitals(ipw.VBox):
         self._invalidate()
         try:
             self.plan = service.review(self.reference_uuid, self.space, self._values(), force=self.force.value,
-                                       native_output_policy=self.full_files.values())
+                                       native_output_policy=self.full_files.values(),
+                                       pdos_resources={'memory_gib':self.pdos_memory.value,'wallclock_seconds':self.pdos_wall.value*60})
             p = self.plan
             cell = ' style="padding: 0.25em 1.5em 0.25em 0; text-align: left"'
             rows = ''.join(f'<tr><td{cell}>{b["multiplicity"]}</td><td{cell}>{r}</td><td{cell}>{w:.6g}</td></tr>'
@@ -169,17 +175,25 @@ class CasscfOrbitals(ipw.VBox):
                 f'<th{cell}>Normalized optimization weight</th></tr>' + rows + '</table>'
                 '<details><summary>Review ORCA optimization and readback inputs</summary><pre>' +
                 html.escape(p['input']) + '</pre><pre>' + html.escape(p['readback_input']) + '</pre></details>')
+            pdos=p['pdos']
+            if p['action']=='compute':
+                self.review_text.value += (f'<p><b>Then automatic PDOS: 1 process, {pdos["memory_gib"]} GiB, '
+                    f'up to {pdos["wallclock_seconds"]/60:g} minutes.</b> It starts after the optimization/readback '
+                    'CalcJob finishes; only compact PDOS data and logs are retrieved.</p>')
+                if not pdos['ready']:
+                    self.review_text.value += '<p>PDOS helpers are unavailable; the electronic reference is retained if analysis cannot run.</p>'
             self.message.value = ''
             self.submit.disabled = False
         except (ValueError, KeyError, OSError, RuntimeError) as exc:
             self.message.value = '<p>' + html.escape(str(exc)) + '</p>'
 
     def _submit(self, _=None):
-        if not self.plan:
+        if not self.plan or self.submit.disabled:
             return
+        plan=self.plan
+        self._invalidate()
         try:
-            self.process_uuid = service.submit(self.plan)
-            self._invalidate()
+            self.process_uuid = service.submit(plan)
             self._refresh()
             self.saved.value = self.process_uuid
             try:

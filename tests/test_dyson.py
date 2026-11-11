@@ -142,8 +142,8 @@ def test_dyson_kernel_single_orbital_limit_has_unit_component_strength():
     from dyson_orca_tools.dyson import Dyson
     initial = {'Molecule':{'Multiplicity':1,'S-Matrix':[[1.]],'MolecularOrbitals':{'MOs':[{'Occupancy':1.,'MOCoefficients':[1.]}]}}}
     final = deepcopy(initial);final['Molecule']['Multiplicity'] = 2
-    params = {'parameters':{'initial':{'nelc':2,'norb':1,'spin_ci':{'[2]':1.}},
-                            'final':{'nelc':1,'norb':1,'spin_ci':{'[u]':1.}}}}
+    params = {'parameters':{'initial':{'nelc':2,'norb':1,'mult':1,'spin_ci':{'[2]':1.}},
+                            'final':{'nelc':1,'norb':1,'mult':2,'spin_ci':{'[u]':1.}}}}
     kernel = Dyson(initial,final,params)
     assert kernel.strength(kernel.dyson_orbital()) == pytest.approx(1.)
     assert spin_factor(1,2)*kernel.strength(kernel.dyson_orbital()) == pytest.approx(2.)
@@ -263,8 +263,8 @@ def test_fully_occupied_active_orbital_is_not_mistaken_for_an_inactive_core():
         'MolecularOrbitals':{'MOs':[{'Occupancy':2.,'MOCoefficients':col} for col in np.eye(2).tolist()]}}}
     final = deepcopy(initial);final['Molecule']['Multiplicity'] = 2
     final['Molecule']['MolecularOrbitals']['MOs'][1]['Occupancy'] = 1.
-    params = {'parameters':{'initial':{'nelc':2,'norb':1,'spin_ci':{'[2]':1.}},
-                            'final':{'nelc':1,'norb':1,'spin_ci':{'[u]':1.}}}}
+    params = {'parameters':{'initial':{'nelc':2,'norb':1,'mult':1,'spin_ci':{'[2]':1.}},
+                            'final':{'nelc':1,'norb':1,'mult':2,'spin_ci':{'[u]':1.}}}}
     kernel = fixed_orbital_kernel(initial,final,params,[1])
     assert kernel.active_slice == slice(1,2)
     assert np.allclose(abs(kernel.dyson_orbital()),[0.,1.])

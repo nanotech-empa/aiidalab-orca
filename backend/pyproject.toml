@@ -17,7 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Reviewed upstream API used by the remote Dyson executable.
-dyson = ["dyson-orca-tools[cube] @ git+https://github.com/AndresOrtegaGuerrero/dyson-orca-tools.git@96658a681815faf1cf260bcb26fe712ca7715103", "scipy", "matplotlib"]
+dyson = ["dyson-orca-tools[cube]==0.1.1", "scipy", "matplotlib"]
 
 [project.scripts]
 orca-dyson = "aiida_empa_orca.dyson_tools:main"

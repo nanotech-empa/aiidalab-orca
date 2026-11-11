@@ -10,7 +10,7 @@ ANALYSES = {
     'correlation': ('Correlation energies · MP2 / NEVPT2 / CASPT2', 'For single-reference correlation, converge a fresh HF reference and compute RI-MP2. For dynamical correlation beyond an active space, select verified CASSCF orbitals and choose SC, FIC or DLPNO-NEVPT2, or CASPT2 with explicit shifts. These energy-only results do not replace Dyson/Kondo state vectors.'),
     'dyson': ('Dyson spectra & maps', 'Use compatible CASCI states for the initial system and its N−1/N+1 electron sectors, then review Dyson transitions. Cubes and maps are separate optional calculations.'),
     'kondo': ('Kondo orbitals & maps', 'Use Dyson transitions for a spin-pure local moment with S > 0, review the charged states and chemical potential, then compute exchange channels and optional maps.'),
-    'vibrations': ('IR / Raman', 'Start from a completed geometry optimization, then review the frequency calculation. Electronic-state calculations are independent.'),
+    'vibrations': ('IR / Raman', 'Use a saved optimization, prepare an optimization, or explicitly use supplied coordinates without optimization. Each calculation requires review.'),
 }
 
 

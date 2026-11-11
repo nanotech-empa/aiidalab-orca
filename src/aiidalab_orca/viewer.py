@@ -445,11 +445,16 @@ class ResultsView(ipw.VBox):
 
     def _vibrations(self):
         if not self.data['optimized']:
-            return ipw.HTML('<h3>Vibrational spectroscopy</h3><p class="orca-notice">'
-                'This draft requires a completed geometry optimization before computing vibrations. '
-                'Use the final geometry to prepare an optimization. Orbital analysis and CASCI remain independent.</p>')
+            from .vibration_entry import VibrationEntry
+            return VibrationEntry(self.data['uuid'],
+                open_reference=getattr(self, '_open_reference', None),
+                optimize_reference=getattr(self, '_optimize_reference', None))
         from .vibrations import VibrationalSpectroscopy
         return VibrationalSpectroscopy(self.data['uuid'])
+
+    def set_reference_actions(self, open_reference, optimize_reference):
+        self._open_reference = open_reference
+        self._optimize_reference = optimize_reference
 
     def _details(self):
         data = self.data

@@ -6,7 +6,7 @@ from aiida.engine import submit
 from aiida_empa_orca.input import render_input
 from aiida_empa_orca.vibrations import (
     PROCESS_TYPE, OUTPUTS, VibrationsWorkChain, frequency_parameters,
-    optimized_source, signature, validate_result, compatible,
+    optimized_source, signature, validate_result, compatible, UNVERIFIED_GEOMETRY_WARNING,
 )
 from .property_services import source_node
 from .property_services import helper_code
@@ -22,13 +22,45 @@ def runs(source_uuid):
             for uuid, label, date, state in rows.order_by({'run': {'ctime': 'desc'}}).all()]
 
 
-def prepare(source_uuid, *, raman=True, force_recompute=False, native_output_policy=None):
+def reference_context(source_uuid):
+    """Find exact geometry/electronic-setting matches, independent of resources."""
+    from aiida_empa_orca.reuse import PROCESS_TYPE as GEOMETRY_PROCESS
+    from aiida_empa_orca.reference import reference_settings
+    source = source_node(source_uuid)
+    source_settings = reference_settings(source.inputs.settings.get_dict())
+    expected = signature(source.outputs.structure, source_settings, source.inputs.code.uuid, False)
+    rows = orm.QueryBuilder().append(orm.WorkChainNode, filters={
+        'process_type': GEOMETRY_PROCESS, 'attributes.process_state': 'finished',
+        'attributes.exit_status': 0}, project=['uuid'], tag='run').order_by({'run': {'ctime': 'desc'}})
+    matches = []
+    for (uuid,) in rows.iterall():
+        node = orm.load_node(uuid)
+        if not node.inputs.optimize.value or 'structure' not in node.outputs or 'retrieved' not in node.outputs:
+            continue
+        settings = node.inputs.settings.get_dict()
+        comparison = dict(settings, nprocs=source_settings['nprocs'])
+        if signature(node.outputs.structure, comparison, node.inputs.code.uuid, False) != expected:
+            continue
+        try:
+            optimized_source(node.outputs.structure, settings, node.inputs.code, node.outputs.retrieved)
+        except (ValueError, KeyError, OSError):
+            continue
+        matches.append({'uuid': str(uuid), 'label': node.label,
+                        'date': node.ctime.strftime('%Y-%m-%d %H:%M UTC')})
+    return {'source_uuid': str(source_uuid), 'optimizations': matches}
+
+
+def prepare(source_uuid, *, raman=True, force_recompute=False, native_output_policy=None, allow_unverified_geometry=False):
     source = source_node(source_uuid)
     structure, settings, code = source.outputs.structure, source.inputs.settings.get_dict(), source.inputs.code
-    optimized_source(structure, settings, code, source.outputs.retrieved)
+    verified = optimized_source(structure, settings, code, source.outputs.retrieved,
+                                allow_unverified_geometry=allow_unverified_geometry)
     plan = {'source_uuid': str(source_uuid), 'raman': bool(raman), 'reuse_uuid': None,
             'native_output_policy': output_policy(native_output_policy),
-            'signature': signature(structure, settings, code.uuid, raman), 'warnings': []}
+            'signature': signature(structure, settings, code.uuid, raman), 'warnings': [],
+            'allow_unverified_geometry': bool(allow_unverified_geometry), 'geometry_verified': verified}
+    if not verified:
+        plan['warnings'].append(UNVERIFIED_GEOMETRY_WARNING)
     if settings.get('constraints'):
         plan['warnings'].append('The reference was optimized with constraints. Free-molecule frequencies may contain imaginary modes or describe a nonstationary geometry.')
     if not force_recompute:
@@ -63,6 +95,7 @@ def builder(plan):
     builder.source_retrieved, builder.code = source.outputs.retrieved, source.inputs.code
     builder.raman = orm.Bool(plan['raman'])
     builder.native_output_policy = orm.Dict(dict=output_policy(plan.get('native_output_policy')))
+    builder.allow_unverified_geometry = orm.Bool(plan.get('allow_unverified_geometry', False))
     if plan['reuse_uuid']:
         previous = orm.load_node(plan['reuse_uuid'])
         validate_result(previous)

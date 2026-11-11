@@ -9,6 +9,7 @@ from aiidalab_widgets_empa.cube import CubeViewer
 from . import property_services as service
 from .widget_lifecycle import close_widget_tree
 from .retention import description as retention_description
+from .resources import MemoryInput, memory_label
 
 
 class CubeDisplayMixin:
@@ -75,6 +76,13 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
         self.codes={key:ipw.Dropdown(options=choices[key],description=label,layout=ipw.Layout(width='95%'))
                     for key,label in (('plot','ORCA plot'),('cubehandler','Cubehandler'))}
 
+        self.memory = MemoryInput(value=2048, style={'description_width': 'initial'})
+        self.wallclock = ipw.BoundedIntText(value=10, min=1, max=10080,
+            description='Cube wall time (minutes)', style={'description_width': 'initial'})
+        self.resources = ipw.Accordion(children=[ipw.VBox([self.memory, self.wallclock,
+            ipw.HTML('<p>One process for cube generation and reduction. Any separate wavefunction '
+                     'preservation uses the same budget.</p>')])], selected_index=None)
+        self.resources.set_title(0, 'Cube resources')
         advanced=ipw.Accordion(children=[ipw.VBox([self.grid,*self.codes.values()])],selected_index=None)
         advanced.set_title(0,'Cube grid and codes')
         self.review_button=ipw.Button(description='Review orbital calculation',icon='list',button_style='primary',layout=ipw.Layout(width='auto'))
@@ -95,12 +103,12 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
         from .presentation import ComputePanel
         self.calculation = ComputePanel('Compute orbital cubes / spin density…', [
                           ipw.HTML('<p>Compute orbital amplitudes and, for an unrestricted reference, spin density. Select multiple orbitals with Ctrl/Cmd. Only cubehandler-reduced previews are retrieved.</p>'),
-                          select_visible,self.orbitals,self.spin,self.wfn_info,self.check_wfn,self.retention,self.stash,advanced,
+                          select_visible,self.orbitals,self.spin,self.wfn_info,self.check_wfn,self.retention,self.stash,self.resources,advanced,
                           self.review_button,self.message,self.submit_button])
         self.empty = ipw.HTML()
         super().__init__([ipw.HBox([self.previous,refresh]),self.progress,self.result_info,self.empty,
                           self.calculation,self.cube,self.download,self.cube_box])
-        for w in (self.orbitals,self.spin,self.grid,self.retention,self.stash,*self.codes.values()):
+        for w in (self.orbitals,self.spin,self.grid,self.retention,self.stash,self.memory,self.wallclock,*self.codes.values()):
             w.observe(self._invalidate,names='value')
         self.retention.observe(self._retention_changed,names='value')
         self._retention_changed()
@@ -146,9 +154,15 @@ class OrbitalProperties(CubeDisplayMixin, ipw.VBox):
                 {'orbitals':[list(pair) for pair in self.orbitals.value],'spin_density':self.spin.value,
                  'grid_points':self.grid.value,'retention':self.retention.value,'stash_directory':self.stash.value.strip()},
                 status['policy'],
-                {key:w.value for key,w in self.codes.items()})
+                {key:w.value for key,w in self.codes.items()},
+                resources={'memory_mb': self.memory.value, 'wallclock_seconds': self.wallclock.value * 60})
             action='Reuse available cube results' if self.plan['action']=='reuse' else 'Generate cubes and reduce them with cubehandler'
             text=f'<p><b>{action}</b></p>'
+            if self.plan['action'] != 'reuse':
+                budget = self.plan['resources']
+                text += (f"<p>Cube generation/reduction: <b>1 process, {memory_label(budget['memory_mb'])}, "
+                         f"up to {budget['wallclock_seconds'] / 60:g} minutes</b>. "
+                         'Any separate wavefunction preservation uses this same budget.</p>')
             if self.plan['regenerate_reference']:
                 text+='<p><b>The wavefunction files are missing. This submission will first recompute SCF at the saved final geometry, with the original electronic settings. Calculation caching will be bypassed where required.</b></p>'
             elif self.plan['action']!='reuse':

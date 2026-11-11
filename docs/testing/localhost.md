@@ -134,7 +134,9 @@ not silently replace L01. Do not interpret it as an unconstrained minimum.
    the displayed indices/occupations; record them. Enable **Spin density (α−β)**
    for this unrestricted reference.
 3. Use **80 grid points/axis**, local compatible helpers and **Leave full cubes
-   in calculation directory**. Review and generate previews once.
+   in calculation directory**. Under **Cube resources**, set **2 GiB** and
+   **Cube wall time (minutes) = 10**. Review must show **1 process, 2 GiB,
+   up to 10 minutes** before generating previews once.
 4. Open each reduced preview. Check the molecule aligns with the cube, signed
    lobes are distinguishable, and spin density is a separate dataset. Download
    one **reduced** cube; record its source UUID/name.
@@ -142,8 +144,12 @@ not silently replace L01. Do not interpret it as an unconstrained minimum.
    edit its center/normal while viewing 3D, then inspect **2D slice**. Areas
    outside the isolated grid must be empty rather than periodically repeated.
 6. Save two named views of one cube: `surface` and `surface-with-slice`. Preserve
-   the plane visibility and coloring in the latter. In **Render**, request one
-   small image (e.g. 800 px if offered) for that saved view on a local renderer.
+   the plane visibility and coloring in the latter. In **Render → Rendering
+   resources**, set **2 GiB** and **Render wall time (minutes) = 10**. Set a
+   small image (e.g. 800 × 800 px) before saving that view. Select only
+   `surface-with-slice` and choose **Review selected views**. Check one CalcJob,
+   its recorded source, image size, included slicing plane, and **1 process,
+   2 GiB, up to 10 minutes**; then **Submit reviewed render** once.
 7. Inspect the stored image and its calculation/source identifier. Switch cube
    and return; verify saved-view identity and settings were not silently lost.
 

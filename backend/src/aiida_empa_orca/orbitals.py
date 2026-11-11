@@ -163,6 +163,8 @@ class OrbitalsWorkChain(engine.WorkChain):
                          'storage_policy':orm.Dict, 'python_code':orm.AbstractCode,'orca_code':orm.AbstractCode,
                          'plot_code':orm.AbstractCode,'cubehandler_code':orm.AbstractCode}.items():
             spec.input(key,valid_type=typ)
+        spec.input('cube_resources', valid_type=orm.Dict,
+                   default=lambda: orm.Dict(dict={'memory_mb': 2048, 'wallclock_seconds': 3600}))
         spec.input('regenerate_reference',valid_type=orm.Bool,default=lambda:orm.Bool(False))
         spec.input('reuse_uuid',valid_type=orm.Str,required=False)
         spec.output('manifest',valid_type=orm.Dict)
@@ -182,6 +184,7 @@ class OrbitalsWorkChain(engine.WorkChain):
     def setup(self):
         try:
             self.ctx.parameters = cube_parameters(self.inputs.parameters.get_dict())
+            self.cube_options()  # Reject invalid budgets before any child can launch.
             self.ctx.native_policy = native_retention(self.inputs.source_remote)
             storage_policy(self.inputs.storage_policy.get_dict())
             computer=self.inputs.python_code.computer
@@ -253,6 +256,14 @@ class OrbitalsWorkChain(engine.WorkChain):
             return self.exit_codes.ERROR_REFERENCE
         self.ctx.source_uuid=str(self.ctx.reference.outputs.remote_folder.uuid)
 
+    def cube_options(self):
+        from .rendering import calcjob_options, helper_resources
+        # Stored checkpoints from before this input retain the historical wall time.
+        budget = helper_resources(self.inputs.cube_resources.get_dict() if 'cube_resources' in self.inputs else None,
+                                  default_seconds=3600)
+        return calcjob_options(self.inputs.source_remote, seconds=budget['wallclock_seconds'],
+                               memory_mb=budget['memory_mb'])
+
     def preserve(self):
         try:
             remote=orm.load_node(self.ctx.source_uuid)
@@ -260,7 +271,10 @@ class OrbitalsWorkChain(engine.WorkChain):
             if self.ctx.location['kind']!='remote' or self.ctx.native_policy['mode'] == 'remote':
                 return
             policy = {'threshold_mb': 0, 'stash_directory': self.ctx.native_policy['stash_directory']}
-            return engine.ToContext(storage=self.submit(storage_builder(remote,self.inputs.python_code,policy)))
+            builder = storage_builder(remote, self.inputs.python_code, policy)
+            for key, value in self.cube_options().items():
+                builder.metadata.options[key] = value
+            return engine.ToContext(storage=self.submit(builder))
         except (OSError,ValueError,RuntimeError,KeyError) as exc:
             self.report(str(exc))
             return self.exit_codes.ERROR_STORAGE
@@ -283,8 +297,7 @@ class OrbitalsWorkChain(engine.WorkChain):
         builder.cubehandler_code=self.inputs.cubehandler_code
         builder.parameters=orm.Dict(dict=self.ctx.parameters)
         attach_source(builder,self.ctx.location)
-        from .rendering import calcjob_options
-        builder.metadata.options=calcjob_options(self.inputs.source_remote,seconds=3600)
+        builder.metadata.options = self.cube_options()
         if self.ctx.parameters['retention']=='stash':
             builder.metadata.options.stash=stash_options(self.ctx.parameters['stash_directory'], 'full_cubes')
         builder.metadata.disable_cache=True  # Explicit reuse checks files, including retained/stashed full cubes.

@@ -6,7 +6,9 @@ from aiida_empa_orca.common_orbitals import attach_orbital, options
 from aiida_empa_orca.casci import signature
 from aiida_empa_orca.rendering import calcjob_options
 
-from .property_services import source_node
+from .property_services import source_node, helper_code
+from aiida_empa_orca.native_logs import DIRECTORY, output_policy
+from aiida_empa_orca.artifacts import stash_options
 
 
 def casscf_sources(entry_uuid):
@@ -63,7 +65,8 @@ def history(source_uuid, method):
     return rows
 
 
-def review(source_uuid, method, values, force=False):
+def review(source_uuid, method, values, force=False, *, native_output_policy=None):
+    retention = output_policy(native_output_policy)
     electronic, reference = context(source_uuid, method)
     effective = correlation.settings(values | {'method': method}, electronic,
                                      reference['casscf_settings'] if reference else None)
@@ -79,9 +82,9 @@ def review(source_uuid, method, values, force=False):
             break
     if reference and reuse is None:
         resolve_electronic(n.outputs.remote_folder, names=['aiida.gbw'])
-    if n.inputs.code.computer.label == 'tigu' and effective['nprocs'] > 12:
-        raise ValueError('Use at most 12 processes per tigu submission')
     return {'source_uuid': str(source_uuid), 'method': method, 'settings': effective,
+            'native_output_policy':retention,
+            'helper_uuid':helper_code(n.inputs.code.computer.uuid) if reuse is None else None,
             'reference_summary': ({'active_space': reference['optimized_active_space'],
                 'states': n.outputs.state_energies.get_dict()['states']} if reference else
                 {'charge': electronic['charge'], 'multiplicity': electronic['multiplicity']}),
@@ -92,13 +95,16 @@ def review(source_uuid, method, values, force=False):
 
 
 def builder(plan):
-    checked = review(plan['source_uuid'], plan['method'], plan['settings'], plan['force'])
+    checked = review(plan['source_uuid'], plan['method'], plan['settings'], plan['force'],
+                     native_output_policy=plan.get('native_output_policy'))
     if any(checked[key] != plan[key] for key in ('signature', 'input', 'code_uuid')):
         raise ValueError('The correlation request changed; review it again')
     electronic, reference = context(plan['source_uuid'], plan['method'])
     n = orm.load_node(plan['source_uuid'])
     b = correlation.CorrelationCalculation.get_builder()
     b.code = n.inputs.code
+    b.compact_code = orm.load_code(checked['helper_uuid'])
+    b.native_output_policy = orm.Dict(dict=checked['native_output_policy'])
     b.electronic_settings, b.settings = orm.Dict(dict=electronic), orm.Dict(dict=plan['settings'])
     b.structure = orm.load_node(reference['structure_uuid']) if reference else n.outputs.structure
     if reference:
@@ -112,13 +118,16 @@ def builder(plan):
     opts = calcjob_options(remote, seconds=plan['settings']['wallclock_seconds'])
     opts.update(options(plan['settings']))
     b.metadata.options = opts
+    if checked['native_output_policy']['mode'] == 'stash':
+        b.metadata.options.stash = stash_options(checked['native_output_policy']['stash_directory'], DIRECTORY)
     b.metadata.disable_cache = True
     b.metadata.label = b.structure.get_formula() + ' · ' + plan['method'] + ' · correlation energies'
     return b
 
 
 def submit(plan):
-    checked = review(plan['source_uuid'], plan['method'], plan['settings'], plan['force'])
+    checked = review(plan['source_uuid'], plan['method'], plan['settings'], plan['force'],
+                     native_output_policy=plan.get('native_output_policy'))
     if checked['signature'] != plan['signature']:
         raise ValueError('The correlation request changed; review it again')
     return checked['reuse_uuid'] or str(engine.submit(builder(plan)).uuid)

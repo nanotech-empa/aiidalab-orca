@@ -110,6 +110,8 @@ class CorrelationEnergies(ipw.VBox):
         self.entry_uuid = str(entry_uuid)
         self.plan, self.process_uuid, self._poll_task = None, None, None
         self._disposed = False
+        from .retention import FullFileRetention
+        self.full_files = FullFileRetention()
         style = {'description_width': 'initial'}
         self.method = ipw.ToggleButtons(options=[('HF → RI-MP2', 'RI-MP2'), ('CASSCF → correlation', 'SC-NEVPT2')],
             style={'button_width': 'auto'})
@@ -158,7 +160,7 @@ class CorrelationEnergies(ipw.VBox):
         self.refresh = ipw.Button(description='Refresh results and references', icon='refresh', layout=ipw.Layout(width='auto'))
         self.refresh.on_click(self._refresh)
         self.output = ipw.VBox()
-        self.form = ipw.VBox([self.frozen, advanced, ipw.HBox([self.review, self.submit],
+        self.form = ipw.VBox([self.frozen, self.full_files, advanced, ipw.HBox([self.review, self.submit],
             layout=ipw.Layout(flex_flow='row wrap')), self.review_text])
         super().__init__([ipw.HTML('<h3>Correlation energies</h3><p>Choose the route matching your reference. '
             'Each calculation keeps this geometry fixed and stores its reference energy, correlation correction '
@@ -170,6 +172,7 @@ class CorrelationEnergies(ipw.VBox):
         for control in (self.real_shift, self.imaginary_shift, self.ipea_shift):
             control.observe(self._invalidate, names='value')
         self.reference.observe(self._source_changed, names='value')
+        self.full_files.observe(self._invalidate, names='revision')
         for control in (self.frozen, self.nprocs, self.memory, self.wall, self.aux, self.force):
             control.observe(self._invalidate, names='value')
         self._refresh()
@@ -211,7 +214,7 @@ class CorrelationEnergies(ipw.VBox):
                 self.notice.value += ('<p>CASPT2 uses a different perturbation model from NEVPT2. '
                     'Review its explicit shifts and inspect reference weights, denominators and residual convergence. '
                     'The full first-order wavefunction increases memory and disk demands on larger systems.</p>')
-            self.notice.value += '<p>Small energy/log outputs are retrieved; full electronic files stay on the calculation computer.</p>'
+            self.notice.value += '<p>Only bounded validation text and diagnostics are retrieved. Full native logs, properties and electronic files are left remotely or stashed using Full files.</p>'
         except (ValueError, KeyError, OSError) as exc:
             self.form.layout.display = 'none'
             self.notice.value = '<p class="orca-notice">' + html.escape(str(exc)) + '</p>'
@@ -237,7 +240,8 @@ class CorrelationEnergies(ipw.VBox):
     def _review(self, _=None):
         self._invalidate()
         try:
-            self.plan = service.review(self._source(), self._method(), self._values(), self.force.value)
+            self.plan = service.review(self._source(), self._method(), self._values(), self.force.value,
+                                       native_output_policy=self.full_files.values())
             p = self.plan
             reference = p['reference_summary']
             if p['method'] != 'RI-MP2':
@@ -247,10 +251,14 @@ class CorrelationEnergies(ipw.VBox):
                     for r in reference['states'])
             else:
                 source = f'Fresh HF · charge {reference["charge"]:+d} · multiplicity {reference["multiplicity"]}'
+            policy = self.full_files.values()
+            destination = ('stashed at '+html.escape(policy['stash_directory']) if policy['mode']=='stash'
+                           else 'left on the calculation computer')
             self.review_text.value = (f'<p><b>{p["action"].capitalize()} {p["method"]}</b> · {html.escape(p["execution"])} · '
                 f'{p["settings"]["nprocs"]} process(es) · {memory_label(p["settings"]["memory_mb"])} · '
                 f'{p["settings"]["wallclock_seconds"] // 60} minutes.</p>'
                 f'<p>{html.escape(source)}. Frozen core: {"chemical core" if p["settings"]["frozen_core"] else "none"}.</p>'
+                f'<p>New full native files are {destination}. Reused calculations keep their recorded policy.</p>'
                 '<details><summary>Review native input</summary><pre>' + html.escape(p['input']) + '</pre></details>')
             if p['method'] == 'DLPNO-NEVPT2':
                 self.review_text.value += '<p>Local FIC approximation: ' + html.escape(p['settings']['pno_preset']) + '.</p>'

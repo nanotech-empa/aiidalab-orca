@@ -81,7 +81,7 @@ and full-resolution cubes. Computer/code setup belongs to `aiidalab-empa-setup`;
 the application must use compatible configured codes without machine-specific
 or scheduler/transport allowlists.
 
-The compact-output candidates address new SCF/geometry, common-orbital and CASCI/CASSCF native files,
+The compact-output candidates address new SCF/geometry, common-orbital, CASCI/CASSCF and correlation native files,
 including wavefunctions and Dyson CI exports:
 it retrieves bounded summaries/manifests and requires explicit remote/stash
 retention. The configured `orca-tools` runtime must support `compact_output.py`;
@@ -105,7 +105,13 @@ remote/stash policy instead of implicitly retrieving orbital files under an old
 size threshold. Combined catalog metadata is bounded at 2 MiB; coefficient
 arrays and original orbital files do not enter that metadata.
 
-Native `aiida.out` retrieval in correlation and other calculation classes is not yet uniformly size bounded.
+Correlation summaries preserve all existing native checks, including every
+CASPT2 residual/denominator table and DLPNO amplitude solve. Full generated
+electronic files are bundled with the native logs for the reviewed remote/stash
+choice; they do not become Dyson/Kondo orbital references. Correlation and
+optical resource review no longer impose process limits by computer label.
+
+Native `aiida.out` retrieval in optical, vibration and other calculation classes is not yet uniformly size bounded.
 Before release, extract and validate compact
 results on the calculation computer, preserve large originals through the
 reviewed remote/stash policy, and update consumers that currently parse the

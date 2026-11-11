@@ -40,8 +40,24 @@ COMMON_MARKERS = re.compile(
     r'Input Geometry matches current geometry|Input basis set matches current basis set|'
     r'Number of (?:basis functions|contracted basis functions)|Number of Electrons\s+NEL|'
     r'Quasi-Restricted Orbitals were saved in aiida.qro|^\s*WARNING:|ERROR|DID NOT CONVERGE', re.I)
+CORRELATION_MARKERS = re.compile(
+    CASSCF_MARKERS.pattern + r'|Program Version|Number of Electrons\s+NEL|'
+    r'Hartree-Fock type|\b(?:Charge|Mult)\s+\.{2,}|SCF CONVERGED AFTER|'
+    r'ORCA\s+MP2|^\s*Total Energy|RI-MP2 CORRELATION ENERGY|MP2 TOTAL ENERGY|'
+    r'FINAL SINGLE POINT ENERGY|Freezing NCore=|Number of frozen core electrons|'
+    r'Orbital Range Operator|Expectation value of <S\*\*2>|'
+    r'ORCA finished by error|Segmentation fault|poorly|normaliz|project|CMatrix|'
+    r'negative|denominator|intruder|NOT CONVERGED|DID NOT CONVERGE|'
+    r'\bPT2\s*=|<\s*(?:NEVPT2|CASPT2)\s*>|Orbitals.*canonical|'
+    r'(?:NEVPT2|CASPT2) Results|\bMULT\s+\d+,\s*ROOT\s+\d+|'
+    r'Reference\s+(?:Energy|Weight)|Last\s+frozen\s+orbital|'
+    r'DLPNO-NEVPT2 SETTINGS|^TCut\w+:|(?:Energy|Residual) convergence tolerance|'
+    r'LMP2-Iter=|\|\s*\d+>|CASPT2.*Levelshift|CASPT2 calculation|'
+    r'Iter\s+EPT2\s+EHylleraas\s+residual norm\s+Time|'
+    r'^\s*\d+\s+[-+.\dEeDd]+\s+[-+.\dEeDd]+\s+[-+.\dEeDd]+\s+[-+.\dEeDd]+\s*$', re.I)
 PROTOCOLS = {'casci-v1': ('aiida.out',), 'casscf-v1': ('aiida.out', 'verify.out'),
-             'scf-v1': ('aiida.out',), 'optimization-v1': ('aiida.out',), 'common-orbitals-v1': ('aiida.out',)}
+             'scf-v1': ('aiida.out',), 'optimization-v1': ('aiida.out',),
+             'common-orbitals-v1': ('aiida.out',), 'correlation-v1': ('aiida.out',)}
 COMPACT_LIMITS = {'scf_results.json': 2 * 1024**2, 'aiida.xyz': 2 * 1024**2,
                   'aiida_trj.xyz': 8 * 1024**2}
 
@@ -91,10 +107,11 @@ def _file_record(path):
     return {'name': path.name, 'size_bytes': after.st_size, 'sha256': checksum}
 
 
-def _collect_log(root, name, markers, tail_name):
+def _collect_log(root, name, markers, tail_name, *, mark_omissions=False):
     original = root / DIRECTORY / name
     selected, size, error = [], 0, None
     checksum = hashlib.sha256()
+    gap = False
     before = original.stat()
     if original.is_symlink() or not original.is_file():
         raise ValueError('Native output is not a regular file')
@@ -107,12 +124,18 @@ def _collect_log(root, name, markers, tail_name):
                     checksum.update(chunk)
                 break
             if markers.search(raw.decode('utf-8', errors='replace')):
-                size += len(raw)
+                # Do not turn formerly separated words/diagnostics into a new
+                # multiline match when omitting an unrelated native section.
+                piece = (b'# Native section omitted.\n' if mark_omissions and gap and selected else b'') + raw
+                size += len(piece)
                 if size > SUMMARY_LIMIT:
                     error = 'Native validation summary exceeds the compact-output budget'
                 elif error is None:
                     raw.decode('utf-8')  # Scientific validation lines must decode exactly.
-                    selected.append(raw)
+                    selected.append(piece)
+                gap = False
+            elif raw.strip():
+                gap = True
     after = original.stat()
     if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
         error = 'Native output changed during collection'
@@ -139,11 +162,13 @@ def collect_output(request, root=Path('.')):
     policy, root = output_policy(request['policy']), Path(root)
     records, summaries, errors = [], [], []
     molecular = protocol in ('scf-v1', 'optimization-v1')
-    markers = (SCF_MARKERS if molecular else COMMON_MARKERS if protocol == 'common-orbitals-v1'
+    markers = (CORRELATION_MARKERS if protocol == 'correlation-v1'
+               else SCF_MARKERS if molecular else COMMON_MARKERS if protocol == 'common-orbitals-v1'
                else STATE_MARKERS if protocol == 'casci-v1' else CASSCF_MARKERS)
     for name in PROTOCOLS[protocol]:
         tail = 'native_output_tail.txt' if name == 'aiida.out' else 'verify_tail.txt'
-        original, summary, error = _collect_log(root, name, markers, tail)
+        original, summary, error = _collect_log(root, name, markers, tail,
+                                               mark_omissions=protocol == 'correlation-v1')
         records.append(original)
         summaries.append(summary)
         if error:
@@ -157,6 +182,21 @@ def collect_output(request, root=Path('.')):
             if target.exists():
                 raise ValueError('Refusing to overwrite a preserved native property output')
             prop.replace(target)  # Only this CalcJob's output, without copying it.
+            records.append(_file_record(target))
+    if protocol == 'correlation-v1':
+        # Energy-only results are not orbital references for another app route.
+        # Preserve this job's generated electronic files in the same native
+        # bundle, without copying inputs or touching the parent wavefunction.
+        for path in sorted(root.iterdir()):
+            if (not re.fullmatch(r'aiida[._][A-Za-z0-9_.-]+', path.name)
+                    or path.name in ('aiida.out', 'aiida.inp', 'aiida.coords.xyz')):
+                continue
+            if path.is_symlink() or not path.is_file():
+                raise ValueError('Unsupported native correlation output: ' + path.name)
+            target = root / DIRECTORY / path.name
+            if target.exists():
+                raise ValueError('Refusing to overwrite native correlation output: ' + path.name)
+            path.replace(target)
             records.append(_file_record(target))
     compact = []
     if molecular and not errors:
@@ -201,7 +241,10 @@ def validate_manifest(record):
     if names[:len(expected)] != expected or len(set(names)) != len(names):
         raise ValueError('Missing or ambiguous full native output')
     for item in [*summaries, *record['files']]:
-        if (item['name'] not in expected + [n.replace('.out', '.property.txt') for n in expected] + ['aiida.xyz', 'aiida_trj.xyz']
+        allowed = (item['name'] in expected + [n.replace('.out', '.property.txt') for n in expected]
+                   + ['aiida.xyz', 'aiida_trj.xyz'] or record['protocol'] == 'correlation-v1'
+                   and re.fullmatch(r'aiida[._][A-Za-z0-9_.-]+', item['name']))
+        if (not allowed
                 or type(item['size_bytes']) is not int or item['size_bytes'] < 0
                 or not re.fullmatch('[0-9a-f]{64}', item['sha256'])):
             raise ValueError('Invalid native-output identity')

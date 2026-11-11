@@ -86,7 +86,9 @@ The A2n operational scripts are evidence from one benchmark, not a portable
 submission API. Use the app services and native WorkChains for new work.
 
 For the compact-output candidate, **Full files** explicitly chooses remote
-retention or stashing for new CASCI/CASSCF logs/GBWs and Dyson CI exports. These full
+retention or stashing for new common-orbital/CASCI/CASSCF logs and orbital files,
+and Dyson CI exports. Catalog/preview requests inherit the reference's orbital
+retention; full cubes keep their separate retention choice. These full
 files are not retrieved. CASCI saves bounded validation text, a diagnostic tail
 and an immutable size/checksum manifest. Dyson needs the original CI log from
 that manifest, not the compact summary. Stored energies remain inspectable if

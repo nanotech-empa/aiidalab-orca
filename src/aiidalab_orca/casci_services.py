@@ -6,6 +6,7 @@ from aiida.engine import submit
 from aiida_empa_orca import casci, common_orbitals
 from aiida_empa_orca.artifacts import resolve_electronic
 from aiida_empa_orca.reference import reference_settings
+from aiida_empa_orca.native_logs import output_policy
 from .property_services import helper_code, source_node, source_remote, wavefunction_status
 
 
@@ -42,7 +43,8 @@ def execution_details(uuid):
             **{key:settings[key] for key in ('nprocs','memory_mb','wallclock_seconds')}}
 
 
-def prepare_common(source_uuid, force=False):
+def prepare_common(source_uuid, force=False, *, native_output_policy=None):
+    retention = output_policy(native_output_policy)
     source = source_node(source_uuid)
     unavailable = []
     for row in ([] if force else reference_runs(source_uuid)):
@@ -50,25 +52,28 @@ def prepare_common(source_uuid, force=False):
             continue  # Orbital optimization is an explicit choice, never implicit SCF preparation.
         try:
             common_orbitals.reference_location(orm.load_node(row['uuid']))
-            return {'source_uuid':source_uuid, 'action':'reuse', 'reference_uuid':row['uuid'], 'unavailable':unavailable}
+            return {'source_uuid':source_uuid, 'action':'reuse', 'reference_uuid':row['uuid'], 'unavailable':unavailable,
+                    'native_output_policy':retention}
         except (FileNotFoundError, KeyError, ValueError) as exc:
             unavailable.append(str(exc))
     resolve_electronic(source_remote(source))
     s = reference_settings(source.inputs.settings.get_dict())
     from aiida_empa_orca.pdos_workflow import default_plan
     return {'source_uuid':source_uuid, 'action':'prepare', 'reference_uuid':None,
+            'native_output_policy':retention,
             'kind':'QRO' if common_orbitals.orbital_filename(s).endswith('qro') else 'restricted',
             'force_recompute':bool(force), 'unavailable':unavailable,
             'pdos':default_plan(source.inputs.code.computer.uuid)}
 
 
-def common_builder(source_uuid, force=False, character_plan=None):
+def common_builder(source_uuid, force=False, character_plan=None, *, native_output_policy=None):
     source = source_node(source_uuid)
     b = common_orbitals.CommonOrbitalsWorkChain.get_builder()
     b.structure, b.settings, b.code = source.outputs.structure, source.inputs.settings, source.inputs.code
     b.source_retrieved, b.source_remote = source.outputs.retrieved, source_remote(source)
     b.storage_code = orm.load_code(helper_code(source.inputs.code.computer.uuid))
     b.storage_policy = orm.Dict(dict=wavefunction_status(source_uuid)['policy'])
+    b.native_output_policy = orm.Dict(dict=output_policy(native_output_policy))
     b.force_recompute = orm.Bool(force)
     from aiida_empa_orca.pdos_workflow import configure, default_plan
     configure(b, character_plan or default_plan(source.inputs.code.computer.uuid))
@@ -80,7 +85,8 @@ def submit_common(plan):
     if plan['action'] == 'reuse':
         common_orbitals.reference_location(orm.load_node(plan['reference_uuid']))
         return plan['reference_uuid']
-    return str(submit(common_builder(plan['source_uuid'],plan.get('force_recompute',False),plan.get('pdos'))).uuid)
+    return str(submit(common_builder(plan['source_uuid'],plan.get('force_recompute',False),plan.get('pdos'),
+                      native_output_policy=plan.get('native_output_policy'))).uuid)
 
 
 def reference_data(uuid):

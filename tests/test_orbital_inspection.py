@@ -134,6 +134,7 @@ def test_common_preparation_preserves_uno_alongside_qro(common_reference,aiida_m
     captured=[]
     monkeypatch.setattr(common_orbitals,'storage_builder',storage)
     process.ctx.preparation = creator
+    process.ctx.retention = {'mode':'stash','stash_directory':'/chosen/stash'}
     process.submit = lambda _: creator
     try:
         process.preserve()

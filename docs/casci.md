@@ -40,6 +40,16 @@ same final fixed geometry and common orbitals.
 Orbital preparation inherits the original SCF's ORCA code, computer, process
 count, memory and wall-time limit. The preparation panel displays those actual
 settings. Saved remote/stashed wavefunctions are accessed on that computer.
+In the compact-output candidate, the preparation's **Full files** control
+chooses remote retention or an explicit stash destination for the full native
+log and prepared QRO/UNO (or restricted GBW) files. Only a bounded validation
+summary, a 64-KiB diagnostic tail and a checksum manifest are retrieved.
+Inspecting the catalog or generating previews inherits that orbital-file
+policy; neither operation silently applies an old wavefunction retrieval
+threshold. Full cubes retain their separate stash/leave/delete choice, with
+only cubehandler-reduced previews retrieved. Reusing older results preserves
+their recorded policy. Changing retention invalidates preparation review.
+
 CASCI uses the orbital reference's computer and displays the execution target
 in its review. Edit CASCI processes, memory and wall time in **CASCI resources
 and advanced settings** before reviewing a new request.

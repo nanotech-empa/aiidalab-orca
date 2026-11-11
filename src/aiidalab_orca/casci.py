@@ -69,6 +69,7 @@ class CasciStates(ipw.VBox):
         self.space_info = ipw.HTML()
         from .retention import FullFileRetention
         self.full_files = FullFileRetention()
+        self.common_full_files = FullFileRetention()
         advanced = ipw.Accordion(children=[ipw.VBox([self.aux,self.threshold,self.nprocs,self.memory,self.walltime,self.force])],selected_index=None)
         advanced.set_title(0,'CASCI resources and advanced settings')
         self.review = ipw.Button(description='Review charge / spin combinations',icon='list',button_style='primary',layout=ipw.Layout(width='auto'))
@@ -108,7 +109,7 @@ class CasciStates(ipw.VBox):
         self.common_preparation = ipw.VBox([
             ipw.HTML('<h4>Common spatial-orbital reference</h4><p>One shared set of spatial orbitals is used for all CASCI states and charge/spin sectors. '
                 'Preparing it reads the saved wavefunction without running a new SCF calculation.</p>'),
-            self.execution_info,self.prepare,self.common_submit,self.preparation_actions,common_options])
+            self.execution_info,self.common_full_files,self.prepare,self.common_submit,self.preparation_actions,common_options])
         self.active_controls = ipw.HBox([self.electrons,self.norb],layout=ipw.Layout(flex_flow='row wrap'))
         self.sector_preparation = ipw.VBox([
             ipw.HTML('<h4>Add charge / spin sectors</h4>'),
@@ -147,6 +148,7 @@ class CasciStates(ipw.VBox):
                         self.nprocs,self.memory,self.walltime,self.force,self.common_force):
             control.observe(self._invalidate,names='value')
         self.full_files.observe(self._invalidate, names='revision')
+        self.common_full_files.observe(self._invalidate, names='revision')
         self.electrons.observe(self._refresh_diagram,names='value')
         self.norb.observe(self._refresh_diagram,names='value')
         self.aux.observe(self._refresh_diagram,names='value')
@@ -280,6 +282,8 @@ class CasciStates(ipw.VBox):
             self._execution_context = context
             if not self.full_files.directory.value:
                 self.full_files.directory.value = context.get('stash_directory', '')
+            if not self.common_full_files.directory.value:
+                self.common_full_files.directory.value = context.get('stash_directory', '')
             self.execution_info.value = (explanation+f'<p><b>Inherited preparation settings:</b> '
                 f'{html.escape(context["code"])}@{html.escape(context["computer"])}; '
                 f'{context["nprocs"]} processes, {memory_label(context["memory_mb"])} total memory, '
@@ -336,10 +340,15 @@ class CasciStates(ipw.VBox):
         self._invalidate()
         self._execution_text()
         try:
-            self.plan = service.prepare_common(self.source_uuid,self.common_force.value)
+            self.plan = service.prepare_common(self.source_uuid,self.common_force.value,
+                                               native_output_policy=self.common_full_files.values())
             text = ('Reuse preserved common orbitals.' if self.plan['action']=='reuse' else
-                    'Read the saved SCF orbitals without SCF iterations; prepare '+self.plan['kind']+' spatial orbitals and preserve them using the SCF wavefunction storage policy.')
+                    'Read the saved SCF orbitals without SCF iterations; prepare '+self.plan['kind']+' spatial orbitals.')
             if self.plan['action'] != 'reuse':
+                policy = self.plan['native_output_policy']
+                destination = ('stashed at '+policy['stash_directory'] if policy['mode']=='stash'
+                               else 'left on the calculation computer')
+                text += ' Full native logs and orbital files are '+destination+'; only compact results are retrieved.'
                 text += ' Orbital-character postprocessing is included for each newly prepared orbital set.'
                 if not self.plan.get('pdos', {}).get('ready'):
                     text += ' Its exporter or analysis worker is not configured; PDOS will be reported as unavailable.'

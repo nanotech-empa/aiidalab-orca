@@ -11,11 +11,13 @@ from aiida import common, engine, orm
 from aiida.parsers import Parser
 from aiida_orca.calculations.orca_orca import OrcaCalculation
 
-from .artifacts import resolve_electronic, storage_builder, storage_policy
+from .artifacts import resolve_electronic, storage_builder, stash_options
 from .input import render_input
 from .pdos_workflow import OrbitalCharacterMixin
 from .protocols import reference as reference_type
 from .reference import reference_settings, reference_signature, single_point_parameters
+from .native_logs import DIRECTORY, output_policy
+from .native_output import compact_spec, prepare_compact, read_manifest
 
 PROCESS_TYPE = 'aiida.workflows:empa_orca.common_orbitals'
 
@@ -99,6 +101,7 @@ class CommonOrbitalsCalculation(engine.CalcJob):
         spec.input('settings', valid_type=orm.Dict)
         spec.input('source_retrieved', valid_type=orm.FolderData)
         source_spec(spec)
+        compact_spec(spec)
         spec.input('metadata.options.parser_name', default='empa_orca.common_orbitals')
         spec.input('metadata.options.withmpi', default=False)
         spec.output('orbital_reference', valid_type=orm.Dict)
@@ -116,13 +119,14 @@ class CommonOrbitalsCalculation(engine.CalcJob):
         code = common.CodeInfo()
         code.code_uuid, code.cmdline_params = self.inputs.code.uuid, ['aiida.inp']
         code.stdout_name, code.join_files = 'aiida.out', True
-        info.codes_info, info.retrieve_list = [code], ['aiida.out']
-        return info
+        info.codes_info = [code]
+        return prepare_compact(info, self.inputs, folder, 'common-orbitals-v1')
 
 
 class CommonOrbitalsParser(Parser):
     def parse(self, **kwargs):
         try:
+            manifest = read_manifest(self.node, self.retrieved.base.repository, 'common-orbitals-v1')
             text = self.retrieved.base.repository.get_object_content('aiida.out')
             if 'ORCA TERMINATED NORMALLY' not in text:
                 raise ValueError('ORCA did not terminate normally')
@@ -155,6 +159,8 @@ class CommonOrbitalsParser(Parser):
                 'structure_uuid': str(self.node.inputs.structure.uuid),
                 'source_retrieved_uuid': str(self.node.inputs.source_retrieved.uuid),
                 'settings': s, 'geometry_mode': 'fixed'}))
+            if manifest is not None:
+                self.out('native_output_manifest', orm.Dict(dict=manifest))
         except (KeyError, ValueError, OSError) as exc:
             self.logger.error(str(exc))
             return self.exit_codes.ERROR_REFERENCE
@@ -187,11 +193,13 @@ class CommonOrbitalsWorkChain(OrbitalCharacterMixin, engine.WorkChain):
                          'storage_code':orm.AbstractCode, 'storage_policy':orm.Dict}.items():
             spec.input(key, valid_type=typ)
         spec.input('force_recompute', valid_type=orm.Bool, default=lambda:orm.Bool(False))
+        spec.input('native_output_policy', valid_type=orm.Dict, default=lambda:orm.Dict(dict={'mode': 'remote'}))
+        spec.output('native_output_manifest', valid_type=orm.Dict, required=False)
         for key, typ in {'orbital_reference':orm.Dict, 'remote_folder':orm.RemoteData, 'retrieved':orm.FolderData}.items():
             spec.output(key, valid_type=typ)
         cls.character_spec(spec)
         spec.outline(cls.setup, engine.if_(cls.needs_preparation)(cls.prepare, cls.inspect,
-                     cls.preserve, cls.inspect_storage), cls.results,
+                     engine.if_(cls.should_stash)(cls.preserve, cls.inspect_storage)), cls.results,
                      cls.run_orbital_character, cls.inspect_orbital_character)
         spec.exit_code(400, 'ERROR_SOURCE', message='The source orbitals or provenance are unavailable; see report.')
         spec.exit_code(401, 'ERROR_PREPARATION', message='Common spatial-orbital preparation failed.')
@@ -202,7 +210,7 @@ class CommonOrbitalsWorkChain(OrbitalCharacterMixin, engine.WorkChain):
         try:
             validate_source(self.inputs.structure, self.inputs.settings.get_dict(), self.inputs.code,
                             self.inputs.source_retrieved, self.inputs.source_remote)
-            storage_policy(self.inputs.storage_policy.get_dict())
+            self.ctx.retention = output_policy(self.inputs.native_output_policy.get_dict())
             if self.inputs.storage_code.computer.uuid != self.inputs.code.computer.uuid:
                 raise ValueError('Storage and ORCA codes must use the same computer')
             # The first implementation requires all-electron basis electron counting.
@@ -233,7 +241,11 @@ class CommonOrbitalsWorkChain(OrbitalCharacterMixin, engine.WorkChain):
         for key in ('structure', 'settings', 'code', 'source_retrieved'):
             b[key] = self.inputs[key]
         attach_orbital(b, self.ctx.location, 'aiida.gbw')
+        b.compact_code = self.inputs.storage_code
+        b.native_output_policy = orm.Dict(dict=self.ctx.retention)
         b.metadata.options = options(self.inputs.settings.get_dict())
+        if self.ctx.retention['mode'] == 'stash':
+            b.metadata.options.stash = stash_options(self.ctx.retention['stash_directory'], DIRECTORY)
         # Preparation creates a remote artifact. Explicit reuse above checks it;
         # never accept a cached directory whose QRO/GBW may have disappeared.
         b.metadata.disable_cache = True
@@ -247,9 +259,12 @@ class CommonOrbitalsWorkChain(OrbitalCharacterMixin, engine.WorkChain):
         node = self.ctx.preparation
         filename = node.outputs.orbital_reference.get_dict()['filename']
         b = storage_builder(node.outputs.remote_folder, self.inputs.storage_code,
-                            self.inputs.storage_policy.get_dict(),
+                            {'threshold_mb': 0, 'stash_directory': self.ctx.retention['stash_directory']},
                             names=[filename,'aiida.uno'] if filename.endswith('qro') else [filename])
         return engine.ToContext(storage=self.submit(b))
+
+    def should_stash(self):
+        return self.ctx.retention['mode'] == 'stash'
 
     def inspect_storage(self):
         if not self.ctx.storage.is_finished_ok:
@@ -259,3 +274,5 @@ class CommonOrbitalsWorkChain(OrbitalCharacterMixin, engine.WorkChain):
         node = orm.load_node(self.ctx.reuse_uuid) if self.ctx.reuse_uuid else self.ctx.preparation
         for key in ('orbital_reference', 'remote_folder', 'retrieved'):
             self.out(key, node.outputs[key])
+        if 'native_output_manifest' in node.outputs:
+            self.out('native_output_manifest', node.outputs.native_output_manifest)

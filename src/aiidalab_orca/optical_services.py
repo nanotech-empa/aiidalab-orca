@@ -25,13 +25,26 @@ def defaults(source_uuid):
     return optical.settings({}, electronic) | {'reference_type': reference_type(electronic)}
 
 
+def display_state(state, success):
+    return 'failed' if state == 'finished' and not success else state
+
+
 def runs(source_uuid):
     source = source_node(source_uuid)
     rows = orm.QueryBuilder().append(orm.FolderData, filters={'uuid': str(source.outputs.retrieved.uuid)}, tag='source').append(
         orm.CalcJobNode, with_incoming='source', edge_filters={'label': 'source_retrieved'}, tag='run',
-        filters={'process_type': optical.PROCESS_TYPE}, project=['uuid', 'label', 'ctime', 'attributes.process_state'])
-    return [{'uuid': str(uid), 'label': label, 'date': date.isoformat(), 'state': state}
-            for uid, label, date, state in rows.order_by({'run': {'ctime': 'desc'}}).all()]
+        filters={'process_type': optical.PROCESS_TYPE},
+        project=['uuid', 'label', 'ctime', 'attributes.process_state', 'attributes.exit_status'])
+    records = []
+    from aiida_empa_orca.protocols import reference as reference_type
+    for uid, label, date, state, exit_status in rows.order_by({'run': {'ctime': 'desc'}}).all():
+        run = orm.load_node(uid)
+        settings = run.inputs.settings.get_dict()
+        families = ('spin-conserving UKS' if reference_type(run.inputs.electronic_settings.get_dict()) == 'UKS'
+                    else 'singlets + triplets' if settings['triplets'] else 'singlets')
+        records.append({'uuid': str(uid), 'label': label, 'date': date.isoformat(), 'state': state,
+                        'display_state': display_state(state, exit_status == 0), 'families': families})
+    return records
 
 
 def review(source_uuid, values, force=False, *, native_output_policy=None):

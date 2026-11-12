@@ -25,9 +25,13 @@ down a kernel. This housekeeping does not require creating another report.
 | Section | Default? | Execution and authorization |
 | --- | --- | --- |
 | [Localhost](localhost.md) | Yes, for the explicitly requested case(s) | Small molecules; normally one calculation at a time, at most two CPU cores and 2 GiB requested memory per calculation. No real QPU access. |
+| [Noncontiguous CAS pilot](../orbital-reordering.md) | When explicitly included | Separate QRO and restricted-source GUI subcases on the selected installed source. |
 | [Remote CPU](remote-cpu.md) | Optional | Requires the user's named computer/code, resource limits and approved cases. A local failure never authorizes moving work to a remote computer. |
 | [Remote QPU](remote-qpu.md) | Optional | Requires separate provider/backend, shot, job-count and time-budget authorization. A simulator test is not permission to use hardware. |
 | [Connected export](connected-export.md) | Optional | Reviewing the configured openBIS form and publishing data are separate scopes. Real publication needs an approved destination and explicit authorization. |
+
+L00–L21 are 22 numbered L groups. The separate noncontiguous-CAS pilot is a
+23rd group when included; keep its subcase evidence distinct from those L cases.
 
 XPS is excluded from this acceptance campaign. Resonance Raman and other
 unimplemented routes are not implied by the full-test title. DMRG and QPU are

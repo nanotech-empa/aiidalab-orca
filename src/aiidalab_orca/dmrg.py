@@ -389,6 +389,7 @@ class NativeDmrg(ipw.VBox):
                     f"{energy:.12f}",
                     f"{record['excitation_energies_ev'][i]:.9f}",
                     f"{record['density_checks'][i]['trace']:.9f}",
+                    ", ".join(f"{value:.9f}" for value in record["density_checks"][i]["natural_occupations"]),
                 )
                 for i, energy in enumerate(record["energies_hartree"])
             ]

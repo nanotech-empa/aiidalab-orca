@@ -522,7 +522,7 @@ class OpticalExcitations(ipw.VBox):
     async def _poll(self):
         while not self._disposed:
             status = progress(self.process_uuid)
-            self.message.value = '<p>' + html.escape(status['state'] + ' · ' + status.get('message', '')) + '</p>'
+            self.message.value = '<p>' + html.escape(service.display_state(status['state'], status['success']) + ' · ' + status.get('message', '')) + '</p>'
             if status['finished']:
                 self._refresh()
                 if status['success']:
@@ -533,7 +533,9 @@ class OpticalExcitations(ipw.VBox):
     def _refresh(self, _=None):
         rows = service.runs(self.source_uuid)
         old = self.saved.value
-        self.saved.options = [('Select an optical calculation', None)] + [(r['date'][:16]+' · '+r['label']+' · '+r['state'], r['uuid']) for r in rows]
+        self.saved.options = [('Select an optical calculation', None)] + [
+            (r['date'][:16]+' · '+r['label']+' · '+r.get('families', 'response families unavailable')+' · '+
+             r.get('display_state', r['state']), r['uuid']) for r in rows]
         valid = {r['uuid'] for r in rows}
         self.saved.value = self.process_uuid if self.process_uuid in valid else old if old in valid else rows[0]['uuid'] if rows else None
         if not rows:
@@ -548,7 +550,7 @@ class OpticalExcitations(ipw.VBox):
         try:
             status = progress(self.saved.value)
             if not status['success']:
-                self.message.value = ('<p>' + html.escape(status['state'] + ' · ' + status['message']) + '</p>'
+                self.message.value = ('<p>' + html.escape(service.display_state(status['state'], status['success']) + ' · ' + status['message']) + '</p>'
                     '<details><summary>Calculation diagnostics</summary><pre>' + html.escape('\n'.join(status['reports'][-8:])) + '</pre></details>')
                 return
             self.message.value = ''

@@ -41,7 +41,7 @@ def runs(source_uuid):
         run = orm.load_node(uid)
         settings = run.inputs.settings.get_dict()
         families = ('spin-conserving UKS' if reference_type(run.inputs.electronic_settings.get_dict()) == 'UKS'
-                    else 'singlets + triplets' if settings['triplets'] else 'singlets')
+                    else 'singlets + triplets' if settings.get('triplets', False) else 'singlets')
         records.append({'uuid': str(uid), 'label': label, 'date': date.isoformat(), 'state': state,
                         'display_state': display_state(state, exit_status == 0), 'families': families})
     return records

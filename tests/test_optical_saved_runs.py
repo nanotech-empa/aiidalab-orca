@@ -24,7 +24,8 @@ def saved_runs(aiida_profile_clean, aiida_localhost, monkeypatch):
         node = orm.CalcJobNode(computer=aiida_localhost, process_type=optical.PROCESS_TYPE)
         node.label = 'Molecule · TDDFT · vertical optical excitations'
         for label, data in [('source_retrieved', orm.load_node(retrieved_uuid)),
-                            ('settings', orm.Dict(dict={'method': 'TDDFT', 'triplets': triplets}).store()),
+                            ('settings', orm.Dict(dict={'method': 'TDDFT'} if key == 'singlets' else
+                                                 {'method': 'TDDFT', 'triplets': triplets}).store()),
                             ('electronic_settings', orm.Dict(dict=protocol_settings(
                                 overrides={'charge': 0, 'multiplicity': mult})).store())]:
             node.base.links.add_incoming(data, link_type=LinkType.INPUT_CALC, link_label=label)

@@ -1,6 +1,10 @@
 """Plain plans and operation-local ORM access for the energy workflow."""
 
+import hashlib
+import json
+
 from aiida import engine, orm
+from aiida.common import NotExistent
 from aiida_empa_orca import casci, common_orbitals
 from aiida_empa_orca.energy import (
     EnergyExportWorkChain,
@@ -177,6 +181,70 @@ def stages(model_uuid, operation, sector=None):
             }
         )
     return sorted(rows, key=lambda row: row["created"])
+
+
+def sample_diagnostics(stage_uuid, model_uuid, sector):
+    """Read the selected, provenance-matched saved counts; return plain data only."""
+    try:
+        model = orm.load_node(model_uuid)
+        stage = orm.load_node(stage_uuid)
+    except NotExistent as exc:
+        raise ValueError("The saved model or sample stage is no longer available") from exc
+    if (
+        not isinstance(model, orm.WorkChainNode)
+        or not isinstance(stage, orm.CalcJobNode)
+        or not model.is_finished_ok
+        or model.process_type != "aiida.workflows:empa_orca.energy_export"
+        or not stage.is_finished_ok
+        or stage.process_type != "aiida.calculations:empa_orca.energy_stage"
+        or stage.inputs.operation.value not in ("sample-simulator", "sample-hardware")
+        or stage.inputs.hamiltonian.uuid != model.outputs.hamiltonian.uuid
+        or stage.inputs.native_export.uuid != model.outputs.native_export.uuid
+        or stage.inputs.sector.get_dict() != sector
+        or "samples" not in stage.outputs
+    ):
+        raise ValueError("Saved counts do not belong to this Hamiltonian and sector")
+    result = stage.outputs.result.get_dict()
+    with stage.outputs.samples.open(mode="rb") as stream:
+        raw = stream.read()
+    if hashlib.sha256(raw).hexdigest() != result["samples_sha256"]:
+        raise ValueError("Saved counts do not match their recorded fingerprint")
+    packet = json.loads(raw)
+    if (
+        packet["hamiltonian_sha256"]
+        != model.outputs.native_export.get_dict()["hamiltonian_sha256"]
+        or packet["sector"] != sector
+    ):
+        raise ValueError("Saved counts have a different Hamiltonian or sector")
+    if packet["execution_kind"] != result["execution_kind"]:
+        raise ValueError("Saved counts have a different execution kind")
+    counts = packet["counts"]
+    if (
+        not isinstance(counts, dict)
+        or not counts
+        or any(
+            not isinstance(bits, str)
+            or len(bits) != packet["n_qubits"]
+            or set(bits) - set("01")
+            or type(count) is not int
+            or count < 1
+            for bits, count in counts.items()
+        )
+        or sum(counts.values()) != packet["shots"]
+    ):
+        raise ValueError("Saved bitstring counts or shot total are invalid")
+    ordered = sorted(counts.items(), key=lambda row: (-row[1], row[0]))
+    return {
+        "stage_uuid": str(stage.uuid),
+        "samples_uuid": str(stage.outputs.samples.uuid),
+        "execution_kind": packet["execution_kind"],
+        "shots": packet["shots"],
+        "distinct_bitstrings": len(ordered),
+        "counts": ordered[:50],
+        "omitted_bitstrings": max(0, len(ordered) - 50),
+        "qubit_to_classical": packet["qubit_to_classical"],
+        "nelec": packet["nelec"],
+    }
 
 
 def prepare_stage(

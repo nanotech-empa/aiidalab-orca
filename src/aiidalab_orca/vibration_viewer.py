@@ -13,6 +13,8 @@ from aiidalab_qe_vibroscopy.app.widgets.ramanwidget import RamanWidget
 from aiidalab_qe_vibroscopy.utils.mode_projection import atom_participation
 from aiida_vibroscopy.utils.spectra import raman_prefactor
 
+from .presentation import data_table
+
 
 class MolecularResponse:
     """Plain-data implementation of the optical interface used by the viewer."""
@@ -95,6 +97,10 @@ class MolecularRamanModel(RamanModel):
 
     def _update_spectrum_options(self):
         self.plot_type_options = [('Orientation average', 'powder'), ('Fixed orientation', 'single_crystal')]
+
+    def modes_table(self):
+        return data_table(['Frequencies (cm⁻¹)', 'Label'],
+            zip(self.rounded_frequencies, self.labels), numeric_columns=(0,), label='Normal modes')
 
     def update_data(self):
         if not np.isfinite(self.broadening) or self.broadening <= 0:
@@ -201,6 +207,7 @@ class MolecularSpectrum(RamanWidget):
         if self.rendered:
             return
         super().render()
+        self.broadening.description = 'Broadening (cm⁻¹):'
         self.use_nac_direction.layout.display = 'none'
         self.supercell_selector.layout.display = 'none'
         self._model._update_spectrum_options()

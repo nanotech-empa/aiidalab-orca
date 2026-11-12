@@ -12,6 +12,7 @@ from .orbitals import CubeDisplayMixin
 from .property_services import property_result, default_stash_directory
 from .helper_budget import HelperBudget
 from .kondo_guidance import chemical_potential_help
+from .presentation import data_table
 
 
 class KondoChannels(CubeDisplayMixin, ipw.VBox):
@@ -167,9 +168,10 @@ class KondoChannels(CubeDisplayMixin, ipw.VBox):
             self.mu.value = data['parameters']['chemical_potential_ev']
             rows = data['channels']
             text = f"<p>Selected result: <b>μ={self.mu.value:.2f} eV</b>.</p>"
-            text += '<table><tr><th>Channel</th><th>j/V² (eV⁻¹)</th><th>Coupling</th></tr>'
-            text += ''.join(f"<tr><td>{r['id']}</td><td>{r['exchange_over_v2_inv_ev']:.5f}</td><td>{r['coupling']}</td></tr>" for r in rows)
-            text += '</table><p>Individual unit-normalized channel maps; couplings are not map brightness weights. '
+            text += data_table(['Channel','j/V² (eV⁻¹)','Coupling'],
+                [[r['id'], f"{r['exchange_over_v2_inv_ev']:.5f}", r['coupling']] for r in rows],
+                numeric_columns=(1,),label='Kondo eigenchannels')
+            text += '<p>Individual unit-normalized channel maps; couplings are not map brightness weights. '
             text += 'A combined experimental Kondo map and resonance width require further modelling.</p>'
             text += ''.join('<p>'+html.escape(w)+'</p>' for w in data['warnings'])
             payload = base64.b64encode(json.dumps(data, indent=2).encode()).decode()

@@ -9,6 +9,7 @@ import ipywidgets as ipw
 
 from aiida_empa_orca.casci import energy_diagram
 from aiida_empa_orca.levels import visible_groups
+from .presentation import data_table
 
 
 def state_label(row):
@@ -79,10 +80,12 @@ class StateEnergyLevels(ipw.VBox):
                        f'<text x="{x+span*.4}" y="407" text-anchor="middle" fill="{color}" font-size="13">Multiplicity {mult}</text>')
         svg.append('</svg>')
         self.plot.value = ''.join(svg)
-        rows = ''.join(f"<tr><td>{r['charge']:+d}</td><td>{r['multiplicity']}</td><td>{r['root']}</td>"
-                       f"<td>{r['energy_hartree']:.10f}</td><td>{r['relative_energy_ev']:.6f}</td></tr>"
-                       for r in sorted(data['states'],key=lambda r:(r['charge'],r['multiplicity'],r['root'])))
-        self.table.value = '<details><summary>State energies and identifiers</summary><table><tr><th>Charge</th><th>Multiplicity</th><th>Root</th><th>Total energy (Hartree)</th><th>Relative energy (eV)</th></tr>'+rows+'</table></details>'
+        rows = [[f"{r['charge']:+d}", r['multiplicity'], r['root'],
+                 f"{r['energy_hartree']:.10f}", f"{r['relative_energy_ev']:.6f}"]
+                for r in sorted(data['states'],key=lambda r:(r['charge'],r['multiplicity'],r['root']))]
+        self.table.value = ('<details><summary>State energies and identifiers</summary>'
+            + data_table(['Charge','Multiplicity','Root','Total energy (Hartree)','Relative energy (eV)'],
+                         rows,numeric_columns=range(5),label='State energies') + '</details>')
         payload = base64.b64encode(json.dumps({'diagram':data,'calculations':self.datasets},indent=2).encode()).decode()
         self.download.value = f'<a download="casci_states.json" href="data:application/json;base64,{payload}">Download state energies and provenance</a>'
 

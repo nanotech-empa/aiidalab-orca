@@ -499,14 +499,23 @@ and preserved source geometry. Do not rank methods by total energy alone.
    **1 circuit per time**, **2 excitation groups**, seed **42**. Review/submit circuit generation.
 4. Select **Ideal QPU simulator**, **1000 shots per circuit**. Review and submit
    sampling. Do not select real IBM hardware. Inspect counts and the explicit
-   simulator label.
+   simulator label in **Saved sample counts** below the saved-samples selector.
+   Record the stage/samples UUIDs, shot total, bitstrings and measurement mapping.
+   Changing the selected model or sector must clear mismatched counts.
 5. Request **3 energy levels**, at most **16 strings per spin** and **1000
-   determinants**. Review/submit the sampled-subspace solve and inspect residual,
-   spin/sector, coverage and energy diagnostics.
+   determinants**. Review/submit the sampled-subspace solve and inspect the saved
+   selection, spin/sector, coverage and energy diagnostics. The current worker
+   checks numerical residuals but does not retain their norms in the saved result.
+   Record this GUI limitation. An independent maintainer can contract the retained
+   vectors with the exported integrals without rerunning a solver. A small
+   projected residual does not establish convergence in the full CAS space.
 6. Select **Saved ORCA comparison** from L07. If requested, run the separate
    **Optional reference: full exported Hamiltonian (PySCF)** with the same model.
    Compare only when orbital/integral/sector identities match. Selected-space
-   results need not equal the full-space energies.
+   results need not equal the full-space energies. A no-matching-spin warning
+   names its solver column. It must not obscure successful pairs in another
+   column. Pair only compatible displayed total-spin levels; a fixed-Mₛ full
+   reference may include higher-spin roots.
 
 **PASS:** each stage is independently reviewed, model identities and limitations
 are retained, and opening the route submits no QPU job. Missing configured workers

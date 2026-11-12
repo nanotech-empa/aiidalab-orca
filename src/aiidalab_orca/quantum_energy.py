@@ -10,6 +10,7 @@ from . import casci_services, energy_services as service
 from .energy_route import assess_space, STAGE_LABELS
 from .retention import FullFileRetention, description as retention_description
 from .property_services import default_stash_directory
+from .presentation import data_table
 
 
 def text_control(label, value):
@@ -153,6 +154,7 @@ class QuantumEnergy(ipw.VBox):
         )
         self.submit_button.on_click(self._submit)
         self.history = ipw.HTML()
+        self.sample_details = ipw.HTML()
         card_refresh = ipw.Button(
             description="Refresh status and saved results",
             icon="refresh",
@@ -292,6 +294,7 @@ class QuantumEnergy(ipw.VBox):
                 self.hardware_box,
                 action("Review sampling / retrieve hardware job", "sample"),
                 self.samples,
+                self.sample_details,
                 ipw.HTML(
                     "<h4>4. Solve the QPU/simulator-selected subspace with PySCF</h4><p>Samples select the configurations used by the "
                     "projected solver; sample frequencies are not wavefunction coefficients. Request several roots to obtain "
@@ -389,11 +392,32 @@ class QuantumEnergy(ipw.VBox):
         self.mult.observe(self._spin_help, names="value")
         self.mult.observe(self._refresh, names="value")
         self.orca.observe(self._refresh, names="value")
+        self.samples.observe(self._refresh_sample_details, names="value")
         self._spin_help()
         self._refresh()
 
     def _sector(self):
         return {"charge": self.charge.value, "ms2": self.mult.value - 1}
+
+    def _refresh_sample_details(self, _=None):
+        self.sample_details.value = ""
+        if not self.samples.value or not self.model.value:
+            return
+        try:
+            saved = service.sample_diagnostics(self.samples.value, self.model.value, self._sector())
+            self.sample_details.value = (
+                "<h4>Saved sample counts</h4><p>"
+                + html.escape(saved["execution_kind"])
+                + f". {saved['shots']} shots across {saved['distinct_bitstrings']} bitstrings. "
+                + f"Stage {html.escape(saved['stage_uuid'])}. Samples {html.escape(saved['samples_uuid'])}.</p>"
+                + "<p>Classical bitstrings have the most-significant bit on the left. "
+                + f"Qubit-to-classical mapping: {html.escape(str(saved['qubit_to_classical']))}. "
+                + f"Target alpha/beta electrons: {html.escape(str(saved['nelec']))}. Counts are not wavefunction coefficients.</p>"
+                + data_table(["Bitstring", "Count"], saved["counts"], numeric_columns=(1,), label="Saved quantum sample counts")
+                + (f"<p>Showing the 50 most frequent bitstrings. {saved['omitted_bitstrings']} more are retained in the saved samples.</p>" if saved['omitted_bitstrings'] else "")
+            )
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            self.sample_details.value = "<p>Saved counts unavailable: " + html.escape(str(exc)) + ".</p>"
 
     def _spin_help(self, _=None):
         electrons = (
@@ -754,6 +778,7 @@ class QuantumEnergy(ipw.VBox):
             r for r in samples if r["result"] and "samples_sha256" in r["result"]
         ]
         choices(self.samples, samples, "samples")
+        self._refresh_sample_details()
         choices(
             self.prepared,
             service.stages(self.model.value, "prepare-hardware", sector=sector),
@@ -978,23 +1003,20 @@ class QuantumEnergy(ipw.VBox):
             key=lambda row: row["energy_hartree"],
         )
         if not levels:
-            return "<p>No displayed PySCF level has S² matching the selected ORCA multiplicity. Choose the appropriate saved spin family.</p>"
+            return ("<p><b>" + html.escape(QuantumEnergy._solver_label(result))
+                    + ":</b> No displayed level has S² matching the selected ORCA multiplicity. "
+                    "This solver has no same-spin comparison pairs. Other solver columns are assessed separately.</p>")
         paired = list(zip(reference["levels"], levels))
         maximum = max(abs(a["energy_hartree"] - b["energy_hartree"]) for a, b in paired)
-        rows = "".join(
-            "<tr>"
-            + "".join(
-                "<td style='padding:6px 12px'>" + html.escape(value) + "</td>"
-                for value in [
+        rows = [
+                [
                     str(i),
                     f"{a['energy_hartree']:.10f}",
                     f"{b['energy_hartree']:.10f}",
                     f"{(b['energy_hartree'] - a['energy_hartree']) * 27.211386245988:.3e}",
                 ]
-            )
-            + "</tr>"
             for i, (a, b) in enumerate(paired)
-        )
+        ]
         return (
             "<h4>Saved ORCA CASCI versus "
             + html.escape(QuantumEnergy._solver_label(result))
@@ -1002,41 +1024,31 @@ class QuantumEnergy(ipw.VBox):
             f"<p>{len(paired)} energy-ordered pairs within multiplicity {reference['multiplicity']}; "
             f"largest |ΔE| = {maximum:.3e} Hartree. Total energies are compared without alignment shifts. "
             "Pairing uses the displayed S²; check convergence and spin purity before assigning approximate roots.</p>"
-            "<table><tr><th>Pair</th><th>ORCA (Ha)</th><th>PySCF (Ha)</th><th>PySCF − ORCA (eV)</th></tr>"
-            + rows
-            + "</table>"
+            + data_table(["Pair", "ORCA (Ha)", "PySCF (Ha)", "PySCF − ORCA (eV)"], rows,
+                         numeric_columns=(0,1,2,3), label="Same-spin energy comparison")
         )
 
     @staticmethod
     def _level_table(result):
         levels = result["levels"]
         if result.get("origin") == "orca_casci":
-            rows = "".join(
-                f"<tr><td style='padding:6px 12px'>{row['root']}</td><td>{row['energy_hartree']:.10f}</td></tr>"
-                for row in levels
-            )
+            rows = [(row['root'], f"{row['energy_hartree']:.10f}") for row in levels]
             return (
                 "<h4>" + html.escape(QuantumEnergy._solver_label(result)) + "</h4>"
                 "<p>Existing saved calculation; no new job. All columns in the diagram share one energy zero. "
-                "ORCA labels show its declared spin multiplicity.</p><table><tr><th>Root</th><th>Total energy (Ha)</th></tr>"
-                + rows
-                + "</table>"
+                "ORCA labels show its declared spin multiplicity.</p>"
+                + data_table(["Root", "Total energy (Ha)"], rows, numeric_columns=(0,1), label="Saved ORCA energy levels")
             )
         zero = min(row["energy_hartree"] for row in levels)
-        rows = "".join(
-            "<tr>"
-            + "".join(
-                '<td style="padding:6px 12px">' + html.escape(str(value)) + "</td>"
-                for value in (
+        rows = [
+                (
                     row["root"],
                     f"{row['energy_hartree']:.10f}",
                     f"{(row['energy_hartree'] - zero) * 27.211386245988:.6f}",
                     f"{row['spin_squared']:.6f}",
                 )
-            )
-            + "</tr>"
             for row in levels
-        )
+        ]
         warning = (
             (
                 "<p><b>Spin contamination detected.</b> These approximate selected-space levels do not yet "
@@ -1054,7 +1066,19 @@ class QuantumEnergy(ipw.VBox):
             + "<p>"
             + f"Requested {result['requested_roots']} levels; computed {result['used_roots']} in a space of dimension {result['dimension']}. "
             + "Energy zero: lowest state in this table; the diagram uses a shared zero. Fixed-Mₛ roots may have different total spins. "
-            "A quantized S² expectation alone is not a general certificate of higher-spin purity.</p><table><tr><th>Root</th><th>Total energy (Ha)</th><th>Relative energy (eV)</th><th>S²</th></tr>"
-            + rows
-            + "</table>"
+            "A quantized S² expectation alone is not a general certificate of higher-spin purity.</p>"
+            + data_table(["Root", "Total energy (Ha)", "Relative energy (eV)", "S²"], rows,
+                         numeric_columns=(0,1,2,3), label="PySCF energy levels")
+            + "<p><b>Residual diagnostics:</b> This worker checks eigensolver residuals before returning a successful result. "
+              "Numerical residual norms are not retained in this saved result. They cannot be inspected here. "
+              "For a sampled solve the check is within the projected space, not the full CAS space.</p>"
+            + (data_table(["Selection diagnostic", "Value"],
+                          [(label, result["selection"].get(key, "Not recorded")) for label,key in [
+                              ("Input shots", "input_shots"), ("Sector-valid shots", "sector_valid_shots"),
+                              ("Sector retention fraction", "sector_retention_fraction"),
+                              ("Observed valid determinants", "observed_valid_determinants"),
+                              ("Alpha strings", "alpha_strings"), ("Beta strings", "beta_strings"),
+                              ("Cartesian product dimension", "cartesian_subspace_dimension"),
+                              ("Spin strings truncated", "spin_strings_truncated")]],
+                          label="Saved sampled-space selection") if result.get("selection") else "")
         )

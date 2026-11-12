@@ -4,6 +4,7 @@ import io
 
 import ase.io
 from aiida import orm
+from aiida.common.exceptions import NotExistent
 from aiida.engine import submit
 
 from aiida_empa_orca.reuse import PROCESS_TYPE
@@ -34,6 +35,18 @@ def codes():
                 ("orca.orca", "empa_orca.optimization", "empa_orca.single_point")):
             result.append((f"{label}@{code.computer.label}", str(uuid)))
     return sorted(result)
+
+
+def execution_context(code_uuid):
+    """Describe the selected Computer without connecting or retaining ORM nodes."""
+    if not code_uuid:
+        return None
+    try:
+        computer = orm.load_code(code_uuid).computer
+    except NotExistent:
+        return None
+    return {"computer": computer.label, "transport": computer.transport_type,
+            "scheduler": computer.scheduler_type}
 
 
 def validate_configuration(atoms, settings, optimize):

@@ -6,7 +6,7 @@ import html
 import ipywidgets as ipw
 
 from .configuration import GeometrySettings
-from .resources import MemoryInput
+from .resources import MemoryInput, execution_hint
 from . import services, structure_io
 from .history import HistoryWidget, inspect_run
 from .viewer import show_result
@@ -208,7 +208,7 @@ class OrcaApp(ipw.VBox):
                                    state.CONFIGURED if self.review else
                                    state.READY if self._settings_confirmed else state.INIT,
                                    self._settings_confirmed)
-        self.resource_hint.value = "<p>Local execution. ORCA uses 75% of the total memory budget divided by the process count. The local scheduler does not enforce a hard memory limit.</p>"
+        self.resource_hint.value = execution_hint(services.execution_context(self.code.value))
         self.mode_hint.value = ("<p>Optimize the atomic positions and compute the final electronic energy.</p>"
                                 if self.optimize.value else
                                 "<p><b>Single-point SCF:</b> compute the energy and wavefunction at the supplied coordinates. "

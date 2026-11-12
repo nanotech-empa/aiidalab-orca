@@ -1,5 +1,6 @@
 """Resource controls with explicit display units and stable backend values."""
 
+import html
 import math
 
 import ipywidgets as ipw
@@ -9,6 +10,21 @@ import traitlets as tl
 def memory_label(memory_mb):
     """Format an existing integer MiB budget without changing its meaning."""
     return f"{memory_mb / 1024:g} GiB"
+
+
+def execution_hint(context):
+    """Keep execution location and scheduler claims tied to selected metadata."""
+    if context is None:
+        execution = "Select an available ORCA code to identify its execution computer."
+    else:
+        computer, transport, scheduler = (html.escape(context[key])
+                                          for key in ("computer", "transport", "scheduler"))
+        execution = (f"Runs on <b>{computer}</b> using <code>{transport}</code> transport "
+                     f"and the <code>{scheduler}</code> scheduler.")
+        if context["scheduler"] == "core.direct":
+            execution += " The direct scheduler does not enforce a hard memory limit."
+    return (f"<p>{execution}</p><p>ORCA uses 75% of the total memory budget divided "
+            "by the process count.</p>")
 
 
 class _GiBInput(ipw.BoundedFloatText):

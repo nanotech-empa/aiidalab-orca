@@ -15,7 +15,7 @@ dependencies = [
   "nglview>=3",
   "matplotlib",
   # Shared IR/Raman spectra and WEAS mode animation, including atom participation (PR #189).
-  "aiidalab-qe-vibroscopy @ git+https://github.com/aiidalab/aiidalab-qe-vibroscopy.git@8d5d9c51192dbd2bf8dcf585c6ae1a8ca23ab6b4",
+  "aiidalab-qe-vibroscopy @ git+https://github.com/aiidalab/aiidalab-qe-vibroscopy.git@817071ae8ef31328294d3e4f4e41e20fdfed21bc",
   # Merged canonical rendering CLI, including JSON tuple/list normalization.
   "cubehandler @ git+https://github.com/nanotech-empa/cubehandler.git@245db38e6a01279c3d911b4217fdf3757033ae14",
   "aiidalab-widgets-base==3.0.1",

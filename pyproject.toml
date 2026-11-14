@@ -17,7 +17,7 @@ dependencies = [
   # Shared IR/Raman spectra and WEAS mode animation, including atom participation (PR #189).
   "aiidalab-qe-vibroscopy @ git+https://github.com/aiidalab/aiidalab-qe-vibroscopy.git@8d5d9c51192dbd2bf8dcf585c6ae1a8ca23ab6b4",
   # Merged canonical rendering CLI, including JSON tuple/list normalization.
-  "cubehandler @ git+https://github.com/nanotech-empa/cubehandler.git@51cd2bc0349ef2eae404592ff167078d416b01ec",
+  "cubehandler @ git+https://github.com/nanotech-empa/cubehandler.git@245db38e6a01279c3d911b4217fdf3757033ae14",
   "aiidalab-widgets-base==3.0.1",
   # Merged shared viewer/CDXML, slice alignment and .cube tempfile contract.
   "aiidalab-widgets-empa[cube] @ git+https://github.com/nanotech-empa/aiidalab-widgets-empa.git@8a97ed1ab7b448217ec165df3a3ba48a7495e9dc",

@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import ipywidgets as ipw
 import pytest
 from aiida import engine, orm
 from aiida.common import LinkType
@@ -265,7 +266,7 @@ def test_restart_same_m_and_increased_m_keep_original_nodes(
 
 
 def test_nonconverged_results_are_visible_with_separate_verdicts(
-    context, aiida_localhost
+    context, aiida_localhost, monkeypatch
 ):
     uid = completed(context, aiida_localhost, status=311)
     data = service.result(uid)
@@ -277,9 +278,22 @@ def test_nonconverged_results_are_visible_with_separate_verdicts(
     try:
         widget.result_uuid.value = uid
         widget._open_result()
-        text = "".join(x.value for x in widget.results.children)
+        text = "".join(x.value for x in widget.results.children if isinstance(x, ipw.HTML))
         assert "Energy (Ha)" in text and "Sweep converged:</b> False" in text
         assert "dmrg-sweeps.csv" in text and "dmrg-sweeps.svg" in text
+        from aiidalab_orca import openbis
+
+        calls = []
+        def review(source):
+            calls.append(source)
+            return ipw.HTML("shared export form")
+        monkeypatch.setattr(openbis, "OpenbisExport", review)
+        button = next(x for x in widget.results.children if isinstance(x, ipw.Button))
+        assert not button.disabled
+        button.click()
+        button.click()
+        assert calls == [uid]
+        assert widget.results.children[-1].children[0].value == "shared export form"
         widget._checkpoint()
         assert widget.parent.value == uid and widget.source.value == context[0]
         assert widget.plan is None and widget.submit_button.disabled

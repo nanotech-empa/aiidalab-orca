@@ -49,7 +49,7 @@ modern openBIS development stack remains separate from this ORCA component;
 installing ORCA alone does not deploy or migrate the openBIS server schema.
 
 The authoritative target model is maintained in
-[aiidalab-openbis/docs/openBIS_schema_documentation.md](https://github.com/nanotech-empa/aiidalab-openbis/blob/feature/orca-simulation-export/docs/openBIS_schema_documentation.md).
+[aiidalab-openbis/docs/openBIS_schema_documentation.md](https://github.com/nanotech-empa/aiidalab-openbis/blob/master/docs/openBIS_schema_documentation.md).
 Schema additions must update that document together with the simulation guide,
 Python/LinkML definitions, provisioner and agent instructions. This first adapter
 uses existing object/property types and does not require a schema migration.
@@ -63,3 +63,14 @@ provenance; exporting a whole entry does not invent a synthetic workflow parent.
 The companion adapter is covered by local mapping, archive and recovery tests.
 A live-server publish/import round trip is a separate acceptance gate, not
 established by those tests. See the [stage validation record](release-readiness.md).
+
+### Additional stored results
+
+Orbital reordering/catalog, energy-export/stage workflows and native DMRG
+results now use the existing labelled `UNCLASSIFIED_SIMULATION` type. DMRG uses
+the existing `DMRG` method-family term and retains all roots, sweeps and recovery
+diagnostics. The DMRG table provides an export action even for a finished,
+unconverged exit-311 result, clearly marked `CONVERGED=false`; other failed or
+running results remain excluded. Energy-stage labels preserve the distinction
+between full/sampled solves, simulator samples and hardware preparation.
+Preparing hardware data does not claim that a hardware calculation ran.

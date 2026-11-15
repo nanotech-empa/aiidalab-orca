@@ -58,6 +58,12 @@ checkpoint is needed. Setting **Native output retrieval (MiB) = 0** requests an
 explicit summary/notice; it does not delete or truncate the native output.
 Reopening a result or closing its browser tab must not restart it.
 
+**Prepare openBIS export** below the saved result opens the common review form.
+It accepts finished exit-0 and exit-311 records, retaining all stored roots and
+sweep diagnostics in `UNCLASSIFIED_SIMULATION` with method `DMRG`. An exit-311
+result remains explicitly unconverged. Review destination and metadata before
+publishing. Export does not retrieve the MPS or run another calculation.
+
 Manual cases L20–L21 are in `docs/testing/dmrg-localhost.md`. Follow the
 campaign's source/preflight and start authorization. A unit test or backend
 script cannot replace browser acceptance. Do not resume or edit old research

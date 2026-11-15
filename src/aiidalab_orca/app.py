@@ -28,7 +28,7 @@ _APP_STYLE = """<style>
 
 
 class OrcaApp(ipw.VBox):
-    def __init__(self):
+    def __init__(self, enable_assistant=True):
         # The notebook loads its profile before constructing the app. Import
         # shared widgets only then, avoiding their automatic-profile fallback.
         from .structures import StructureWidget
@@ -148,6 +148,11 @@ class OrcaApp(ipw.VBox):
         self.wavefunction_storage.observe(self._invalidate, names="revision")
         self.optimize.observe(self._optimization_changed, names="value")
         self._update_steps()
+        from .assistant import create_panel
+
+        self.assistant_panel = create_panel(self) if enable_assistant else None
+        if self.assistant_panel is not None:
+            self.children = (*self.children, self.assistant_panel)
 
     def choose_analysis(self, task):
         self._requested_analysis = task
@@ -486,6 +491,8 @@ class OrcaApp(ipw.VBox):
             self._show_error(exc)
 
     def close(self):
+        if getattr(self, "assistant_panel", None) is not None:
+            self.assistant_panel.close()
         if getattr(self, "_poll_task", None):
             self._poll_task.cancel()
         if hasattr(self, "structure"):

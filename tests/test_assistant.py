@@ -63,7 +63,7 @@ def test_load_structure_preserves_source_uuid(adapter, aiida_profile):
 
 def test_import_smiles_uses_gui_builder_and_preserves_smiles_provenance(adapter, aiida_profile):
     from aiida import orm
-    from aiidalab_ai_assistant.tools import ToolRegistry
+    ToolRegistry = pytest.importorskip("aiidalab_ai_assistant.tools").ToolRegistry
     from aiidalab_orca.structure_io import store_reviewed_structure
     registry = ToolRegistry()
     adapter.register(registry)
@@ -101,7 +101,7 @@ def test_smiles_failure_or_stale_revision_preserves_existing_structure(adapter):
 def test_import_structure_fills_file_draft_and_retains_exact_source(adapter, aiida_profile):
     import hashlib
     from aiida import orm
-    from aiidalab_ai_assistant.tools import ToolRegistry
+    ToolRegistry = pytest.importorskip("aiidalab_ai_assistant.tools").ToolRegistry
     from aiidalab_orca.structure_io import store_reviewed_structure
 
     text = "2\nH2; test geometry in angstrom; https://example.org/source\nH 0 0 0\nH 0 0 0.74\n"
@@ -239,7 +239,7 @@ def test_review_failure_exposes_displayed_error_without_changing_revision(adapte
 
 def test_cdxml_import_and_creation_use_existing_gui_and_provenance(adapter, aiida_profile):
     from aiida import orm
-    from aiidalab_ai_assistant.tools import ToolRegistry
+    ToolRegistry = pytest.importorskip("aiidalab_ai_assistant.tools").ToolRegistry
     from aiidalab_orca.structure_io import store_reviewed_structure
 
     text = '<CDXML><page><fragment><n id="1" p="0 0" Element="6"/><n id="2" p="10 0" Element="6"/><b B="1" E="2" Order="2"/></fragment></page></CDXML>'

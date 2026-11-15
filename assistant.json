@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "title": "ORCA molecular analysis",
+  "notebook": "orca.ipynb",
+  "assistant": {
+    "embedded": true
+  },
+  "capabilities": [
+    "Shared chat; inspect, populate, review and explicitly submit geometry/SCF",
+    "App-owned guides for CAS, DMRG, quantum-assisted energy and openBIS export"
+  ]
+}

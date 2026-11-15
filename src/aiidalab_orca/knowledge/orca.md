@@ -235,7 +235,7 @@ Raman is supported; resonance Raman is not implemented in this route.
 ## What the chat can do
 
 Inspect the actual tool schemas. The current adapter provides `orca_get_state`,
-`orca_import_smiles`, `orca_load_structure`, `orca_update_draft`,
+`orca_import_smiles`, `orca_import_structure`, `orca_prepare_cdxml`, `orca_load_structure`, `orca_update_draft`,
 `orca_open_calculation`, `orca_review`, `orca_submit` and `orca_undo`.
 Read the current revision before an edit and read back the resulting form.
 The adapter's current edit/submission scope is geometry/SCF; guide the user
@@ -243,9 +243,24 @@ through visible CASCI/Dyson/Kondo/IR/Raman controls instead of inventing tools
 or claiming those calculations were submitted. There is no `orca_set_goal`
 tool. Ask the user to select the visible goal when necessary.
 
-The embedded chat has no web-search/browser tool at present. Offer the official
-links below and use packaged facts; do not claim fresh page retrieval or a
-literature search without a real tool. XPS is **Work in progress** in the standard
+For missing geometry, search AiiDA and openBIS `MOLECULE` definitions with their
+ChemDraw sketches, then public structure repositories and primary literature
+unless the user excluded those sources. ChatGPT sign-in provides native web
+search; other providers may lack it. Use the tools actually available and cite
+exact sources. Do not claim fresh retrieval without a successful search/read.
+When verified coordinates are available, use `orca_import_structure` with a
+filename, complete text and the current revision; do not ask the user to copy
+coordinates into a file and upload it. It reuses File / XYZ parsing, preserves
+the exact file for reviewed provenance and fills the visible structure draft.
+For coordinates from a PDF, extract one complete labelled state/geometry,
+check its atom count and elements, keep all coordinate values/units unchanged,
+and put its DOI/URL and state in the XYZ comment. Do not mix adjacent coordinate
+tables or infer missing rows. Read back `state.geometry`, the source hash and
+messages; importing geometry does not optimize it or establish its ground-state
+spin. Select charge/spin and method separately before calculation review.
+If a source cannot be read or its identity is ambiguous, name that precise gap.
+CDXML uses the existing Create model GUI through `orca_prepare_cdxml` to
+convert the reviewed drawing into starting coordinates. XPS is **Work in progress** in the standard
 GUI. Native DMRG has its own reviewed workspace and `orca.dmrg` guide.
 QPU demonstrators and research recovery jobs are separate work and
 must not be reset, restarted or repurposed while guiding these app steps.
@@ -272,3 +287,31 @@ conventions. Use the app's [Dyson guide](../../../docs/dyson.md),
 [Kondo guide](https://github.com/nanotech-empa/aiidalab-orca/blob/8d4549e6177586b60a18dbd68a5a63759d9a6cf4/docs/kondo.md) and
 [Calvo-Fernández et al., PRB 110, 165113](https://doi.org/10.1103/PhysRevB.110.165113).
 Do not describe the whole app pipeline as a single built-in ORCA command.
+
+
+## Shared chat and publication
+
+The current app embeds the shared assistant. Use only its registered tools:
+geometry/SCF draft, review and explicitly confirmed submission are supported.
+Later CAS/DMRG/quantum stages remain in their existing workspaces; guide those
+actual controls using the relevant installed guide, especially orca.quantum-energy
+for export → circuits → simulator/authorized QPU samples → sampled-space solve.
+Do not claim a quantum job ran because a draft or hardware preparation completed.
+
+The common openBIS tools search typed materials and bounded relationship graphs
+using the configured account. Follow pagination and inspect incomplete evidence.
+For publication, use the Results export workspace or native DMRG's Prepare
+openBIS export, select project/collection and review all cards before Export.
+Partial native DMRG exit 311 remains nonconverged. Stored quantum stages retain
+full/sampled/simulator/hardware labels. A link or prepared form is not a published
+record. Archive import remains in the existing openBIS Import simulations GUI.
+
+
+For CDXML, pass the complete drawing text to `orca_import_structure`. This loads
+its document, not a molecular geometry. Inspect `cdxml.choices`, `cdxml.fields`
+and messages in `orca_get_state`, then use `orca_prepare_cdxml` with the desired
+fields and `create_model=true`. Read back the generated geometry. The original
+and reviewed CDXML documents are preserved by the existing calculation-review
+provenance path. A changed drawing/selection invalidates the prior revision.
+This uses the same drawing builder as the manual GUI; it does not run ORCA or
+choose charge, multiplicity, periodicity changes or an optimization for the user.

@@ -30,9 +30,14 @@ Reading a guide does not submit a calculation or authorize an action.
 When working outside that chat, follow the relative links above and inspect
 the intended installed/release revision. An agent must not claim to have read
 GitHub or an official manual page if its environment cannot retrieve it. The
-embedded chat currently has no web-search/browser tool; it can supply the
-checked official links and the packaged instructions without pretending to
-have performed a fresh literature search.
+ChatGPT sign-in chat supports native web search; check actual tool availability
+for other providers. Search molecular concepts (`MOLECULE`, with ChemDraw
+sketches) and linked geometries in openBIS, not just physical `SUBSTANCE` records.
+For verified XYZ/extXYZ, CIF, PDB, MOL or SDF text, use `orca_import_structure`
+to populate the existing File / XYZ draft. Do not turn an accessible coordinate
+table into a manual copy-and-upload task. Preserve one complete geometry and its
+source citation; read back atom count/formula and review charge/spin separately.
+The tool imports a draft; it neither runs ORCA nor stores nodes before review.
 
 ## What a useful answer looks like
 
@@ -71,3 +76,26 @@ The [noncontiguous-CAS preparation candidate](../orbital-reordering.md) document
 explicit source/prepared mapping, signed checks, supported source types and the
 pending native/browser pilot. Check installed controls and acceptance status;
 the branch and preview selector alone do not establish deployment.
+
+
+## Current shared-chat integration and export
+
+The common assistant is embedded again in the canonical OrcaApp. Its restored
+geometry/SCF tools inspect the real form, update a revision-checked draft,
+prepare review and request a separate execution action. They do not submit
+CASCI, DMRG or quantum stages. For those, guide the user through the actual
+workspace controls documented above; never invent an unavailable tool.
+
+For publication use the Results workspace's shared openBIS form; native DMRG
+has **Prepare openBIS export**. Inspect project/collection and the result cards
+before **Export**. Finished partial native DMRG exit 311 retains CONVERGED=false.
+Orbital catalogs/reordering, energy exports/stages and DMRG diagnostics retain
+their stored context and units. The quantum stage's labels distinguish full
+classical solve, sampled solve, simulator and hardware preparation/execution.
+Use the shared openBIS typed/relationship tools to find related records, and the
+existing import GUI to restore archives. See [export details](../openbis-export.md).
+
+CDXML text uses the same `orca_import_structure` entry point. Inspect its drawing
+choices/options, then `orca_prepare_cdxml` can edit those fields and invoke the
+existing Create model control. This preserves original/reviewed drawing provenance
+when the model is later reviewed. It does not submit or optimize a calculation.

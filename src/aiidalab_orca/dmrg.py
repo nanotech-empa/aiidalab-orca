@@ -453,7 +453,23 @@ class NativeDmrg(ipw.VBox):
                 f'<p><a download="dmrg-sweeps.svg" href="data:image/svg+xml;base64,{svg}">Download sweep plot</a> · '
                 f'<a download="dmrg-sweeps.csv" href="data:text/csv;base64,{encoded}">Download sweep energies</a></p>'
             )
-            self.results.children = [title, table, note, plot]
+            export = ipw.Button(
+                description="Prepare openBIS export",
+                icon="upload",
+                layout=ipw.Layout(width="auto"),
+                disabled=data["state"] != "finished"
+                or data["exit_status"] not in (0, 311),
+            )
+            export_body = ipw.VBox()
+
+            def open_export(_, uuid=str(data["uuid"])):
+                from .openbis import OpenbisExport
+
+                if not export_body.children:
+                    export_body.children = [OpenbisExport(uuid)]
+
+            export.on_click(open_export)
+            self.results.children = [title, table, note, plot, export, export_body]
         except (ValueError, OSError, KeyError) as exc:
             self.process_uuid = None
             self._message(exc)

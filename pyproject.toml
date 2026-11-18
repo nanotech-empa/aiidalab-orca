@@ -9,6 +9,7 @@ description = "AiiDAlab interface for composable molecular ORCA workflows"
 requires-python = ">=3.12"
 dependencies = [
   "aiida-empa-orca==0.1.0",
+  "aiida-core>=2.9.4,<3",
   "aiidalab>=26.9.0",
   "ipywidgets>=8,<9",
   "anywidget",
@@ -20,7 +21,7 @@ dependencies = [
   "cubehandler @ git+https://github.com/nanotech-empa/cubehandler.git@245db38e6a01279c3d911b4217fdf3757033ae14",
   "aiidalab-widgets-base==3.0.1",
   # Merged shared viewer/CDXML, slice alignment and .cube tempfile contract.
-  "aiidalab-widgets-empa[cube] @ git+https://github.com/nanotech-empa/aiidalab-widgets-empa.git@8a97ed1ab7b448217ec165df3a3ba48a7495e9dc",
+  "aiidalab-widgets-empa[cube] @ git+https://github.com/nanotech-empa/aiidalab-widgets-empa.git@3473d7f3ac6cac57d1343d44f6177c56aea2436a",
 ]
 
 [project.entry-points."aiidalab_assistant.workflow_guides"]

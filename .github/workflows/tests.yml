@@ -6,7 +6,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - core: '2.9.2'
+          - core: '2.9.4'
             aiidalab: '26.9.0'
           - core: '2.9.4'
             aiidalab: '26.10.0'

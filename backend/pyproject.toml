@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Composable molecular ORCA workflows for EMPA"
 requires-python = ">=3.12"
 dependencies = [
-  "aiida-core>=2.9.2,<3",
+  "aiida-core>=2.9.4,<3",
   "aiida-orca @ git+https://github.com/ezpzbz/aiida-orca.git@36abfa6917819c3e9ff454cfa89d9fd013634d12",
   "ase",
   "numpy",

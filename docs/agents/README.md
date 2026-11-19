@@ -99,3 +99,17 @@ CDXML text uses the same `orca_import_structure` entry point. Inspect its drawin
 choices/options, then `orca_prepare_cdxml` can edit those fields and invoke the
 existing Create model control. This preserves original/reviewed drawing provenance
 when the model is later reviewed. It does not submit or optimize a calculation.
+
+
+## Editing a structure through the shared chat
+
+Read `structure_editor_guide`, then use `structure_editor_inspect` for one-based
+atoms, Cartesian coordinates, neighbor distances and the current editor revision.
+`structure_editor_preview` prepares a rotation, element replacement or atom/group
+addition/removal; inspect it, apply its preview ID and read back the edited atoms.
+`structure_editor_undo` restores the last unchanged draft. These tools use the
+native editor, preserve internal group geometries and do not run calculations.
+For CH -> CH2 identify the existing carbon and add one H when chemically intended;
+for an added CH2 group clarify the native =CH2 template's meaning. On a planar
+GNR the H-H direction can follow the local plane normal; a separate explicit
+reference/torsion is available. Check bonding/charge/spin before calculation review.

@@ -274,3 +274,39 @@ def test_cdxml_import_and_creation_use_existing_gui_and_provenance(adapter, aiid
     assert "error" in registry.call("orca_prepare_cdxml", {
         "expected_revision": adapter.context()["revision"], "create_model": True,
     })
+
+
+def test_shared_editor_updates_real_geometry_and_preserves_source(adapter):
+    import numpy as np
+    ToolRegistry = pytest.importorskip("aiidalab_ai_assistant.tools").ToolRegistry
+    registry = ToolRegistry()
+    adapter.register(registry)
+    before = adapter.app.structure.atoms.copy()
+    state = registry.call("structure_editor_inspect", {})
+    preview = registry.call("structure_editor_preview", {
+        "operation": "rotate", "indices": [2], "direction": [1, 0, 0],
+        "origin": [0, 0, 0], "angle_degrees": 30,
+        "expected_revision": state["revision"],
+    })
+    assert "error" not in preview, preview
+    assert np.array_equal(adapter.app.structure.atoms.positions, before.positions)
+    result = registry.call("structure_editor_apply", {
+        "preview_id": preview["preview_id"], "expected_revision": state["revision"],
+    })
+    assert "error" not in result, result
+    assert np.allclose(adapter.app.structure.viewer.structure.positions, adapter.app.structure.atoms.positions)
+    assert not np.allclose(adapter.app.structure.atoms.positions, before.positions)
+    assert adapter.app.review is None and not adapter.app._submitted
+    restored = registry.call("structure_editor_undo", {"expected_revision": result["revision"]})
+    assert "error" not in restored and np.allclose(adapter.app.structure.atoms.positions, before.positions)
+    state = registry.call("structure_editor_inspect", {})
+    preview = registry.call("structure_editor_preview", {
+        "operation": "replace_element", "indices": [2], "element": "S",
+        "expected_revision": state["revision"],
+    })
+    adapter.app._submitted = True
+    # Submission changes the host revision. A fresh preview cannot edit a submitted form either.
+    result = registry.call("structure_editor_apply", {
+        "preview_id": preview["preview_id"], "expected_revision": state["revision"],
+    })
+    assert "error" in result

@@ -321,6 +321,19 @@ class OrcaAssistantAdapter:
 
     def register(self, registry):
         from aiidalab_ai_assistant.tools import object_schema
+        from aiidalab_ai_assistant.structure_editor import StructureEditorTools
+
+        def edit_atoms(atoms):
+            if self.app._submitted:
+                raise ValueError("Use Edit a copy before changing a submitted structure")
+            self.app.structure.editor.structure = atoms
+            self._undo = self._after = None
+
+        self.editor_tools = StructureEditorTools(
+            self, lambda: self.app.structure.atoms, edit_atoms,
+            lambda: self.app.structure.viewer.selection,
+        )
+        self.editor_tools.register(registry)
         string = {"type": "string"}
         revision = {"expected_revision": string}
         registry.add("orca_get_state", "Read the ORCA form, current page, visible error/validation messages, review readiness, selected process, allowed codes and revision. Inspect this after an operation fails.",

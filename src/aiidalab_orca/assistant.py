@@ -1,5 +1,4 @@
 """Adapter between the shared assistant and the current ORCA form."""
-import copy
 import hashlib
 import json
 from html.parser import HTMLParser
@@ -90,11 +89,10 @@ class OrcaAssistantAdapter:
         return self.dispatch(self._state)
 
     def _require_revision(self, revision):
-        if revision != self._state()["revision"]:
+        state = self._state()
+        if revision != state["revision"]:
             raise ValueError("The form changed while the assistant was thinking. Read it again and preserve the newer edits.")
-
-    def _snapshot(self):
-        return copy.deepcopy(self._state())
+        return state
 
     def _restore(self, state):
         app = self.app
@@ -110,14 +108,14 @@ class OrcaAssistantAdapter:
                 "label": app.label, "force_recompute": app.force}
 
     def update(self, expected_revision, settings=None, **changes):
-        self._require_revision(expected_revision)
+        state = self._require_revision(expected_revision)
         app = self.app
         if app._submitted:
             raise ValueError("These inputs were submitted. Use Edit a copy before changing them.")
         if not app.structure.ready or app.structure.atoms is None:
             raise ValueError("Select a molecular structure first")
-        before = self._snapshot()
         fields = self._resource_fields()
+        before = {key: state[key] for key in ("settings", "auto_multiplicity", *fields)}
         if changes.keys() - fields.keys():
             raise ValueError("Unknown resource setting")
         merged = {**before["settings"], **(settings or {})}
